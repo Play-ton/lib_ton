@@ -395,8 +395,8 @@ Settings Deserialize(const TLstorage_Settings &data) {
 	}, [&](const TLDstorage_settings3 &data) {
 		return Settings{
 			.main = Deserialize(data.vmain()),
-			.test = Deserialize(data.vtest()), // #TODO postponed
-			.useTestNetwork = true,//Deserialize(data.vuseTestNetwork()),
+			.test = Deserialize(data.vtest()),
+			.useTestNetwork = Deserialize(data.vuseTestNetwork()),
 			.useNetworkCallbacks = Deserialize(data.vuseNetworkCallbacks()),
 			.version = data.vversion().v
 		};
