@@ -26,6 +26,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QByteArray>
 
 namespace Ton {
 namespace {
@@ -86,6 +87,19 @@ bool Wallet::CheckAddress(const QString &address) {
 	return RequestSender::Execute(TLUnpackAccountAddress(
 		tl_string(address)
 	)) ? true : false;
+}
+
+QString Wallet::ConvertIntoRaw(const QString& address) {
+	const auto result = RequestSender::Execute(TLUnpackAccountAddress(
+		tl_string(address)
+	));
+	Expects(result.has_value());
+
+	const auto& unpacked = result->c_unpackedAccountAddress();
+	const auto workchain = unpacked.vworkchain_id().v;
+	const auto addr = QString::fromLocal8Bit(unpacked.vaddr().v.toHex().toUpper());
+
+	return QString{ "%1:%2" }.arg(workchain).arg(addr);
 }
 
 base::flat_set<QString> Wallet::GetValidWords() {

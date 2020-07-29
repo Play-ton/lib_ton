@@ -88,6 +88,7 @@ public:
 	static void EnableLogging(bool enabled, const QString &basePath);
 	static void LogMessage(const QString &message);
 	[[nodiscard]] static bool CheckAddress(const QString &address);
+	[[nodiscard]] static QString ConvertIntoRaw(const QString &address);
 	[[nodiscard]] static base::flat_set<QString> GetValidWords();
 	[[nodiscard]] static bool IsIncorrectPasswordError(const Error &error);
 
