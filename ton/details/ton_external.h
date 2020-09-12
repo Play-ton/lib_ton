@@ -30,6 +30,7 @@ struct WalletList;
 class External final : public base::has_weak_ptr {
 public:
 	External(const QString &path, Fn<void(Update)> &&updateCallback);
+	~External();
 
 	void open(
 		const QByteArray &globalPassword,
@@ -43,6 +44,8 @@ public:
 
 	[[nodiscard]] RequestSender &lib();
 	[[nodiscard]] Storage::Cache::Database &db();
+
+	Result<QString> tonlabsSdkRequest(const char *method, const QString &params);
 
 	static void EnableLogging(bool enabled, const QString &basePath);
 	static void LogMessage(const QString &message);
@@ -69,6 +72,7 @@ private:
 	Settings _settings;
 	RequestSender _lib;
 	Storage::DatabasePointer _db;
+	uint32_t _tonlabsSdkContext;
 	ConfigUpgrade _configUpgrade = ConfigUpgrade::None;
 
 	State _state = State::Initial;

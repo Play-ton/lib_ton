@@ -13,6 +13,8 @@
 #include "ton/details/ton_parse_state.h"
 #include "storage/cache/storage_cache_database.h"
 
+#include <iostream>
+
 namespace Ton::details {
 namespace {
 
@@ -113,23 +115,31 @@ void AccountViewers::saveNewState(
 	}
 }
 
+void AccountViewers::saveTokensState(AccountViewers::Viewers &viewers, WalletState &&state) {
+	viewers.state = std::move(state);
+}
+
 void AccountViewers::checkPendingForSameState(
 		const QString &address,
 		Viewers &viewers,
+		const TokenMap<TokenState>& tokenStates,
 		const AccountState &state) {
 	auto pending = ComputePendingTransactions(
 		viewers.state.current().pendingTransactions,
 		state,
 		TransactionsSlice());
-	if (viewers.state.current().pendingTransactions != pending) {
+	const auto &currentState = viewers.state.current();
+	if (tokenStates != currentState.tokenStates || currentState.pendingTransactions != pending) {
 		// Some pending transactions were discarded by the sync time.
 		saveNewState(viewers, WalletState{
 			address,
 			state,
 			viewers.state.current().lastTransactions,
-			std::move(pending)
+			std::move(pending),
+			tokenStates
 		}, RefreshSource::Remote);
-	} else {
+	}
+	else {
 		finishRefreshing(viewers);
 		checkNextRefresh();
 	}
@@ -149,8 +159,17 @@ void AccountViewers::refreshAccount(
 		if (LocalTimeSyncer::IsRequestFastEnough(requested, crl::now())) {
 			_blockchainTime.fire({ requested, TimeId(state.syncTime) });
 		}
+
+		const auto pepeState = _owner->requestTokenState(address, TokenKind::Pepe);
+		if (!pepeState) {
+			std::cerr << pepeState.error().details.toStdString() << std::endl;
+			return;
+		}
+		TokenMap<TokenState> tokenStates;
+		tokenStates.insert(std::make_pair(pepeState->kind, std::move(pepeState.value())));
+
 		if (state == viewers->state.current().account) {
-			checkPendingForSameState(address, *viewers, state);
+			checkPendingForSameState(address, *viewers, tokenStates, state);
 			return;
 		}
 		const auto received = [=](Result<TransactionsSlice> result) {
@@ -158,13 +177,15 @@ void AccountViewers::refreshAccount(
 			if (!viewers || reportError(*viewers, result)) {
 				return;
 			}
+
 			saveNewStateEncrypted(
 				address,
 				*viewers,
 				WalletState{
-					address,
-					state,
-					std::move(*result) },
+					.address = address,
+					.account = state,
+					.lastTransactions = std::move(*result),
+					.tokenStates = std::move(tokenStates)},
 				RefreshSource::Remote);
 		};
 		_owner->requestTransactions(
@@ -183,6 +204,7 @@ void AccountViewers::saveNewStateEncrypted(
 	auto &last = full.lastTransactions;
 	const auto &existingPending = full.pendingTransactions;
 	const auto &state = full.account;
+	const auto &tokenStates = full.tokenStates;
 	const auto finish = [=](Viewers &viewers, TransactionsSlice &&last) {
 		auto pending = (source == RefreshSource::Database)
 			? existingPending
@@ -194,7 +216,8 @@ void AccountViewers::saveNewStateEncrypted(
 			address,
 			state,
 			std::move(last),
-			std::move(pending)
+			std::move(pending),
+			std::move(tokenStates),
 		}, source);
 	};
 	const auto previousId = last.previousId;

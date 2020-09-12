@@ -22,6 +22,16 @@ struct TransactionId {
 	QByteArray hash;
 };
 
+enum class TokenKind {
+	Ton = 0x0,
+	Pepe = 0x1,
+};
+
+template <typename T>
+using TokenMap = std::unordered_map<Ton::TokenKind, T>;
+
+QString toString(TokenKind kind);
+
 bool operator==(
 	const TransactionId &a,
 	const TransactionId &b);
@@ -51,6 +61,14 @@ struct AccountState {
 
 bool operator==(const AccountState &a, const AccountState &b);
 bool operator!=(const AccountState &a, const AccountState &b);
+
+struct TokenState {
+	TokenKind kind;
+	int64 fullBalance = kUnknownBalance;
+};
+
+bool operator==(const TokenState &a, const TokenState &b);
+bool operator!=(const TokenState &a, const TokenState &b);
 
 struct MessageText {
 	QString text;
@@ -143,6 +161,7 @@ struct WalletState {
 	AccountState account;
 	TransactionsSlice lastTransactions;
 	std::vector<PendingTransaction> pendingTransactions;
+	std::unordered_map<TokenKind, TokenState> tokenStates;
 };
 
 bool operator==(const WalletState &a, const WalletState &b);

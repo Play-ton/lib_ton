@@ -18,7 +18,8 @@ storage.message2 source:string destination:string value:int64 created:int64 body
 storage.transaction id:storage.TransactionId time:int64 fee:int64 storageFee:int64 otherFee:int64 incoming:storage.Message outgoing:vector<storage.Message> = storage.Transaction;
 storage.transactionsSlice list:vector<storage.Transaction> previousId:storage.TransactionId = storage.TransactionsSlice;
 storage.pendingTransaction fake:storage.Transaction sentUntilSyncTime:int64 = storage.PendingTransaction;
-storage.walletState address:string account:storage.AccountState lastTransactions:storage.TransactionsSlice pendingTransactions:vector<storage.PendingTransaction> = storage.WalletState;
+storage.tokenState kind:int32 fullBalance:int64 = storage.TokenState;
+storage.walletState address:string account:storage.AccountState lastTransactions:storage.TransactionsSlice pendingTransactions:vector<storage.PendingTransaction> tokenStates:vector<storage.TokenState> = storage.WalletState;
 storage.network blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool = storage.Network;
 
 storage.settings blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool useNetworkCallbacks:storage.Bool = storage.Settings; // old

@@ -85,6 +85,8 @@ public:
 		Callback<PendingTransaction> ready,
 		Callback<> done);
 
+	void sendFreeTonAbiMessage(Callback<> done);
+
 	static void EnableLogging(bool enabled, const QString &basePath);
 	static void LogMessage(const QString &message);
 	[[nodiscard]] static bool CheckAddress(const QString &address);
@@ -117,6 +119,7 @@ public:
 		const QString &address,
 		const TransactionId &lastId,
 		Callback<TransactionsSlice> done);
+	Result<TokenState> requestTokenState(const QString &address, TokenKind kind);
 
 private:
 	struct ViewersPassword {
@@ -160,7 +163,10 @@ private:
 	base::flat_map<
 		QByteArray,
 		std::vector<Callback<>>> _viewersPasswordsWaiters;
+	QString _tokenContractAddress;
 	base::Timer _viewersPasswordsExpireTimer;
+
+	QString _tokenAbi;
 
 	rpl::lifetime _lifetime;
 

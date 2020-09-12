@@ -8,6 +8,17 @@
 
 namespace Ton {
 
+QString toString(TokenKind kind) {
+	switch (kind) {
+		case TokenKind::Ton:
+			return "TON";
+		case TokenKind::Pepe:
+			return "PEPE";
+		default:
+			return "unknown";
+	}
+}
+
 bool operator<(const TransactionId &a, const TransactionId &b) {
 	return (a.lt < b.lt);
 }
@@ -18,6 +29,14 @@ bool operator==(const TransactionId &a, const TransactionId &b) {
 
 bool operator!=(const TransactionId &a, const TransactionId &b) {
 	return !(a == b);
+}
+
+bool operator==(const TokenState &a, const TokenState &b) {
+	return (a.kind == b.kind) && (a.fullBalance == b.fullBalance);
+}
+
+bool operator!=(const TokenState &a, const TokenState &b) {
+	return (a.kind != b.kind) || (a.fullBalance != b.fullBalance);
 }
 
 bool operator==(const RestrictionLimit &a, const RestrictionLimit &b) {

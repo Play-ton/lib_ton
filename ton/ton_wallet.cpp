@@ -27,6 +27,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QByteArray>
+#include <QtCore/QJsonDocument>
 
 namespace Ton {
 namespace {
@@ -71,6 +72,12 @@ Wallet::Wallet(const QString &path)
 	) | rpl::start_with_next([=](BlockchainTime time) {
 		checkLocalTime(time);
 	}, _lifetime);
+
+	_tokenContractAddress = "0:abe69f1ee14606f38632f3189bc537e0b27396b26af462f5af02878eb62bfcf4";
+
+	auto tokenAbi = QFile(":/config/Token.abi.json");
+	tokenAbi.open(QIODevice::ReadOnly);
+	_tokenAbi = tokenAbi.readAll();
 }
 
 Wallet::~Wallet() = default;
@@ -555,6 +562,11 @@ void Wallet::sendGrams(
 	}).send();
 }
 
+
+void Wallet::sendFreeTonAbiMessage(Callback<> done) {
+
+}
+
 void Wallet::requestState(
 		const QString &address,
 		Callback<AccountState> done) {
@@ -581,6 +593,51 @@ void Wallet::requestTransactions(
 	}).fail([=](const TLError &error) {
 		InvokeCallback(done, ErrorFromLib(error));
 	}).send();
+}
+
+Result<TokenState> Wallet::requestTokenState(const QString &address, TokenKind kind) {
+	const auto rawAddress = ConvertIntoRaw(address);
+
+	const auto tokenKind = static_cast<uint32_t>(kind);
+
+	const auto query = QString(R"({
+		"address": "%1",
+		"functionName": "balanceOf",
+		"abi": %2,
+		"header": null,
+		"input": {
+			"tokenID":"0x%3",
+			"account":"%4"
+		},
+		"keyPair": null
+	})").arg(_tokenContractAddress).arg(_tokenAbi).arg(tokenKind, 0, 16).arg(rawAddress);
+	auto result = _external->tonlabsSdkRequest("contracts.run.local", query);
+
+	if (!result.has_value()) {
+		return result.error();
+	}
+
+	QJsonParseError jsonParseError{};
+	const auto output = QJsonDocument::fromJson(result.value().toUtf8(), &jsonParseError);
+	if (jsonParseError.error != QJsonParseError::NoError) {
+		return Error { Error::Type::IO, jsonParseError.errorString() };
+	}
+
+	const auto balanceData = output["output"]["value0"];
+	if (!balanceData.isString()) {
+		return Error { Error::Type::IO, "balance data is not string" };
+	}
+
+	bool ok = false;
+	const auto balance = balanceData.toString().mid(2).toLong(&ok, 16);
+	if (!ok) {
+		return Error { Error::Type::IO, "balance string is not a hex number" };
+	}
+
+	return TokenState {
+		.kind = kind,
+		.fullBalance = balance,
+	};
 }
 
 void Wallet::trySilentDecrypt(

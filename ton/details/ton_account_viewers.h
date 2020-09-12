@@ -64,6 +64,7 @@ private:
 	void checkPendingForSameState(
 		const QString &address,
 		Viewers &viewers,
+		const TokenMap<TokenState>& tokenStates,
 		const AccountState &state);
 	void checkNextRefresh();
 	Viewers *findRefreshingViewers(const QString &address);
@@ -79,6 +80,9 @@ private:
 		Viewers &viewers,
 		WalletState &&state,
 		RefreshSource source);
+	void saveTokensState(
+		Viewers &viewers,
+		WalletState &&state);
 
 	const not_null<Wallet*> _owner;
 	const not_null<RequestSender*> _lib;

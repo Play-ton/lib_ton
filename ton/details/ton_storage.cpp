@@ -68,6 +68,8 @@ TLstorage_TransactionsSlice Serialize(const TransactionsSlice &data);
 TransactionsSlice Deserialize(const TLstorage_TransactionsSlice &data);
 TLstorage_PendingTransaction Serialize(const PendingTransaction &data);
 PendingTransaction Deserialize(const TLstorage_PendingTransaction &data);
+TLstorage_TokenState Serialize(const TokenState &data);
+TokenState Deserialize(const TLstorage_TokenState &data);
 TLstorage_WalletState Serialize(const WalletState &data);
 WalletState Deserialize(const TLstorage_WalletState &data);
 TLstorage_Settings Serialize(const Settings &data);
@@ -317,21 +319,51 @@ PendingTransaction Deserialize(const TLstorage_PendingTransaction &data) {
 	});
 }
 
+TLstorage_TokenState Serialize(const TokenState &data) {
+	return make_storage_tokenState(
+		tl_int32(static_cast<int32_t>(data.kind)),
+		tl_int64(data.fullBalance));
+}
+
+TokenState Deserialize(const TLstorage_TokenState &data) {
+	return data.match([&](const TLDstorage_tokenState &data) {
+		return TokenState {
+			.kind = static_cast<TokenKind>(data.vkind().v),
+			.fullBalance = data.vfullBalance().v
+		};
+	});
+}
+
 TLstorage_WalletState Serialize(const WalletState &data) {
+	std::vector<TokenState> tokenStates;
+	tokenStates.reserve(data.tokenStates.size());
+	for (const auto &[kind, state] : data.tokenStates) {
+		tokenStates.push_back(state);
+	}
+
 	return make_storage_walletState(
 		tl_string(data.address),
 		Serialize(data.account),
 		Serialize(data.lastTransactions),
-		Serialize(data.pendingTransactions));
+		Serialize(data.pendingTransactions),
+		Serialize(tokenStates));
 }
 
 WalletState Deserialize(const TLstorage_WalletState &data) {
 	return data.match([&](const TLDstorage_walletState &data) {
+		auto storedTokenStates = Deserialize(data.vtokenStates());
+
+		TokenMap<TokenState> tokenStates;
+		for (auto& item : storedTokenStates) {
+			tokenStates.insert({ item.kind, item });
+		}
+
 		return WalletState{
-			tl::utf16(data.vaddress()),
-			Deserialize(data.vaccount()),
-			Deserialize(data.vlastTransactions()),
-			Deserialize(data.vpendingTransactions())
+			.address = tl::utf16(data.vaddress()),
+			.account = Deserialize(data.vaccount()),
+			.lastTransactions = Deserialize(data.vlastTransactions()),
+			.pendingTransactions = Deserialize(data.vpendingTransactions()),
+			.tokenStates = std::move(tokenStates)
 		};
 	});
 }
