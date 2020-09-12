@@ -27,6 +27,8 @@ enum class TokenKind {
 	Pepe = 0x1,
 };
 
+bool operator!(const TokenKind &kind);
+
 template <typename T>
 using TokenMap = std::unordered_map<Ton::TokenKind, T>;
 

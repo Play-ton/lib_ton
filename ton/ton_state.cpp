@@ -19,6 +19,10 @@ QString toString(TokenKind kind) {
 	}
 }
 
+bool operator!(const TokenKind &kind) {
+	return kind == Ton::TokenKind::Ton;
+}
+
 bool operator<(const TransactionId &a, const TransactionId &b) {
 	return (a.lt < b.lt);
 }
