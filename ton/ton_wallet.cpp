@@ -28,6 +28,8 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonDocument>
+#include <utility>
+#include <iostream>
 
 namespace Ton {
 namespace {
@@ -73,7 +75,7 @@ Wallet::Wallet(const QString &path)
 		checkLocalTime(time);
 	}, _lifetime);
 
-	_tokenContractAddress = "0:abe69f1ee14606f38632f3189bc537e0b27396b26af462f5af02878eb62bfcf4";
+	_tokenContractAddress = "0:e7467c20f164df166229b817e0862cd83dcf99ad66a8aea6bfa7a2b5032bbbbc";
 
 	auto tokenAbi = QFile(":/config/Token.abi.json");
 	tokenAbi.open(QIODevice::ReadOnly);
@@ -461,6 +463,59 @@ void Wallet::changePassword(
 		std::move(changed));
 }
 
+void Wallet::checkSendTokens(
+		const QByteArray &publicKey,
+		const TokenTransactionToSend &transaction,
+		Callback<TransactionCheckResult> done) {
+	Expects(!!transaction.token);
+	Expects(transaction.amount >= 0);
+
+	const auto sender = getUsedAddress(publicKey);
+	Assert(!sender.isEmpty());
+
+	const auto realAmount = 10000000;
+
+	const auto body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
+	if (!body.has_value()) {
+		InvokeCallback(done, body.error());
+		return;
+	}
+
+	const auto check = [=](int64 id) {
+		_external->lib().request(TLquery_EstimateFees(
+			tl_int53(id),
+			tl_boolTrue()
+		)).done([=](const TLquery_Fees &result) {
+			_external->lib().request(TLquery_Forget(
+				tl_int53(id)
+			)).send();
+			InvokeCallback(done, Parse(result));
+		}).fail([=](const TLError &error) {
+			InvokeCallback(done, ErrorFromLib(error));
+		}).send();
+	};
+
+	_external->lib().request(TLCreateQuery(
+		tl_inputKeyFake(),
+		tl_accountAddress(tl_string(sender)),
+		tl_int32(transaction.timeout),
+		tl_actionMsg(
+			tl_vector(1, tl_msg_message(
+				tl_accountAddress(tl_string(_tokenContractAddress)),
+				tl_string(),
+				tl_int64(realAmount),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+			tl_from(transaction.allowSendToUninited)),
+		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
+	)).done([=](const TLquery_Info &result) {
+		result.match([&](const TLDquery_info &data) {
+			check(data.vid().v);
+		});
+	}).fail([=](const TLError &error) {
+		InvokeCallback(done, ErrorFromLib(error));
+	}).send();
+}
+
 void Wallet::checkSendGrams(
 		const QByteArray &publicKey,
 		const TransactionToSend &transaction,
@@ -518,7 +573,7 @@ void Wallet::sendGrams(
 	const auto sender = getUsedAddress(publicKey);
 	Assert(!sender.isEmpty());
 
-	const auto send = [=](int64 id) {
+	const auto send = [this, done = std::move(done)](int64 id) {
 		_external->lib().request(TLquery_Send(
 			tl_int53(id)
 		)).done([=] {
@@ -562,9 +617,69 @@ void Wallet::sendGrams(
 	}).send();
 }
 
+void Wallet::sendTokens(
+	const QByteArray &publicKey,
+	const QByteArray &password,
+	const TokenTransactionToSend &transaction,
+	Callback<PendingTransaction> ready,
+	Callback<> done) {
+	Expects(transaction.amount >= 0);
 
-void Wallet::sendFreeTonAbiMessage(Callback<> done) {
+	const auto sender = getUsedAddress(publicKey);
+	Assert(!sender.isEmpty());
 
+	const auto realAmount = 10000000;
+
+	const auto body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
+	if (!body.has_value()) {
+		InvokeCallback(done, body.error());
+		return;
+	}
+
+	const auto send = [this, done = std::move(done)](int64 id) {
+		_external->lib().request(TLquery_Send(
+			tl_int53(id)
+		)).done([=] {
+			InvokeCallback(done);
+		}).fail([=](const TLError &error) {
+			InvokeCallback(done, ErrorFromLib(error));
+		}).send();
+	};
+
+	_external->lib().request(TLCreateQuery(
+		prepareInputKey(publicKey, password),
+		tl_accountAddress(tl_string(sender)),
+		tl_int32(transaction.timeout),
+		tl_actionMsg(
+			tl_vector(1, tl_msg_message(
+				tl_accountAddress(tl_string(_tokenContractAddress)),
+				tl_string(),
+				tl_int64(realAmount),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+			tl_from(transaction.allowSendToUninited)),
+		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
+	)).done([=](const TLquery_Info &result) {
+		result.match([&](const TLDquery_info &data) {
+			const auto weak = base::make_weak(this);
+			auto pending = Parse(result, sender, TransactionToSend {
+				.amount = realAmount,
+				.recipient = _tokenContractAddress,
+				.timeout = transaction.timeout,
+				.allowSendToUninited = transaction.allowSendToUninited
+			});
+			_accountViewers->addPendingTransaction(pending);
+			if (!weak) {
+				return;
+			}
+			InvokeCallback(ready, std::move(pending));
+			if (!weak) {
+				return;
+			}
+			send(data.vid().v);
+		});
+	}).fail([=](const TLError &error) {
+		InvokeCallback(ready, ErrorFromLib(error));
+	}).send();
 }
 
 void Wallet::requestState(
@@ -617,16 +732,8 @@ Result<TokenState> Wallet::requestTokenState(const QString &address, TokenKind k
 		return result.error();
 	}
 
-	QJsonParseError jsonParseError{};
-	const auto output = QJsonDocument::fromJson(result.value().toUtf8(), &jsonParseError);
-	if (jsonParseError.error != QJsonParseError::NoError) {
-		return Error { Error::Type::IO, jsonParseError.errorString() };
-	}
-
+	const auto output = QJsonDocument::fromJson(result.value().toUtf8());
 	const auto balanceData = output["output"]["value0"];
-	if (!balanceData.isString()) {
-		return Error { Error::Type::IO, "balance data is not string" };
-	}
 
 	bool ok = false;
 	const auto balance = balanceData.toString().mid(2).toLong(&ok, 16);
@@ -834,6 +941,38 @@ void Wallet::checkLocalTime(BlockchainTime time) {
 			&_external->lib(),
 			[=] { _localTimeSyncer = nullptr; });
 	}
+}
+
+Result<QByteArray> Wallet::createTokenMessage(
+		Ton::TokenKind token,
+		const QString &recipient,
+		int64 amount) {
+	const auto tokenKind = static_cast<uint32_t>(token);
+	const auto recipientRaw = ConvertIntoRaw(recipient);
+
+	const auto query = QString(R"({
+		"function": "transfer",
+		"abi": %1,
+		"params": {
+			"tokenID":"0x%2",
+			"recipient":"%3",
+			"amount":"%4"
+		},
+		"internal": true,
+		"keyPair": null
+	})").arg(_tokenAbi).arg(tokenKind, 0, 16).arg(recipientRaw).arg(amount);
+	auto result = _external->tonlabsSdkRequest("contracts.run.body", query);
+	if (!result.has_value()) {
+		return Error { Error::Type::IO, result.value() };
+	}
+
+	const auto response = QJsonDocument::fromJson(result->toUtf8());
+	const auto messageBody = response["bodyBase64"].toString();
+	QByteArray body = QByteArray::fromBase64(messageBody.toUtf8());
+	if (body.isEmpty()) {
+		return Error { Error::Type::IO, "failed to create token message" };
+	}
+	return std::move(body);
 }
 
 } // namespace Ton

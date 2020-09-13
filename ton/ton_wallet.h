@@ -78,14 +78,23 @@ public:
 		const QByteArray &publicKey,
 		const TransactionToSend &transaction,
 		Callback<TransactionCheckResult> done);
+	void checkSendTokens(
+		const QByteArray &publicKey,
+		const TokenTransactionToSend &transaction,
+		Callback<TransactionCheckResult> done);
+
 	void sendGrams(
 		const QByteArray &publicKey,
 		const QByteArray &password,
 		const TransactionToSend &transaction,
 		Callback<PendingTransaction> ready,
 		Callback<> done);
-
-	void sendFreeTonAbiMessage(Callback<> done);
+	void sendTokens(
+		const QByteArray &publicKey,
+		const QByteArray &password,
+		const TokenTransactionToSend &transaction,
+		Callback<PendingTransaction> ready,
+		Callback<> done);
 
 	static void EnableLogging(bool enabled, const QString &basePath);
 	static void LogMessage(const QString &message);
@@ -135,6 +144,10 @@ private:
 	void checkLocalTime(details::BlockchainTime time);
 	void notifyPasswordGood(const QByteArray &publicKey, int generation);
 	void checkPasswordsExpiration();
+	[[nodiscard]] Result<QByteArray> createTokenMessage(
+		Ton::TokenKind token,
+		const QString &recipient,
+		int64 amount);
 	[[nodiscard]] QString getDefaultAddress(
 		const QByteArray &publicKey,
 		int revision) const;

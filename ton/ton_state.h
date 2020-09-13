@@ -132,6 +132,14 @@ struct TransactionToSend {
 	bool sendUnencryptedText = false;
 };
 
+struct TokenTransactionToSend {
+	TokenKind token;
+	int64 amount = 0;
+	QString recipient;
+	int timeout = 0;
+	bool allowSendToUninited = false;
+};
+
 struct TransactionFees {
 	int64 inForward = 0;
 	int64 storage = 0;

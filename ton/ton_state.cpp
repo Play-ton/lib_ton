@@ -92,7 +92,8 @@ bool operator==(const WalletState &a, const WalletState &b) {
 	return (a.address == b.address)
 		&& (a.account == b.account)
 		&& (a.lastTransactions == b.lastTransactions)
-		&& (a.pendingTransactions == b.pendingTransactions);
+		&& (a.pendingTransactions == b.pendingTransactions)
+		&& (a.tokenStates == b.tokenStates);
 }
 
 bool operator!=(const WalletState &a, const WalletState &b) {
