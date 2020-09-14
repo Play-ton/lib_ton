@@ -947,32 +947,46 @@ Result<QByteArray> Wallet::createTokenMessage(
 		Ton::TokenKind token,
 		const QString &recipient,
 		int64 amount) {
-	const auto tokenKind = static_cast<uint32_t>(token);
-	const auto recipientRaw = ConvertIntoRaw(recipient);
+	const auto tokenKind = static_cast<int32_t>(token);
 
-	const auto query = QString(R"({
-		"function": "transfer",
-		"abi": %1,
-		"params": {
-			"tokenID":"0x%2",
-			"recipient":"%3",
-			"amount":"%4"
-		},
-		"internal": true,
-		"keyPair": null
-	})").arg(_tokenAbi).arg(tokenKind, 0, 16).arg(recipientRaw).arg(amount);
-	auto result = _external->tonlabsSdkRequest("contracts.run.body", query);
-	if (!result.has_value()) {
-		return Error { Error::Type::IO, result.value() };
+	const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
+		tl_string("transfer"),
+		tl_vector(
+			QVector<TLftabi_Param>{
+				tl_ftabi_paramTime(tl_string("time")),
+				tl_ftabi_paramExpire(tl_string("expire")),
+			}),
+		tl_vector(
+			QVector<TLftabi_Param>{
+				tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+				tl_ftabi_paramAddress(tl_string("account")),
+				tl_ftabi_paramUint(tl_string("amount"), tl_int32(256))
+			}),
+		{}
+	));
+	if (!createdFunction.has_value()) {
+		return createdFunction.error();
 	}
 
-	const auto response = QJsonDocument::fromJson(result->toUtf8());
-	const auto messageBody = response["bodyBase64"].toString();
-	QByteArray body = QByteArray::fromBase64(messageBody.toUtf8());
-	if (body.isEmpty()) {
-		return Error { Error::Type::IO, "failed to create token message" };
+	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
+		createdFunction.value(),
+		tl_ftabi_functionCallInternal(
+			{},
+			tl_vector(QVector<TLftabi_Value>{
+				tl_ftabi_valueUint(
+					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+					tl_int64(static_cast<int64_t>(tokenKind))),
+				tl_ftabi_valueAddress(
+					tl_ftabi_paramAddress(tl_string("recipient")),
+					tl_accountAddress(tl_string(recipient))),
+				tl_ftabi_valueUint(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
+			})
+	)));
+	if (!encodedBody.has_value()) {
+		return encodedBody.error();
 	}
-	return std::move(body);
+
+	return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
 } // namespace Ton
