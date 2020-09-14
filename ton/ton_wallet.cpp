@@ -468,8 +468,6 @@ void Wallet::checkSendTokens(
 	const auto sender = getUsedAddress(publicKey);
 	Assert(!sender.isEmpty());
 
-	const auto realAmount = 10000000;
-
 	const auto body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
 	if (!body.has_value()) {
 		InvokeCallback(done, body.error());
@@ -498,7 +496,7 @@ void Wallet::checkSendTokens(
 			tl_vector(1, tl_msg_message(
 				tl_accountAddress(tl_string(_tokenContractAddress)),
 				tl_string(),
-				tl_int64(realAmount),
+				tl_int64(transaction.realAmount),
 				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
 			tl_from(transaction.allowSendToUninited)),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
@@ -623,8 +621,6 @@ void Wallet::sendTokens(
 	const auto sender = getUsedAddress(publicKey);
 	Assert(!sender.isEmpty());
 
-	const auto realAmount = 10000000;
-
 	const auto body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
 	if (!body.has_value()) {
 		InvokeCallback(done, body.error());
@@ -649,7 +645,7 @@ void Wallet::sendTokens(
 			tl_vector(1, tl_msg_message(
 				tl_accountAddress(tl_string(_tokenContractAddress)),
 				tl_string(),
-				tl_int64(realAmount),
+				tl_int64(transaction.realAmount),
 				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
 			tl_from(transaction.allowSendToUninited)),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
@@ -657,7 +653,7 @@ void Wallet::sendTokens(
 		result.match([&](const TLDquery_info &data) {
 			const auto weak = base::make_weak(this);
 			auto pending = Parse(result, sender, TransactionToSend {
-				.amount = realAmount,
+				.amount = transaction.realAmount,
 				.recipient = _tokenContractAddress,
 				.timeout = transaction.timeout,
 				.allowSendToUninited = transaction.allowSendToUninited

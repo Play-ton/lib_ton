@@ -134,6 +134,7 @@ struct TransactionToSend {
 
 struct TokenTransactionToSend {
 	TokenKind token;
+	int64 realAmount = 10000000; // default 0.01 TON will be recalculated after check
 	int64 amount = 0;
 	QString recipient;
 	int timeout = 0;
