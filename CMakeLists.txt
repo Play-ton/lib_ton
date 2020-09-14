@@ -75,5 +75,4 @@ PUBLIC
     desktop-app::external_expected
 PRIVATE
     desktop-app::external_ton
-    desktop-app::external_tonlabs_sdk
 )

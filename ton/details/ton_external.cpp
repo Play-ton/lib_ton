@@ -13,7 +13,6 @@
 #include "storage/cache/storage_cache_database.h"
 #include "storage/storage_encryption.h"
 #include "base/openssl_help.h"
-#include "tonclient.h"
 
 #include <crl/crl_async.h>
 #include <crl/crl_on_main.h>
@@ -86,26 +85,8 @@ External::External(const QString &path, Fn<void(Update)> &&updateCallback)
 , _updateCallback(std::move(updateCallback))
 , _lib(generateUpdateCallback())
 , _db(MakeDatabase(_basePath))
-, _tonlabsSdkContext(tc_create_context())
 {
 	Expects(!path.isEmpty());
-	Expects(_tonlabsSdkContext != 0);
-
-	const auto setupResult = tonlabsSdkRequest("setup", R"({
-		"baseUrl": "https://main.ton.dev",
-		"messageExpirationTimeout": 360000,
-		"messageExpirationTimeoutGrowFactor": 1.5,
-		"messageProcessingTimeout": 360000,
-		"waitForTimeout": 360000,
-		"retries": 5
-	})");
-	Expects(setupResult.has_value());
-}
-
-External::~External() {
-	if (_tonlabsSdkContext != 0) {
-		tc_destroy_context(_tonlabsSdkContext);
-	}
 }
 
 Fn<void(const TLUpdate &)> External::generateUpdateCallback() const {
@@ -250,35 +231,6 @@ RequestSender &External::lib() {
 
 Storage::Cache::Database &External::db() {
 	return *_db;
-}
-
-Result<QString> External::tonlabsSdkRequest(const char *method, const QString &params) {
-	tc_string_t tc_method = {
-		.content = method,
-		.len = strlen(method),
-	};
-	const auto content = params.toStdString();
-	tc_string_t tc_params_json {
-		.content = content.data(),
-		.len = static_cast<uint32_t>(content.size())
-	};
-	const auto tc_response_handle = tc_json_request(_tonlabsSdkContext, tc_method, tc_params_json);
-	const auto tc_response = tc_read_json_response(tc_response_handle);
-	if (tc_response.error_json.len) {
-		const auto error_json = QString::fromUtf8(tc_response.error_json.content, tc_response.error_json.len);
-		tc_destroy_json_response(tc_response_handle);
-
-		std::cout << "Got error " << error_json.toStdString() << std::endl;
-
-		return Error{ Error::Type::IO, error_json };
-	} else {
-		const auto result_json = QString::fromUtf8(tc_response.result_json.content, tc_response.result_json.len);
-		tc_destroy_json_response(tc_response_handle);
-
-		std::cout << "Got response " << result_json.toStdString() << std::endl;
-
-		return result_json;
-	}
 }
 
 void External::EnableLogging(bool enabled, const QString &basePath) {

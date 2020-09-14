@@ -128,7 +128,10 @@ public:
 		const QString &address,
 		const TransactionId &lastId,
 		Callback<TransactionsSlice> done);
-	Result<TokenState> requestTokenState(const QString &address, TokenKind kind);
+	void requestTokenState(
+		const QString &address,
+		TokenKind kind,
+		Callback<TokenState> done);
 
 private:
 	struct ViewersPassword {

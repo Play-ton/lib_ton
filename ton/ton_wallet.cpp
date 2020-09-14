@@ -27,7 +27,6 @@
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QByteArray>
-#include <QtCore/QJsonDocument>
 #include <utility>
 #include <iostream>
 
@@ -76,10 +75,6 @@ Wallet::Wallet(const QString &path)
 	}, _lifetime);
 
 	_tokenContractAddress = "0:e7467c20f164df166229b817e0862cd83dcf99ad66a8aea6bfa7a2b5032bbbbc";
-
-	auto tokenAbi = QFile(":/config/Token.abi.json");
-	tokenAbi.open(QIODevice::ReadOnly);
-	_tokenAbi = tokenAbi.readAll();
 }
 
 Wallet::~Wallet() = default;
@@ -710,41 +705,59 @@ void Wallet::requestTransactions(
 	}).send();
 }
 
-Result<TokenState> Wallet::requestTokenState(const QString &address, TokenKind kind) {
-	const auto rawAddress = ConvertIntoRaw(address);
-
-	const auto tokenKind = static_cast<uint32_t>(kind);
-
-	const auto query = QString(R"({
-		"address": "%1",
-		"functionName": "balanceOf",
-		"abi": %2,
-		"header": null,
-		"input": {
-			"tokenID":"0x%3",
-			"account":"%4"
-		},
-		"keyPair": null
-	})").arg(_tokenContractAddress).arg(_tokenAbi).arg(tokenKind, 0, 16).arg(rawAddress);
-	auto result = _external->tonlabsSdkRequest("contracts.run.local", query);
-
-	if (!result.has_value()) {
-		return result.error();
+void Wallet::requestTokenState(const QString &address, TokenKind kind, Callback<TokenState> done) {
+	const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
+		tl_string("balanceOf"),
+		tl_vector(
+			QVector<TLftabi_Param>{
+				tl_ftabi_paramTime(tl_string("time")),
+				tl_ftabi_paramExpire(tl_string("expire")),
+			}),
+		tl_vector(
+			QVector<TLftabi_Param>{
+				tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+				tl_ftabi_paramAddress(tl_string("account")),
+			}),
+		tl_vector(
+			QVector<TLftabi_Param>{
+				tl_ftabi_paramUint(tl_string("value0"), tl_int32(256))
+			})
+	));
+	if (!createdFunction.has_value()) {
+		return InvokeCallback(done, createdFunction.error());
 	}
 
-	const auto output = QJsonDocument::fromJson(result.value().toUtf8());
-	const auto balanceData = output["output"]["value0"];
+	_external->lib().request(TLftabi_RunLocal(
+		tl_accountAddress(tl_string(_tokenContractAddress)),
+		createdFunction.value(),
+		tl_ftabi_functionCallExternal(
+			{},
+			tl_vector(QVector<TLftabi_Value>{
+				tl_ftabi_valueInt(
+					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+					tl_int64(static_cast<int64_t>(kind))),
+				tl_ftabi_valueAddress(
+					tl_ftabi_paramAddress(tl_string("account")),
+					tl_accountAddress(tl_string(address))),
+			})
+		))
+	).done([=](const TLftabi_localRunResult &result) {
+		const auto &results = result.c_ftabi_localRunResult().vvalues().v;
+		if (results.empty() && results[0].type() != id_ftabi_valueInt) {
+			InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
+		} else {
+			const auto fullBalance = results[0].c_ftabi_valueInt().vvalue().v;
 
-	bool ok = false;
-	const auto balance = balanceData.toString().mid(2).toLong(&ok, 16);
-	if (!ok) {
-		return Error { Error::Type::IO, "balance string is not a hex number" };
-	}
+			std::cout << "Received token state for " << static_cast<int32>(kind) << " " << fullBalance << std::endl;
 
-	return TokenState {
-		.kind = kind,
-		.fullBalance = balance,
-	};
+			InvokeCallback(done, TokenState {
+				.kind = kind,
+				.fullBalance = fullBalance
+			});
+		}
+	}).fail([=](const TLError &error) {
+		InvokeCallback(done, ErrorFromLib(error));
+	}).send();
 }
 
 void Wallet::trySilentDecrypt(
@@ -959,7 +972,7 @@ Result<QByteArray> Wallet::createTokenMessage(
 		tl_vector(
 			QVector<TLftabi_Param>{
 				tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
-				tl_ftabi_paramAddress(tl_string("account")),
+				tl_ftabi_paramAddress(tl_string("recipient")),
 				tl_ftabi_paramUint(tl_string("amount"), tl_int32(256))
 			}),
 		{}
@@ -973,13 +986,13 @@ Result<QByteArray> Wallet::createTokenMessage(
 		tl_ftabi_functionCallInternal(
 			{},
 			tl_vector(QVector<TLftabi_Value>{
-				tl_ftabi_valueUint(
+				tl_ftabi_valueInt(
 					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
 					tl_int64(static_cast<int64_t>(tokenKind))),
 				tl_ftabi_valueAddress(
 					tl_ftabi_paramAddress(tl_string("recipient")),
 					tl_accountAddress(tl_string(recipient))),
-				tl_ftabi_valueUint(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
+				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
 			})
 	)));
 	if (!encodedBody.has_value()) {

@@ -160,39 +160,46 @@ void AccountViewers::refreshAccount(
 			_blockchainTime.fire({ requested, TimeId(state.syncTime) });
 		}
 
-		const auto pepeState = _owner->requestTokenState(address, TokenKind::Pepe);
-		if (!pepeState) {
-			std::cerr << pepeState.error().details.toStdString() << std::endl;
-			return;
-		}
-		TokenMap<TokenState> tokenStates;
-		tokenStates.insert(std::make_pair(pepeState->kind, std::move(pepeState.value())));
-
-		if (state == viewers->state.current().account) {
-			checkPendingForSameState(address, *viewers, tokenStates, state);
-			return;
-		}
-		const auto received = [=](Result<TransactionsSlice> result) {
-			const auto viewers = findRefreshingViewers(address);
-			if (!viewers || reportError(*viewers, result)) {
+		const auto onTokenStateReceived = [=](Result<TokenState> pepeState) {
+			if (!pepeState) {
+				std::cerr << pepeState.error().details.toStdString() << std::endl;
 				return;
 			}
 
-			saveNewStateEncrypted(
+			TokenMap<TokenState> tokenStates;
+			tokenStates.insert(std::make_pair(pepeState->kind, std::move(pepeState.value())));
+
+			if (state == viewers->state.current().account) {
+				checkPendingForSameState(address, *viewers, tokenStates, state);
+				return;
+			}
+			const auto received = [=](Result<TransactionsSlice> result) {
+				const auto viewers = findRefreshingViewers(address);
+				if (viewers == nullptr || reportError(*viewers, result)) {
+					return;
+				}
+
+				saveNewStateEncrypted(
+					address,
+					*viewers,
+					WalletState{
+						.address = address,
+						.account = state,
+						.lastTransactions = std::move(*result),
+						.tokenStates = std::move(tokenStates)},
+					RefreshSource::Remote);
+			};
+			_owner->requestTransactions(
+				viewers->publicKey,
 				address,
-				*viewers,
-				WalletState{
-					.address = address,
-					.account = state,
-					.lastTransactions = std::move(*result),
-					.tokenStates = std::move(tokenStates)},
-				RefreshSource::Remote);
+				state.lastTransactionId,
+				received);
 		};
-		_owner->requestTransactions(
-			viewers->publicKey,
+
+		_owner->requestTokenState(
 			address,
-			state.lastTransactionId,
-			received);
+			TokenKind::Pepe,
+			onTokenStateReceived);
 	});
 }
 
