@@ -27,6 +27,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QByteArray>
+#include <QtGui/QDesktopServices>
 #include <utility>
 #include <iostream>
 
@@ -74,6 +75,7 @@ Wallet::Wallet(const QString &path)
 		checkLocalTime(time);
 	}, _lifetime);
 
+	_gateUrl = "https://gate.broxus.com/";
 	_tokenContractAddress = "0:e7467c20f164df166229b817e0862cd83dcf99ad66a8aea6bfa7a2b5032bbbbc";
 }
 
@@ -458,10 +460,56 @@ void Wallet::changePassword(
 		std::move(changed));
 }
 
-void Wallet::checkSendTokens(
+void Wallet::checkSendGrams(
 		const QByteArray &publicKey,
-		const TokenTransactionToSend &transaction,
+		const TransactionToSend &transaction,
 		Callback<TransactionCheckResult> done) {
+	Expects(transaction.amount >= 0);
+
+	const auto sender = getUsedAddress(publicKey);
+	Assert(!sender.isEmpty());
+
+	const auto check = [=](int64 id) {
+		_external->lib().request(TLquery_EstimateFees(
+			tl_int53(id),
+			tl_boolTrue()
+		)).done([=](const TLquery_Fees &result) {
+			_external->lib().request(TLquery_Forget(
+				tl_int53(id)
+			)).send();
+			InvokeCallback(done, Parse(result));
+		}).fail([=](const TLError &error) {
+			InvokeCallback(done, ErrorFromLib(error));
+		}).send();
+	};
+	_external->lib().request(TLCreateQuery(
+		tl_inputKeyFake(),
+		tl_accountAddress(tl_string(sender)),
+		tl_int32(transaction.timeout),
+		tl_actionMsg(
+			tl_vector(1, tl_msg_message(
+				tl_accountAddress(tl_string(transaction.recipient)),
+				tl_string(),
+				tl_int64(transaction.amount),
+				(transaction.sendUnencryptedText
+					? tl_msg_dataText
+					: tl_msg_dataDecryptedText)(
+						tl_string(transaction.comment)))),
+			tl_from(transaction.allowSendToUninited)),
+		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
+	)).done([=](const TLquery_Info &result) {
+		result.match([&](const TLDquery_info &data) {
+			check(data.vid().v);
+		});
+	}).fail([=](const TLError &error) {
+		InvokeCallback(done, ErrorFromLib(error));
+	}).send();
+}
+
+void Wallet::checkSendTokens(
+	const QByteArray &publicKey,
+	const TokenTransactionToSend &transaction,
+	Callback<TransactionCheckResult> done) {
 	Expects(!!transaction.token);
 	Expects(transaction.amount >= 0);
 
@@ -498,52 +546,6 @@ void Wallet::checkSendTokens(
 				tl_string(),
 				tl_int64(transaction.realAmount),
 				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
-			tl_from(transaction.allowSendToUninited)),
-		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
-	)).done([=](const TLquery_Info &result) {
-		result.match([&](const TLDquery_info &data) {
-			check(data.vid().v);
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
-}
-
-void Wallet::checkSendGrams(
-		const QByteArray &publicKey,
-		const TransactionToSend &transaction,
-		Callback<TransactionCheckResult> done) {
-	Expects(transaction.amount >= 0);
-
-	const auto sender = getUsedAddress(publicKey);
-	Assert(!sender.isEmpty());
-
-	const auto check = [=](int64 id) {
-		_external->lib().request(TLquery_EstimateFees(
-			tl_int53(id),
-			tl_boolTrue()
-		)).done([=](const TLquery_Fees &result) {
-			_external->lib().request(TLquery_Forget(
-				tl_int53(id)
-			)).send();
-			InvokeCallback(done, Parse(result));
-		}).fail([=](const TLError &error) {
-			InvokeCallback(done, ErrorFromLib(error));
-		}).send();
-	};
-	_external->lib().request(TLCreateQuery(
-		tl_inputKeyFake(),
-		tl_accountAddress(tl_string(sender)),
-		tl_int32(transaction.timeout),
-		tl_actionMsg(
-			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(transaction.recipient)),
-				tl_string(),
-				tl_int64(transaction.amount),
-				(transaction.sendUnencryptedText
-					? tl_msg_dataText
-					: tl_msg_dataDecryptedText)(
-						tl_string(transaction.comment)))),
 			tl_from(transaction.allowSendToUninited)),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
 	)).done([=](const TLquery_Info &result) {
@@ -673,9 +675,13 @@ void Wallet::sendTokens(
 	}).send();
 }
 
+void Wallet::openGate() {
+	QDesktopServices::openUrl(QUrl(_gateUrl));
+}
+
 void Wallet::requestState(
 		const QString &address,
-		Callback<AccountState> done) {
+		const Callback<AccountState> &done) {
 	_external->lib().request(TLGetAccountState(
 		tl_accountAddress(tl_string(address))
 	)).done([=](const TLFullAccountState &result) {
@@ -689,7 +695,7 @@ void Wallet::requestTransactions(
 		const QByteArray &publicKey,
 		const QString &address,
 		const TransactionId &lastId,
-		Callback<TransactionsSlice> done) {
+		const Callback<TransactionsSlice> &done) {
 	_external->lib().request(TLraw_GetTransactions(
 		tl_inputKeyFake(),
 		tl_accountAddress(tl_string(address)),
@@ -701,7 +707,10 @@ void Wallet::requestTransactions(
 	}).send();
 }
 
-void Wallet::requestTokenState(const QString &address, TokenKind kind, Callback<TokenState> done) {
+void Wallet::requestTokenState(
+		const QString &address,
+		TokenKind kind,
+		const Callback<TokenState> &done) {
 	const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
 		tl_string("balanceOf"),
 		tl_vector(
@@ -756,38 +765,10 @@ void Wallet::requestTokenState(const QString &address, TokenKind kind, Callback<
 	}).send();
 }
 
-void Wallet::trySilentDecrypt(
-		const QByteArray &publicKey,
-		std::vector<Transaction> &&list,
-		Callback<std::vector<Transaction>> done) {
-	const auto encrypted = CollectEncryptedTexts(list);
-	if (encrypted.empty() || !_viewersPasswords.contains(publicKey)) {
-		InvokeCallback(done, std::move(list));
-		return;
-	}
-	const auto shared = std::make_shared<std::vector<Transaction>>(
-		std::move(list));
-	const auto password = _viewersPasswords[publicKey];
-	const auto generation = password.generation;
-	_external->lib().request(TLmsg_Decrypt(
-		prepareInputKey(publicKey, password.bytes),
-		MsgDataArrayFromEncrypted(encrypted)
-	)).done([=](const TLmsg_DataDecryptedArray &result) {
-		InvokeCallback(
-			done,
-			AddDecryptedTexts(
-				std::move(*shared),
-				encrypted,
-				MsgDataArrayToDecrypted(result)));
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, std::move(*shared));
-	}).send();
-}
-
 void Wallet::decrypt(
-		const QByteArray &publicKey,
-		std::vector<Transaction> &&list,
-		Callback<std::vector<Transaction>> done) {
+	const QByteArray &publicKey,
+	std::vector<Transaction> &&list,
+	const Callback<std::vector<Transaction>> &done) {
 	const auto encrypted = CollectEncryptedTexts(list);
 	if (encrypted.empty()) {
 		InvokeCallback(done, std::move(list));
@@ -799,7 +780,7 @@ void Wallet::decrypt(
 	const auto generation = password.generation;
 	const auto fail = [=](const TLError &error) {
 		handleInputKeyError(publicKey, generation, error, [=](
-				Result<> result) {
+			Result<> result) {
 			if (result) {
 				decrypt(publicKey, std::move(*shared), done);
 			} else {
@@ -823,6 +804,33 @@ void Wallet::decrypt(
 				encrypted,
 				MsgDataArrayToDecrypted(result)));
 	}).fail(fail).send();
+}
+
+void Wallet::trySilentDecrypt(
+		const QByteArray &publicKey,
+		std::vector<Transaction> &&list,
+		const Callback<std::vector<Transaction>> &done) {
+	const auto encrypted = CollectEncryptedTexts(list);
+	if (encrypted.empty() || !_viewersPasswords.contains(publicKey)) {
+		InvokeCallback(done, std::move(list));
+		return;
+	}
+	const auto shared = std::make_shared<std::vector<Transaction>>(
+		std::move(list));
+	const auto password = _viewersPasswords[publicKey];
+	_external->lib().request(TLmsg_Decrypt(
+		prepareInputKey(publicKey, password.bytes),
+		MsgDataArrayFromEncrypted(encrypted)
+	)).done([=](const TLmsg_DataDecryptedArray &result) {
+		InvokeCallback(
+			done,
+			AddDecryptedTexts(
+				std::move(*shared),
+				encrypted,
+				MsgDataArrayToDecrypted(result)));
+	}).fail([=](const TLError &error) {
+		InvokeCallback(done, std::move(*shared));
+	}).send();
 }
 
 void Wallet::handleInputKeyError(

@@ -96,6 +96,8 @@ public:
 		Callback<PendingTransaction> ready,
 		Callback<> done);
 
+	void openGate();
+
 	static void EnableLogging(bool enabled, const QString &basePath);
 	static void LogMessage(const QString &message);
 	[[nodiscard]] static bool CheckAddress(const QString &address);
@@ -115,23 +117,25 @@ public:
 	void decrypt(
 		const QByteArray &publicKey,
 		std::vector<Transaction> &&list,
-		Callback<std::vector<Transaction>> done);
+		const Callback<std::vector<Transaction>> &done);
 	void trySilentDecrypt(
 		const QByteArray &publicKey,
 		std::vector<Transaction> &&list,
-		Callback<std::vector<Transaction>> done);
+		const Callback<std::vector<Transaction>> &done);
 
 	// Internal API.
-	void requestState(const QString &address, Callback<AccountState> done);
+	void requestState(
+		const QString &address,
+		const Callback<AccountState> &done);
 	void requestTransactions(
 		const QByteArray &publicKey,
 		const QString &address,
 		const TransactionId &lastId,
-		Callback<TransactionsSlice> done);
+		const Callback<TransactionsSlice> &done);
 	void requestTokenState(
 		const QString &address,
 		TokenKind kind,
-		Callback<TokenState> done);
+		const Callback<TokenState> &done);
 
 private:
 	struct ViewersPassword {
@@ -179,10 +183,10 @@ private:
 	base::flat_map<
 		QByteArray,
 		std::vector<Callback<>>> _viewersPasswordsWaiters;
-	QString _tokenContractAddress;
 	base::Timer _viewersPasswordsExpireTimer;
 
-	QString _tokenAbi;
+	QString _gateUrl;
+	QString _tokenContractAddress;
 
 	rpl::lifetime _lifetime;
 
