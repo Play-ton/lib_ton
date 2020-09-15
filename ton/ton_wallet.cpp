@@ -76,7 +76,7 @@ Wallet::Wallet(const QString &path)
 	}, _lifetime);
 
 	_gateUrl = "https://gate.broxus.com/";
-	_tokenContractAddress = "0:e7467c20f164df166229b817e0862cd83dcf99ad66a8aea6bfa7a2b5032bbbbc";
+	_tokenContractAddress = "0:1e3869ea230fd7fd9a8bfce5a4b65cbd4f17fd0826c5f43873b446f63a4620d1";
 }
 
 Wallet::~Wallet() = default;
@@ -613,11 +613,11 @@ void Wallet::sendGrams(
 }
 
 void Wallet::sendTokens(
-	const QByteArray &publicKey,
-	const QByteArray &password,
-	const TokenTransactionToSend &transaction,
-	Callback<PendingTransaction> ready,
-	Callback<> done) {
+		const QByteArray &publicKey,
+		const QByteArray &password,
+		const TokenTransactionToSend &transaction,
+		Callback<PendingTransaction> ready,
+		Callback<> done) {
 	Expects(transaction.amount >= 0);
 
 	const auto sender = getUsedAddress(publicKey);
@@ -958,6 +958,52 @@ void Wallet::checkLocalTime(BlockchainTime time) {
 			&_external->lib(),
 			[=] { _localTimeSyncer = nullptr; });
 	}
+}
+
+Result<QByteArray> Wallet::createSwapBackMessage(
+	Ton::TokenKind token,
+	const QString &etheriumAddress,
+	int64 amount) {
+	const auto tokenKind = static_cast<int32_t>(token);
+
+	const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
+		tl_string("swapBack"),
+		tl_vector(
+			QVector<TLftabi_Param>{
+				tl_ftabi_paramTime(tl_string("time")),
+				tl_ftabi_paramExpire(tl_string("expire")),
+			}),
+		tl_vector(
+			QVector<TLftabi_Param>{
+				tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+				tl_ftabi_paramUint(tl_string("ethereumAddress"), tl_int32(256)),
+				tl_ftabi_paramUint(tl_string("amount"), tl_int32(256))
+			}),
+		{}
+	));
+	if (!createdFunction.has_value()) {
+		return createdFunction.error();
+	}
+
+	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
+		createdFunction.value(),
+		tl_ftabi_functionCallInternal(
+			{},
+			tl_vector(QVector<TLftabi_Value>{
+				tl_ftabi_valueInt(
+					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+					tl_int64(static_cast<int64_t>(tokenKind))),
+				tl_ftabi_valueBigInt(
+					tl_ftabi_paramUint(tl_string("ethereumAddress"), tl_int32(256)),
+					tl_string(etheriumAddress)),
+				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
+			})
+		)));
+	if (!encodedBody.has_value()) {
+		return encodedBody.error();
+	}
+
+	return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
 Result<QByteArray> Wallet::createTokenMessage(

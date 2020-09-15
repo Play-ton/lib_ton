@@ -155,6 +155,10 @@ private:
 		Ton::TokenKind token,
 		const QString &recipient,
 		int64 amount);
+	[[nodiscard]] Result<QByteArray> createSwapBackMessage(
+		Ton::TokenKind token,
+		const QString &etheriumAddress,
+		int64 amount);
 	[[nodiscard]] QString getDefaultAddress(
 		const QByteArray &publicKey,
 		int revision) const;
