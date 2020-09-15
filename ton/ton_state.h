@@ -24,7 +24,7 @@ struct TransactionId {
 
 enum class TokenKind {
 	Ton = 0x0,
-	Pepe = 0x1,
+	USDT = 0x1,
 };
 
 bool operator!(const TokenKind &kind);
@@ -138,6 +138,7 @@ struct TokenTransactionToSend {
 	int64 amount = 0;
 	QString recipient;
 	int timeout = 0;
+	bool swapBack = false;
 	bool allowSendToUninited = false;
 };
 

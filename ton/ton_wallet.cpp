@@ -516,7 +516,12 @@ void Wallet::checkSendTokens(
 	const auto sender = getUsedAddress(publicKey);
 	Assert(!sender.isEmpty());
 
-	const auto body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
+	Result<QByteArray> body{};
+	if (!transaction.swapBack) {
+		body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
+	} else {
+		body = createSwapBackMessage(transaction.token, transaction.recipient, transaction.amount);
+	}
 	if (!body.has_value()) {
 		InvokeCallback(done, body.error());
 		return;
@@ -623,7 +628,12 @@ void Wallet::sendTokens(
 	const auto sender = getUsedAddress(publicKey);
 	Assert(!sender.isEmpty());
 
-	const auto body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
+	Result<QByteArray> body{};
+	if (!transaction.swapBack) {
+		body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
+	} else {
+		body = createSwapBackMessage(transaction.token, transaction.recipient, transaction.amount);
+	}
 	if (!body.has_value()) {
 		InvokeCallback(done, body.error());
 		return;
@@ -964,6 +974,12 @@ Result<QByteArray> Wallet::createSwapBackMessage(
 	Ton::TokenKind token,
 	const QString &etheriumAddress,
 	int64 amount) {
+	if (!etheriumAddress.startsWith("0x")) {
+		return Error { Error::Type::IO, "invalid etherium address" };
+	}
+	const auto target = etheriumAddress.mid(2, -1);
+	const auto targetBytes = QByteArray::fromHex(target.toUtf8());
+
 	const auto tokenKind = static_cast<int32_t>(token);
 
 	const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
@@ -993,10 +1009,10 @@ Result<QByteArray> Wallet::createSwapBackMessage(
 				tl_ftabi_valueInt(
 					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
 					tl_int64(static_cast<int64_t>(tokenKind))),
+				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
 				tl_ftabi_valueBigInt(
 					tl_ftabi_paramUint(tl_string("ethereumAddress"), tl_int32(256)),
-					tl_string(etheriumAddress)),
-				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
+					tl_string(targetBytes))
 			})
 		)));
 	if (!encodedBody.has_value()) {

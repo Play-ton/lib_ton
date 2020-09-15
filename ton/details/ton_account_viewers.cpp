@@ -160,14 +160,20 @@ void AccountViewers::refreshAccount(
 			_blockchainTime.fire({ requested, TimeId(state.syncTime) });
 		}
 
-		const auto onTokenStateReceived = [=](Result<TokenState> pepeState) {
-			if (!pepeState) {
-				std::cerr << pepeState.error().details.toStdString() << std::endl;
-				return;
+		const auto onTokenStateReceived = [=](Result<TokenState> tokenState) {
+			if (!tokenState.has_value()) {
+				std::cout << tokenState.error().details.toStdString() << std::endl;
 			}
 
 			TokenMap<TokenState> tokenStates;
-			tokenStates.insert(std::make_pair(pepeState->kind, std::move(pepeState.value())));
+			if (tokenState.has_value()) {
+				tokenStates.insert(std::make_pair(tokenState->kind, std::move(tokenState.value())));
+			} else {
+				tokenStates.insert(std::make_pair(tokenState->kind, TokenState {
+					.kind = TokenKind::USDT,
+					.fullBalance = kUnknownBalance,
+				}));
+			}
 
 			if (state == viewers->state.current().account) {
 				checkPendingForSameState(address, *viewers, tokenStates, state);
@@ -198,7 +204,7 @@ void AccountViewers::refreshAccount(
 
 		_owner->requestTokenState(
 			address,
-			TokenKind::Pepe,
+			TokenKind::USDT,
 			onTokenStateReceived);
 	});
 }

@@ -12,8 +12,8 @@ QString toString(TokenKind kind) {
 	switch (kind) {
 		case TokenKind::Ton:
 			return "TON";
-		case TokenKind::Pepe:
-			return "PEPE";
+		case TokenKind::USDT:
+			return "USDT";
 		default:
 			return "unknown";
 	}
