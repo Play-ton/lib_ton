@@ -134,7 +134,7 @@ public:
 		const Callback<TransactionsSlice> &done);
 	void requestTokenState(
 		const QString &address,
-		TokenKind kind,
+		TokenKind token,
 		const Callback<TokenState> &done);
 
 private:

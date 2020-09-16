@@ -167,10 +167,10 @@ void AccountViewers::refreshAccount(
 
 			TokenMap<TokenState> tokenStates;
 			if (tokenState.has_value()) {
-				tokenStates.insert(std::make_pair(tokenState->kind, std::move(tokenState.value())));
+				tokenStates.insert(std::make_pair(tokenState->token, std::move(tokenState.value())));
 			} else {
-				tokenStates.insert(std::make_pair(tokenState->kind, TokenState {
-					.kind = TokenKind::USDT,
+				tokenStates.insert(std::make_pair(tokenState->token, TokenState {
+					.token = TokenKind::USDT,
 					.fullBalance = kUnknownBalance,
 				}));
 			}

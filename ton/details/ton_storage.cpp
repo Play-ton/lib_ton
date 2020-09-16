@@ -321,14 +321,14 @@ PendingTransaction Deserialize(const TLstorage_PendingTransaction &data) {
 
 TLstorage_TokenState Serialize(const TokenState &data) {
 	return make_storage_tokenState(
-		tl_int32(static_cast<int32_t>(data.kind)),
+		tl_int32(static_cast<int32_t>(data.token)),
 		tl_int64(data.fullBalance));
 }
 
 TokenState Deserialize(const TLstorage_TokenState &data) {
 	return data.match([&](const TLDstorage_tokenState &data) {
 		return TokenState {
-			.kind = static_cast<TokenKind>(data.vkind().v),
+			.token = static_cast<TokenKind>(data.vkind().v),
 			.fullBalance = data.vfullBalance().v
 		};
 	});
@@ -355,7 +355,7 @@ WalletState Deserialize(const TLstorage_WalletState &data) {
 
 		TokenMap<TokenState> tokenStates;
 		for (auto& item : storedTokenStates) {
-			tokenStates.insert({ item.kind, item });
+			tokenStates.insert({item.token, item });
 		}
 
 		return WalletState{

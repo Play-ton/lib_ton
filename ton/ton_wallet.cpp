@@ -76,7 +76,7 @@ Wallet::Wallet(const QString &path)
 	}, _lifetime);
 
 	_gateUrl = "https://gate.broxus.com/";
-	_tokenContractAddress = "0:1e3869ea230fd7fd9a8bfce5a4b65cbd4f17fd0826c5f43873b446f63a4620d1";
+	_tokenContractAddress = "0:c4adad007271883dca8d55ab6c7cdb7b9ff6085766017a413feefc1f9e1735d1";
 }
 
 Wallet::~Wallet() = default;
@@ -719,7 +719,7 @@ void Wallet::requestTransactions(
 
 void Wallet::requestTokenState(
 		const QString &address,
-		TokenKind kind,
+		TokenKind token,
 		const Callback<TokenState> &done) {
 	const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
 		tl_string("balanceOf"),
@@ -750,7 +750,7 @@ void Wallet::requestTokenState(
 			tl_vector(QVector<TLftabi_Value>{
 				tl_ftabi_valueInt(
 					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
-					tl_int64(static_cast<int64_t>(kind))),
+					tl_int64(static_cast<int64_t>(token))),
 				tl_ftabi_valueAddress(
 					tl_ftabi_paramAddress(tl_string("account")),
 					tl_accountAddress(tl_string(address))),
@@ -763,10 +763,10 @@ void Wallet::requestTokenState(
 		} else {
 			const auto fullBalance = results[0].c_ftabi_valueInt().vvalue().v;
 
-			std::cout << "Received token state for " << static_cast<int32>(kind) << " " << fullBalance << std::endl;
+			std::cout << "Received token state for " << static_cast<int32>(token) << " " << fullBalance << std::endl;
 
 			InvokeCallback(done, TokenState {
-				.kind = kind,
+				.token = token,
 				.fullBalance = fullBalance
 			});
 		}

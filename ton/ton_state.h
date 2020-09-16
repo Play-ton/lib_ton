@@ -33,6 +33,7 @@ template <typename T>
 using TokenMap = std::unordered_map<Ton::TokenKind, T>;
 
 QString toString(TokenKind kind);
+uint32_t countDecimals(TokenKind kind);
 
 bool operator==(
 	const TransactionId &a,
@@ -65,7 +66,7 @@ bool operator==(const AccountState &a, const AccountState &b);
 bool operator!=(const AccountState &a, const AccountState &b);
 
 struct TokenState {
-	TokenKind kind;
+	TokenKind token;
 	int64 fullBalance = kUnknownBalance;
 };
 

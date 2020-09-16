@@ -8,8 +8,8 @@
 
 namespace Ton {
 
-QString toString(TokenKind kind) {
-	switch (kind) {
+QString toString(TokenKind token) {
+	switch (token) {
 		case TokenKind::Ton:
 			return "TON";
 		case TokenKind::USDT:
@@ -19,8 +19,19 @@ QString toString(TokenKind kind) {
 	}
 }
 
-bool operator!(const TokenKind &kind) {
-	return kind == Ton::TokenKind::Ton;
+uint32_t countDecimals(TokenKind token) {
+	switch (token) {
+		case TokenKind::Ton:
+			return 9;
+		case TokenKind::USDT:
+			return 6;
+		default:
+			return 1;
+	}
+}
+
+bool operator!(const TokenKind &token) {
+	return token == Ton::TokenKind::Ton;
 }
 
 bool operator<(const TransactionId &a, const TransactionId &b) {
@@ -36,11 +47,11 @@ bool operator!=(const TransactionId &a, const TransactionId &b) {
 }
 
 bool operator==(const TokenState &a, const TokenState &b) {
-	return (a.kind == b.kind) && (a.fullBalance == b.fullBalance);
+	return (a.token == b.token) && (a.fullBalance == b.fullBalance);
 }
 
 bool operator!=(const TokenState &a, const TokenState &b) {
-	return (a.kind != b.kind) || (a.fullBalance != b.fullBalance);
+	return (a.token != b.token) || (a.fullBalance != b.fullBalance);
 }
 
 bool operator==(const RestrictionLimit &a, const RestrictionLimit &b) {
