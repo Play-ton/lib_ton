@@ -685,8 +685,11 @@ void Wallet::sendTokens(
 	}).send();
 }
 
-void Wallet::openGate() {
-	QDesktopServices::openUrl(QUrl(_gateUrl));
+void Wallet::openGate(const QString &rawAddress) {
+	const auto ethereumTokenAddress = "0xdac17f958d2ee523a2206206994597c13d831ec7";
+	auto url = QUrl(_gateUrl);
+	url.setQuery(QString{"TONAddress=%1&ethereumTokenAddress=%2"}.arg(rawAddress, ethereumTokenAddress));
+	QDesktopServices::openUrl(url);
 }
 
 void Wallet::requestState(

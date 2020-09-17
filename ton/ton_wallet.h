@@ -96,7 +96,7 @@ public:
 		Callback<PendingTransaction> ready,
 		Callback<> done);
 
-	void openGate();
+	void openGate(const QString &rawAddress);
 
 	static void EnableLogging(bool enabled, const QString &basePath);
 	static void LogMessage(const QString &message);
