@@ -23,6 +23,7 @@ struct TransactionId {
 };
 
 enum class TokenKind {
+    DefaultToken = 0x0,
 	Ton = 0x0,
 	USDT = 0x1,
 };
