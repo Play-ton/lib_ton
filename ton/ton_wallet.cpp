@@ -114,9 +114,9 @@ base::flat_set<QString> Wallet::GetValidWords() {
 	Assert(result);
 
 	return result->match([&](const TLDbip39Hints &data) {
-		auto &&words = ranges::view::all(
+		auto &&words = ranges::views::all(
 			data.vwords().v
-		) | ranges::view::transform([](const TLstring &word) {
+		) | ranges::views::transform([](const TLstring &word) {
 			return QString::fromUtf8(word.v);
 		});
 		return base::flat_set<QString>{ words.begin(), words.end() };
@@ -258,7 +258,7 @@ rpl::producer<Update> Wallet::updates() const {
 }
 
 std::vector<QByteArray> Wallet::publicKeys() const {
-	return _list->entries | ranges::view::transform(
+	return _list->entries | ranges::views::transform(
 		&WalletList::Entry::publicKey
 	) | ranges::to_vector;
 }
@@ -946,12 +946,12 @@ void Wallet::loadWebResource(const QString &url, Callback<QByteArray> done) {
 
 Fn<void(Update)> Wallet::generateUpdatesCallback() {
 	return [=](Update update) {
-		if (const auto sync = base::get_if<SyncState>(&update.data)) {
+		if (const auto sync = std::get_if<SyncState>(&update.data)) {
 			if (*sync == _lastSyncStateUpdate) {
 				return;
 			}
 			_lastSyncStateUpdate = *sync;
-		} else if (const auto upgrade = base::get_if<ConfigUpgrade>(
+		} else if (const auto upgrade = std::get_if<ConfigUpgrade>(
 				&update.data)) {
 			if (*upgrade == ConfigUpgrade::TestnetToMainnet) {
 				_switchedToMain = true;

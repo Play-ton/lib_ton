@@ -26,10 +26,10 @@ namespace {
 	auto &outgoing = result.fake.outgoing.emplace_back();
 	outgoing.source = sender;
 	outgoing.destination = transaction.recipient;
-	outgoing.message = MessageText{
+	outgoing.message = MessageData{
 		transaction.comment.toUtf8(),
 		QByteArray(),
-		!transaction.sendUnencryptedText
+		transaction.sendUnencryptedText ? MessageDataType::PlainText : MessageDataType::DecryptedText
 	};
 	outgoing.value = transaction.amount;
 	return result;
@@ -84,9 +84,9 @@ AccountState Parse(const TLFullAccountState &data) {
 				: 0;
 			data.vconfig().match([&](const TLDrwallet_config &data) {
 				result.restrictionStartAt = data.vstart_at().v;
-				result.restrictionLimits = ranges::view::all(
+				result.restrictionLimits = ranges::views::all(
 					data.vlimits().v
-				) | ranges::view::transform([](const TLrwallet_limit &data) {
+				) | ranges::views::transform([](const TLrwallet_limit &data) {
 					return Parse(data);
 				}) | ranges::to_vector;
 			});
@@ -96,15 +96,31 @@ AccountState Parse(const TLFullAccountState &data) {
 	});
 }
 
-MessageText Parse(const TLmsg_Data &data) {
+MessageData Parse(const TLmsg_Data &data) {
 	return data.match([&](const TLDmsg_dataText &data) {
-		return MessageText{ tl::utf16(data.vtext()) };
+		return MessageData{
+			.text = tl::utf16(data.vtext()),
+			.data = {},
+			.type = MessageDataType::PlainText,
+		};
 	}, [&](const TLDmsg_dataRaw &data) {
-		return MessageText{};
+		return MessageData{
+			.text = {},
+			.data = data.vbody().v,
+			.type = MessageDataType::RawBody,
+		};
 	}, [&](const TLDmsg_dataEncryptedText &data) {
-		return MessageText{ QString(), data.vtext().v };
+		return MessageData{
+			.text = {},
+			.data = data.vtext().v,
+			.type = MessageDataType::EncryptedText
+		};
 	}, [&](const TLDmsg_dataDecryptedText &data) {
-		return MessageText{ tl::utf16(data.vtext()), QByteArray(), true };
+		return MessageData{
+			.text = tl::utf16(data.vtext()),
+			.data = {},
+			.type = MessageDataType::DecryptedText
+		};
 	});
 }
 
@@ -133,9 +149,9 @@ Transaction Parse(const TLraw_Transaction &data) {
 		result.fee = data.vfee().v;
 		result.id = Parse(data.vtransaction_id());
 		result.incoming = Parse(data.vin_msg());
-		result.outgoing = ranges::view::all(
+		result.outgoing = ranges::views::all(
 			data.vout_msgs().v
-		) | ranges::view::transform([](const TLraw_Message &data) {
+		) | ranges::views::transform([](const TLraw_Message &data) {
 			return Parse(data);
 		}) | ranges::to_vector;
 		result.otherFee = data.vother_fee().v;
@@ -149,9 +165,9 @@ TransactionsSlice Parse(const TLraw_Transactions &data) {
 	return data.match([&](const TLDraw_transactions &data) {
 		auto result = TransactionsSlice();
 		result.previousId = Parse(data.vprevious_transaction_id());
-		result.list = ranges::view::all(
+		result.list = ranges::views::all(
 			data.vtransactions().v
-		) | ranges::view::transform([](const TLraw_Transaction &data) {
+		) | ranges::views::transform([](const TLraw_Transaction &data) {
 			return Parse(data);
 		}) | ranges::to_vector;
 		return result;
@@ -186,9 +202,9 @@ TransactionCheckResult Parse(const TLquery_Fees &data) {
 	return data.match([&](const TLDquery_fees &data) {
 		auto result = TransactionCheckResult();
 		result.sourceFees = Parse(data.vsource_fees());
-		result.destinationFees = ranges::view::all(
+		result.destinationFees = ranges::views::all(
 			data.vdestination_fees().v
-		) | ranges::view::transform([](const TLFees &data) {
+		) | ranges::views::transform([](const TLFees &data) {
 			return Parse(data);
 		}) | ranges::to_vector;
 		return result;
@@ -197,9 +213,9 @@ TransactionCheckResult Parse(const TLquery_Fees &data) {
 
 std::vector<QString> Parse(const TLExportedKey &data) {
 	return data.match([&](const TLDexportedKey &data) {
-		return ranges::view::all(
+		return ranges::views::all(
 			data.vword_list().v
-		) | ranges::view::transform([](const TLsecureString &data) {
+		) | ranges::views::transform([](const TLsecureString &data) {
 			return tl::utf16(data.v);
 		}) | ranges::to_vector;
 	});
@@ -263,8 +279,8 @@ QVector<EncryptedText> CollectEncryptedTexts(
 	auto result = QVector<EncryptedText>();
 	result.reserve(data.size());
 	const auto add = [&](const Message &data) {
-		if (!data.message.encrypted.isEmpty()) {
-			result.push_back({ data.message.encrypted, data.source });
+		if (!data.message.data.isEmpty()) {
+			result.push_back({data.message.data, data.source });
 		}
 	};
 	for (const auto &transaction : data) {
@@ -286,14 +302,14 @@ std::vector<Transaction> AddDecryptedTexts(
 		return parsed;
 	}
 	const auto decrypt = [&](Message &message) {
-		const auto &was = message.message.encrypted;
+		const auto &was = message.message.data;
 		if (was.isEmpty()) {
 			return;
 		}
 		const auto i = ranges::find(encrypted, was, &EncryptedText::bytes);
 		if (i != encrypted.end()) {
 			message.message.text = decrypted[i - encrypted.begin()].text;
-			message.message.decrypted = true;
+			message.message.type = MessageDataType::DecryptedText;
 		}
 	};
 	for (auto &transaction : parsed) {

@@ -11,10 +11,11 @@ storage.accountStateRestricted lockedBalance:int64 startAt:int64 limits:vector<s
 storage.accountState balance:int64 syncTime:int64 lastTransactionId:storage.TransactionId = storage.AccountState; // old
 storage.accountStateFull balance:int64 syncTime:int64 lastTransactionId:storage.TransactionId details:storage.AccountStateDetails = storage.AccountState;
 storage.message source:string destination:string value:int64 created:int64 bodyHash:bytes message:string = storage.Message; // old
-storage.messageTextEncrypted data:bytes = storage.MessageText;
-storage.messageTextDecrypted text:string = storage.MessageText;
-storage.messageTextPlain text:string = storage.MessageText;
-storage.message2 source:string destination:string value:int64 created:int64 bodyHash:bytes message:storage.MessageText = storage.Message;
+storage.messageDataTextEncrypted data:bytes = storage.MessageData;
+storage.messageDataTextDecrypted text:string = storage.MessageData;
+storage.messageDataTextPlain text:string = storage.MessageData;
+storage.messageDataRaw body:bytes = storage.MessageData;
+storage.message2 source:string destination:string value:int64 created:int64 bodyHash:bytes message:storage.MessageData = storage.Message;
 storage.transaction id:storage.TransactionId time:int64 fee:int64 storageFee:int64 otherFee:int64 incoming:storage.Message outgoing:vector<storage.Message> = storage.Transaction;
 storage.transactionsSlice list:vector<storage.Transaction> previousId:storage.TransactionId = storage.TransactionsSlice;
 storage.pendingTransaction fake:storage.Transaction sentUntilSyncTime:int64 = storage.PendingTransaction;

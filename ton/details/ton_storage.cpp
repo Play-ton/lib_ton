@@ -214,21 +214,46 @@ AccountState Deserialize(const TLstorage_AccountState &data) {
 	});
 }
 
-TLstorage_MessageText Serialize(const MessageText &data) {
-	return !data.encrypted.isEmpty()
-		? make_storage_messageTextEncrypted(tl_bytes(data.encrypted))
-		: data.decrypted
-		? make_storage_messageTextDecrypted(tl_string(data.text))
-		: make_storage_messageTextPlain(tl_string(data.text));
+TLstorage_MessageData Serialize(const MessageData &data) {
+	switch (data.type) {
+		case MessageDataType::PlainText:
+			return make_storage_messageDataTextPlain(tl_string(data.text));
+		case MessageDataType::EncryptedText:
+			return make_storage_messageDataTextEncrypted(tl_bytes(data.data));
+		case MessageDataType::DecryptedText:
+			return make_storage_messageDataTextDecrypted(tl_string(data.text));
+		case MessageDataType::RawBody:
+			return make_storage_messageDataRaw(tl_bytes(data.data));
+		default:
+			Assert(false);
+	}
 }
 
-MessageText Deserialize(const TLstorage_MessageText &data) {
-	return data.match([&](const TLDstorage_messageTextEncrypted &data) {
-		return MessageText{ QString(), tl::utf8(data.vdata()) };
-	}, [&](const TLDstorage_messageTextDecrypted &data) {
-		return MessageText{ tl::utf16(data.vtext()), QByteArray(), true };
-	}, [&](const TLDstorage_messageTextPlain &data) {
-		return MessageText{ tl::utf16(data.vtext()) };
+MessageData Deserialize(const TLstorage_MessageData &data) {
+	return data.match([&](const TLDstorage_messageDataTextEncrypted &data) {
+		return MessageData{
+			.text = {},
+			.data = tl::utf8(data.vdata()),
+			.type = MessageDataType::EncryptedText
+		};
+	}, [&](const TLDstorage_messageDataTextDecrypted &data) {
+		return MessageData{
+			.text = tl::utf16(data.vtext()),
+			.data = {},
+			.type = MessageDataType::DecryptedText
+		};
+	}, [&](const TLDstorage_messageDataTextPlain &data) {
+		return MessageData{
+			.text = tl::utf16(data.vtext()),
+			.data = {},
+			.type = MessageDataType::PlainText
+		};
+	}, [&](const TLDstorage_messageDataRaw &data) {
+		return MessageData{
+			.text = {},
+			.data = data.vbody().v,
+			.type = MessageDataType::RawBody
+		};
 	});
 }
 
@@ -250,7 +275,7 @@ Message Deserialize(const TLstorage_Message &data) {
 			data.vvalue().v,
 			data.vcreated().v,
 			data.vbodyHash().v,
-			MessageText{ tl::utf16(data.vmessage()) }
+			MessageData{ tl::utf16(data.vmessage()) }
 		};
 	}, [&](const TLDstorage_message2 &data) {
 		return Message{

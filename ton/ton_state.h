@@ -73,10 +73,17 @@ struct TokenState {
 bool operator==(const TokenState &a, const TokenState &b);
 bool operator!=(const TokenState &a, const TokenState &b);
 
-struct MessageText {
+enum class MessageDataType {
+	PlainText,
+	EncryptedText,
+	DecryptedText,
+	RawBody
+};
+
+struct MessageData {
 	QString text;
-	QByteArray encrypted;
-	bool decrypted = false;
+	QByteArray data;
+	MessageDataType type;
 };
 
 struct Message {
@@ -85,7 +92,7 @@ struct Message {
 	int64 value = 0;
 	int64 created = 0;
 	QByteArray bodyHash;
-	MessageText message;
+	MessageData message;
 };
 
 struct EncryptedText {
@@ -217,7 +224,7 @@ struct DecryptPasswordGood {
 };
 
 struct Update {
-	base::variant<
+	std::variant<
 		SyncState,
 		LiteServerQuery,
 		ConfigUpgrade,
