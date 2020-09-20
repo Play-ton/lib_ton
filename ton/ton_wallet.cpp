@@ -759,8 +759,8 @@ void Wallet::requestTokenState(
 					tl_accountAddress(tl_string(address))),
 			})
 		))
-	).done([=](const TLftabi_localRunResult &result) {
-		const auto &results = result.c_ftabi_localRunResult().vvalues().v;
+	).done([=](const TLftabi_decodedOutput &result) {
+		const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
 		if (results.empty() && results[0].type() != id_ftabi_valueInt) {
 			InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
 		} else {
