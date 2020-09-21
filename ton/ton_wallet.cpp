@@ -76,7 +76,6 @@ Wallet::Wallet(const QString &path)
 	}, _lifetime);
 
 	_gateUrl = "https://gate.broxus.com/";
-	_tokenContractAddress = "0:c4adad007271883dca8d55ab6c7cdb7b9ff6085766017a413feefc1f9e1735d1";
 }
 
 Wallet::~Wallet() = default;
@@ -516,6 +515,8 @@ void Wallet::checkSendTokens(
 	const auto sender = getUsedAddress(publicKey);
 	Assert(!sender.isEmpty());
 
+	const auto tokenContractAddress = _external->settings().net().tokenContractAddress;
+
 	Result<QByteArray> body{};
 	if (!transaction.swapBack) {
 		body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
@@ -547,7 +548,7 @@ void Wallet::checkSendTokens(
 		tl_int32(transaction.timeout),
 		tl_actionMsg(
 			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(_tokenContractAddress)),
+				tl_accountAddress(tl_string(tokenContractAddress)),
 				tl_string(),
 				tl_int64(transaction.realAmount),
 				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
@@ -628,6 +629,8 @@ void Wallet::sendTokens(
 	const auto sender = getUsedAddress(publicKey);
 	Assert(!sender.isEmpty());
 
+	const auto tokenContractAddress = _external->settings().net().tokenContractAddress;
+
 	Result<QByteArray> body{};
 	if (!transaction.swapBack) {
 		body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
@@ -655,7 +658,7 @@ void Wallet::sendTokens(
 		tl_int32(transaction.timeout),
 		tl_actionMsg(
 			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(_tokenContractAddress)),
+				tl_accountAddress(tl_string(tokenContractAddress)),
 				tl_string(),
 				tl_int64(transaction.realAmount),
 				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
@@ -666,7 +669,7 @@ void Wallet::sendTokens(
 			const auto weak = base::make_weak(this);
 			auto pending = Parse(result, sender, TransactionToSend {
 				.amount = transaction.realAmount,
-				.recipient = _tokenContractAddress,
+				.recipient = tokenContractAddress,
 				.timeout = transaction.timeout,
 				.allowSendToUninited = transaction.allowSendToUninited
 			});
@@ -724,6 +727,8 @@ void Wallet::requestTokenState(
 		const QString &address,
 		TokenKind token,
 		const Callback<TokenState> &done) {
+	const auto tokenContractAddress = _external->settings().net().tokenContractAddress;
+
 	const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
 		tl_string("balanceOf"),
 		tl_vector(
@@ -746,7 +751,7 @@ void Wallet::requestTokenState(
 	}
 
 	_external->lib().request(TLftabi_RunLocal(
-		tl_accountAddress(tl_string(_tokenContractAddress)),
+		tl_accountAddress(tl_string(tokenContractAddress)),
 		createdFunction.value(),
 		tl_ftabi_functionCallExternal(
 			{},

@@ -13,6 +13,7 @@ struct NetSettings {
 	QString configUrl;
 	QByteArray config;
 	bool useCustomConfig = false;
+	QString tokenContractAddress = {};
 };
 
 struct Settings {

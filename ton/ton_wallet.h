@@ -190,7 +190,6 @@ private:
 	base::Timer _viewersPasswordsExpireTimer;
 
 	QString _gateUrl;
-	QString _tokenContractAddress;
 
 	rpl::lifetime _lifetime;
 

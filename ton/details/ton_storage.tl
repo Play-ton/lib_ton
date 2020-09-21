@@ -21,7 +21,7 @@ storage.transactionsSlice list:vector<storage.Transaction> previousId:storage.Tr
 storage.pendingTransaction fake:storage.Transaction sentUntilSyncTime:int64 = storage.PendingTransaction;
 storage.tokenState kind:int32 fullBalance:int64 = storage.TokenState;
 storage.walletState address:string account:storage.AccountState lastTransactions:storage.TransactionsSlice pendingTransactions:vector<storage.PendingTransaction> tokenStates:vector<storage.TokenState> = storage.WalletState;
-storage.network blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool = storage.Network;
+storage.network blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool tokenContractAddress:string = storage.Network;
 
 storage.settings blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool useNetworkCallbacks:storage.Bool = storage.Settings; // old
 storage.settings2 blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool useNetworkCallbacks:storage.Bool version:int32 = storage.Settings; // old

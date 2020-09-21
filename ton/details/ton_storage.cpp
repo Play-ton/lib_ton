@@ -398,7 +398,8 @@ TLstorage_Network Serialize(const NetSettings &data) {
 		tl_string(data.blockchainName),
 		tl_string(data.configUrl),
 		tl_string(data.config),
-		Serialize(data.useCustomConfig));
+		Serialize(data.useCustomConfig),
+		tl_string(data.tokenContractAddress));
 }
 
 NetSettings Deserialize(const TLstorage_Network &data) {
@@ -407,7 +408,8 @@ NetSettings Deserialize(const TLstorage_Network &data) {
 			.blockchainName = tl::utf16(data.vblockchainName()),
 			.configUrl = tl::utf16(data.vconfigUrl()),
 			.config = tl::utf8(data.vconfig()),
-			.useCustomConfig = Deserialize(data.vuseCustomConfig())
+			.useCustomConfig = Deserialize(data.vuseCustomConfig()),
+			.tokenContractAddress = tl::utf8(data.vtokenContractAddress())
 		};
 	});
 }
@@ -455,7 +457,7 @@ Settings Deserialize(const TLstorage_Settings &data) {
 			.test = Deserialize(data.vtest()),
 			.useTestNetwork = Deserialize(data.vuseTestNetwork()),
 			.useNetworkCallbacks = Deserialize(data.vuseNetworkCallbacks()),
-			.version = data.vversion().v
+			.version = data.vversion().v,
 		};
 	});
 	return result;
