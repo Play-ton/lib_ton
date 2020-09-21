@@ -31,7 +31,7 @@ uint32_t countDecimals(TokenKind token) {
 }
 
 bool operator!(const TokenKind &token) {
-	return token == Ton::TokenKind::Ton;
+	return token == Ton::TokenKind::DefaultToken;
 }
 
 bool operator<(const TransactionId &a, const TransactionId &b) {
