@@ -224,13 +224,18 @@ struct DecryptPasswordGood {
 	int generation = 0;
 };
 
+struct TokenContractAddressChanged {
+	QString newTokenContractAddress = {};
+};
+
 struct Update {
 	std::variant<
 		SyncState,
 		LiteServerQuery,
 		ConfigUpgrade,
 		DecryptPasswordNeeded,
-		DecryptPasswordGood> data;
+		DecryptPasswordGood,
+		TokenContractAddressChanged> data;
 };
 
 } // namespace Ton

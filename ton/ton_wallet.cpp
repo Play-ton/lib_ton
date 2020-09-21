@@ -197,6 +197,11 @@ void Wallet::updateSettings(Settings settings, Callback<> done) {
 	const auto detach = (was.net().blockchainName
 		!= settings.net().blockchainName);
 	const auto change = (was.useTestNetwork != settings.useTestNetwork);
+
+	if (was.net().tokenContractAddress != settings.net().tokenContractAddress) {
+		_updates.fire({ TokenContractAddressChanged{settings.net().tokenContractAddress} });
+	}
+
 	const auto finish = [=](Result<ConfigInfo> result) {
 		if (!result) {
 			InvokeCallback(done, result.error());
