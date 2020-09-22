@@ -34,6 +34,7 @@ template <typename T>
 using TokenMap = std::unordered_map<Ton::TokenKind, T>;
 
 QString toString(TokenKind kind);
+TokenKind tokenFromString(QString token);
 uint32_t countDecimals(TokenKind kind);
 
 bool operator==(

@@ -19,6 +19,15 @@ QString toString(TokenKind token) {
 	}
 }
 
+TokenKind tokenFromString(QString token) {
+    if (token == "TON") {
+        return TokenKind::Ton;
+    } else if (token == "USDT") {
+        return TokenKind::USDT;
+    }
+    return TokenKind::DefaultToken;
+}
+
 uint32_t countDecimals(TokenKind token) {
 	switch (token) {
 		case TokenKind::Ton:
@@ -31,7 +40,7 @@ uint32_t countDecimals(TokenKind token) {
 }
 
 bool operator!(const TokenKind &token) {
-	return token == Ton::TokenKind::DefaultToken;
+	return token == Ton::TokenKind::Ton;
 }
 
 bool operator<(const TransactionId &a, const TransactionId &b) {
