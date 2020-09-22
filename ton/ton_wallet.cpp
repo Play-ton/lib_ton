@@ -45,6 +45,178 @@ constexpr auto kDefaultWorkchainId = 0;
 	return tl_error(tl_int32(0), tl_string("KEY_DECRYPT"));
 }
 
+tl::boxed<TLftabi_function> TokenTransferFunction() {
+	static std::optional<TLftabi_function> function;
+	if (!function.has_value()) {
+		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
+			tl_string("transfer"),
+			tl_vector(
+				QVector<TLftabi_Param>{
+					tl_ftabi_paramTime(tl_string("time")),
+					tl_ftabi_paramExpire(tl_string("expire")),
+				}),
+			tl_vector(
+				QVector<TLftabi_Param>{
+					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+					tl_ftabi_paramAddress(tl_string("recipient")),
+					tl_ftabi_paramUint(tl_string("amount"), tl_int32(256))
+				}),
+			{}
+		));
+		Expects(createdFunction.has_value());
+		function = createdFunction.value();
+	}
+	return function.value();
+}
+
+tl::boxed<TLftabi_function> TokenSwapBackFunction() {
+	static std::optional<TLftabi_function> function;
+	if (!function.has_value()) {
+		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
+			tl_string("swapBack"),
+			tl_vector(
+				QVector<TLftabi_Param>{
+					tl_ftabi_paramTime(tl_string("time")),
+					tl_ftabi_paramExpire(tl_string("expire")),
+				}),
+			tl_vector(
+				QVector<TLftabi_Param>{
+					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+					tl_ftabi_paramUint(tl_string("ethereumAddress"), tl_int32(256)),
+					tl_ftabi_paramUint(tl_string("amount"), tl_int32(256))
+				}),
+			{}
+		));
+		Expects(createdFunction.has_value());
+		function = createdFunction.value();
+	}
+	return function.value();
+}
+
+std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
+	const auto decodedTransferInput = RequestSender::Execute(TLftabi_DecodeInput(
+		TokenTransferFunction(),
+		tl_bytes(body),
+		tl_boolTrue()
+	));
+	if (!decodedTransferInput.has_value()) {
+		return std::nullopt;
+	}
+
+	const auto args = decodedTransferInput.value().c_ftabi_decodedInput().vvalues().v;
+	if (args.size() != 3 ||
+		args[0].type() != id_ftabi_valueInt ||
+		args[1].type() != id_ftabi_valueAddress ||
+		args[2].type() != id_ftabi_valueInt)
+	{
+		return std::nullopt;
+	}
+
+	return TokenTransfer {
+		.token = static_cast<Ton::TokenKind>(args[0].c_ftabi_valueInt().vvalue().v),
+		.dest = args[1].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
+		.value = args[2].c_ftabi_valueInt().vvalue().v
+	};
+}
+
+std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
+	const auto decodedSwapBackInput = RequestSender::Execute(TLftabi_DecodeInput(
+		TokenSwapBackFunction(),
+		tl_bytes(body),
+		tl_boolTrue()
+	));
+	if (!decodedSwapBackInput.has_value()) {
+		return std::nullopt;
+	}
+
+	const auto args = decodedSwapBackInput.value().c_ftabi_decodedInput().vvalues().v;
+	if (args.size() != 3 ||
+		args[0].type() != id_ftabi_valueInt ||
+		args[1].type() != id_ftabi_valueBigInt ||
+		args[2].type() != id_ftabi_valueInt)
+	{
+		return std::nullopt;
+	}
+
+	constexpr auto ethereumAddressByteCount = 20;
+
+	auto address = args[1].c_ftabi_valueBigInt().vvalue().v;
+	auto addressSize = address.size();
+	if (addressSize < ethereumAddressByteCount) {
+		return std::nullopt;
+	} else if (addressSize > ethereumAddressByteCount) {
+		auto addressDelta = addressSize - ethereumAddressByteCount;
+		std::memmove(address.data(), address.data() + addressDelta, ethereumAddressByteCount);
+		address.resize(ethereumAddressByteCount);
+	}
+
+	return TokenSwapBack {
+		.token = static_cast<Ton::TokenKind>(args[0].c_ftabi_valueInt().vvalue().v),
+		.dest = "0x" + address.toHex(),
+		.value = args[2].c_ftabi_valueInt().vvalue().v
+	};
+}
+
+Result<QByteArray> CreateTokenMessage(
+	Ton::TokenKind token,
+	const QString &recipient,
+	int64 amount) {
+	const auto tokenKind = static_cast<int32_t>(token);
+
+	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
+		TokenTransferFunction(),
+		tl_ftabi_functionCallInternal(
+			{},
+			tl_vector(QVector<TLftabi_Value>{
+				tl_ftabi_valueInt(
+					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+					tl_int64(static_cast<int64_t>(tokenKind))),
+				tl_ftabi_valueAddress(
+					tl_ftabi_paramAddress(tl_string("recipient")),
+					tl_accountAddress(tl_string(recipient))),
+				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
+			})
+		)));
+	if (!encodedBody.has_value()) {
+		return encodedBody.error();
+	}
+
+	return encodedBody.value().c_ftabi_messageBody().vdata().v;
+}
+
+Result<QByteArray> CreateSwapBackMessage(
+	Ton::TokenKind token,
+	const QString &etheriumAddress,
+	int64 amount) {
+	if (!etheriumAddress.startsWith("0x")) {
+		return Error { Error::Type::IO, "invalid etherium address" };
+	}
+	const auto target = etheriumAddress.mid(2, -1);
+	const auto targetBytes = QByteArray::fromHex(target.toUtf8());
+
+	const auto tokenKind = static_cast<int32_t>(token);
+
+	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
+		TokenSwapBackFunction(),
+		tl_ftabi_functionCallInternal(
+			{},
+			tl_vector(QVector<TLftabi_Value>{
+				tl_ftabi_valueInt(
+					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+					tl_int64(static_cast<int64_t>(tokenKind))),
+				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
+				tl_ftabi_valueBigInt(
+					tl_ftabi_paramUint(tl_string("ethereumAddress"), tl_int32(256)),
+					tl_string(targetBytes))
+			})
+		)));
+	if (!encodedBody.has_value()) {
+		return encodedBody.error();
+	}
+
+	return encodedBody.value().c_ftabi_messageBody().vdata().v;
+}
+
 } // namespace
 
 namespace details {
@@ -105,6 +277,26 @@ QString Wallet::ConvertIntoRaw(const QString& address) {
 	const auto addr = QString::fromLocal8Bit(unpacked.vaddr().v.toHex().toUpper());
 
 	return QString{ "%1:%2" }.arg(workchain).arg(addr);
+}
+
+std::optional<Ton::TokenTransaction> Wallet::ParseTokenTransaction(const Ton::MessageData& message) {
+	if (message.type != Ton::MessageDataType::RawBody) {
+		return std::nullopt;
+	}
+
+	if (auto transfer = ParseTokenTransfer(message.data); transfer.has_value()) {
+		std::cout << "Tranfer: " << std::endl;
+		std::cout << "\t" << transfer.value().value << " " << Ton::toString(transfer.value().token).toStdString() << "\n";
+		std::cout << "\t to: " << transfer.value().dest.toStdString() << "\n" << std::endl;
+		return transfer.value();
+	} else if (auto swapBack = ParseTokenSwapBack(message.data); swapBack.has_value()) {
+		std::cout << "Swap back: " << std::endl;
+		std::cout << "\t" << swapBack.value().value << " " << Ton::toString(swapBack.value().token).toStdString() << "\n";
+		std::cout << "\t to: " << swapBack.value().dest.toStdString() << "\n" << std::endl;
+		return swapBack.value();
+	} else {
+		return std::nullopt;
+	}
 }
 
 base::flat_set<QString> Wallet::GetValidWords() {
@@ -524,9 +716,9 @@ void Wallet::checkSendTokens(
 
 	Result<QByteArray> body{};
 	if (!transaction.swapBack) {
-		body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
+		body = CreateTokenMessage(transaction.token, transaction.recipient, transaction.amount);
 	} else {
-		body = createSwapBackMessage(transaction.token, transaction.recipient, transaction.amount);
+		body = CreateSwapBackMessage(transaction.token, transaction.recipient, transaction.amount);
 	}
 	if (!body.has_value()) {
 		InvokeCallback(done, body.error());
@@ -638,9 +830,9 @@ void Wallet::sendTokens(
 
 	Result<QByteArray> body{};
 	if (!transaction.swapBack) {
-		body = createTokenMessage(transaction.token, transaction.recipient, transaction.amount);
+		body = CreateTokenMessage(transaction.token, transaction.recipient, transaction.amount);
 	} else {
-		body = createSwapBackMessage(transaction.token, transaction.recipient, transaction.amount);
+		body = CreateSwapBackMessage(transaction.token, transaction.recipient, transaction.amount);
 	}
 	if (!body.has_value()) {
 		InvokeCallback(done, body.error());
@@ -981,104 +1173,6 @@ void Wallet::checkLocalTime(BlockchainTime time) {
 			&_external->lib(),
 			[=] { _localTimeSyncer = nullptr; });
 	}
-}
-
-Result<QByteArray> Wallet::createSwapBackMessage(
-	Ton::TokenKind token,
-	const QString &etheriumAddress,
-	int64 amount) {
-	if (!etheriumAddress.startsWith("0x")) {
-		return Error { Error::Type::IO, "invalid etherium address" };
-	}
-	const auto target = etheriumAddress.mid(2, -1);
-	const auto targetBytes = QByteArray::fromHex(target.toUtf8());
-
-	const auto tokenKind = static_cast<int32_t>(token);
-
-	const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-		tl_string("swapBack"),
-		tl_vector(
-			QVector<TLftabi_Param>{
-				tl_ftabi_paramTime(tl_string("time")),
-				tl_ftabi_paramExpire(tl_string("expire")),
-			}),
-		tl_vector(
-			QVector<TLftabi_Param>{
-				tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
-				tl_ftabi_paramUint(tl_string("ethereumAddress"), tl_int32(256)),
-				tl_ftabi_paramUint(tl_string("amount"), tl_int32(256))
-			}),
-		{}
-	));
-	if (!createdFunction.has_value()) {
-		return createdFunction.error();
-	}
-
-	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-		createdFunction.value(),
-		tl_ftabi_functionCallInternal(
-			{},
-			tl_vector(QVector<TLftabi_Value>{
-				tl_ftabi_valueInt(
-					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
-					tl_int64(static_cast<int64_t>(tokenKind))),
-				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
-				tl_ftabi_valueBigInt(
-					tl_ftabi_paramUint(tl_string("ethereumAddress"), tl_int32(256)),
-					tl_string(targetBytes))
-			})
-		)));
-	if (!encodedBody.has_value()) {
-		return encodedBody.error();
-	}
-
-	return encodedBody.value().c_ftabi_messageBody().vdata().v;
-}
-
-Result<QByteArray> Wallet::createTokenMessage(
-		Ton::TokenKind token,
-		const QString &recipient,
-		int64 amount) {
-	const auto tokenKind = static_cast<int32_t>(token);
-
-	const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-		tl_string("transfer"),
-		tl_vector(
-			QVector<TLftabi_Param>{
-				tl_ftabi_paramTime(tl_string("time")),
-				tl_ftabi_paramExpire(tl_string("expire")),
-			}),
-		tl_vector(
-			QVector<TLftabi_Param>{
-				tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
-				tl_ftabi_paramAddress(tl_string("recipient")),
-				tl_ftabi_paramUint(tl_string("amount"), tl_int32(256))
-			}),
-		{}
-	));
-	if (!createdFunction.has_value()) {
-		return createdFunction.error();
-	}
-
-	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-		createdFunction.value(),
-		tl_ftabi_functionCallInternal(
-			{},
-			tl_vector(QVector<TLftabi_Value>{
-				tl_ftabi_valueInt(
-					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
-					tl_int64(static_cast<int64_t>(tokenKind))),
-				tl_ftabi_valueAddress(
-					tl_ftabi_paramAddress(tl_string("recipient")),
-					tl_accountAddress(tl_string(recipient))),
-				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
-			})
-	)));
-	if (!encodedBody.has_value()) {
-		return encodedBody.error();
-	}
-
-	return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
 } // namespace Ton
