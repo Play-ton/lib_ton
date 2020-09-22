@@ -303,7 +303,7 @@ std::vector<Transaction> AddDecryptedTexts(
 	}
 	const auto decrypt = [&](Message &message) {
 		const auto &was = message.message.data;
-		if (was.isEmpty()) {
+		if (was.isEmpty() || message.message.type == MessageDataType::RawBody) {
 			return;
 		}
 		const auto i = ranges::find(encrypted, was, &EncryptedText::bytes);

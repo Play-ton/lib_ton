@@ -98,6 +98,8 @@ using TokenTransaction = std::variant<
 	TokenTransfer,
 	TokenSwapBack>;
 
+bool CheckTokenTransaction(TokenKind token, const TokenTransaction& transaction);
+
 struct MessageData {
 	QString text;
 	QByteArray data;

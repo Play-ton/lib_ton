@@ -63,6 +63,14 @@ bool operator!=(const TokenState &a, const TokenState &b) {
 	return (a.token != b.token) || (a.fullBalance != b.fullBalance);
 }
 
+bool CheckTokenTransaction(TokenKind token, const TokenTransaction& transaction) {
+	return v::match(transaction, [&](const TokenTransfer &transfer) {
+		return transfer.token == token;
+	}, [&](const TokenSwapBack &swapBack) {
+		return swapBack.token == token;
+	});
+}
+
 bool operator==(const RestrictionLimit &a, const RestrictionLimit &b) {
 	return (a.seconds == b.seconds) && (a.lockedAmount == b.lockedAmount);
 }
