@@ -82,6 +82,22 @@ enum class MessageDataType {
 	RawBody
 };
 
+struct TokenTransfer {
+	TokenKind token;
+	QString dest;
+	int64 value = 0;
+};
+
+struct TokenSwapBack {
+	TokenKind token;
+	QString dest;
+	int64 value = 0;
+};
+
+using TokenTransaction = std::variant<
+	TokenTransfer,
+	TokenSwapBack>;
+
 struct MessageData {
 	QString text;
 	QByteArray data;

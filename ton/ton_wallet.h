@@ -102,6 +102,8 @@ public:
 	static void LogMessage(const QString &message);
 	[[nodiscard]] static bool CheckAddress(const QString &address);
 	[[nodiscard]] static QString ConvertIntoRaw(const QString &address);
+	[[nodiscard]] static std::optional<Ton::TokenTransaction> ParseTokenTransaction(
+		const Ton::MessageData& message);
 	[[nodiscard]] static base::flat_set<QString> GetValidWords();
 	[[nodiscard]] static bool IsIncorrectPasswordError(const Error &error);
 
@@ -151,14 +153,6 @@ private:
 	void checkLocalTime(details::BlockchainTime time);
 	void notifyPasswordGood(const QByteArray &publicKey, int generation);
 	void checkPasswordsExpiration();
-	[[nodiscard]] Result<QByteArray> createTokenMessage(
-		Ton::TokenKind token,
-		const QString &recipient,
-		int64 amount);
-	[[nodiscard]] Result<QByteArray> createSwapBackMessage(
-		Ton::TokenKind token,
-		const QString &etheriumAddress,
-		int64 amount);
 	[[nodiscard]] QString getDefaultAddress(
 		const QByteArray &publicKey,
 		int revision) const;
