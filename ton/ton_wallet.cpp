@@ -963,7 +963,7 @@ void Wallet::requestTokenState(
 		))
 	).done([=](const TLftabi_decodedOutput &result) {
 		const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
-		if (results.empty() && results[0].type() != id_ftabi_valueInt) {
+		if (results.empty() || results[0].type() != id_ftabi_valueInt) {
 			InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
 		} else {
 			const auto fullBalance = results[0].c_ftabi_valueInt().vvalue().v;
