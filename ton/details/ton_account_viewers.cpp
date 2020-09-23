@@ -160,23 +160,17 @@ void AccountViewers::refreshAccount(
 			_blockchainTime.fire({ requested, TimeId(state.syncTime) });
 		}
 
-		const auto onTokenStateReceived = [=](Result<TokenState> tokenState) {
-			if (!tokenState.has_value()) {
-				std::cout << tokenState.error().details.toStdString() << std::endl;
+		const auto onTokenStatesReceived = [=](Result<TokenMap<TokenState>> tokenStates) {
+			if (!tokenStates.has_value()) {
+				std::cout << tokenStates.error().details.toStdString() << std::endl;
 			}
 
-			TokenMap<TokenState> tokenStates;
-			if (tokenState.has_value()) {
-				tokenStates.insert(std::make_pair(tokenState->token, std::move(tokenState.value())));
-			} else {
-				tokenStates.insert(std::make_pair(tokenState->token, TokenState {
-					.token = TokenKind::USDT,
-					.fullBalance = kUnknownBalance,
-				}));
+			if (!tokenStates.has_value()) {
+				tokenStates.emplace(TokenMap<TokenState>{});
 			}
 
 			if (state == viewers->state.current().account) {
-				checkPendingForSameState(address, *viewers, tokenStates, state);
+				checkPendingForSameState(address, *viewers, tokenStates.value(), state);
 				return;
 			}
 			const auto received = [=](Result<TransactionsSlice> result) {
@@ -192,7 +186,7 @@ void AccountViewers::refreshAccount(
 						.address = address,
 						.account = state,
 						.lastTransactions = std::move(*result),
-						.tokenStates = std::move(tokenStates)},
+						.tokenStates = std::move(tokenStates.value())},
 					RefreshSource::Remote);
 			};
 			_owner->requestTransactions(
@@ -202,10 +196,16 @@ void AccountViewers::refreshAccount(
 				received);
 		};
 
-		_owner->requestTokenState(
+		_owner->requestTokenStates(
 			address,
-			TokenKind::USDT,
-			onTokenStateReceived);
+			{
+				Ton::TokenKind::USDT,
+				Ton::TokenKind::USDC,
+				Ton::TokenKind::DAI,
+				Ton::TokenKind::WBTC,
+				Ton::TokenKind::WETH,
+			},
+			onTokenStatesReceived);
 	});
 }
 

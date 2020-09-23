@@ -11,6 +11,8 @@
 #include "base/weak_ptr.h"
 #include "base/timer.h"
 
+#include <unordered_set>
+
 namespace Storage::Cache {
 class Database;
 } // namespace Storage::Cache
@@ -97,6 +99,7 @@ public:
 		Callback<> done);
 
 	void openGate(const QString &rawAddress);
+	void openReveal(const QString &ethereumAddress);
 
 	static void EnableLogging(bool enabled, const QString &basePath);
 	static void LogMessage(const QString &message);
@@ -134,10 +137,12 @@ public:
 		const QString &address,
 		const TransactionId &lastId,
 		const Callback<TransactionsSlice> &done);
-	void requestTokenState(
+	void requestTokenStates(
 		const QString &address,
-		TokenKind token,
-		const Callback<TokenState> &done);
+		std::unordered_set<TokenKind> &&tokens,
+		const Callback<TokenMap<TokenState>> &done);
+	void requestAvailableTokens(
+		const Callback<TokenMap<TokenInfo>> &done);
 
 private:
 	struct ViewersPassword {

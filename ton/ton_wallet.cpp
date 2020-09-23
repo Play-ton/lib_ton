@@ -30,6 +30,7 @@
 #include <QtGui/QDesktopServices>
 #include <utility>
 #include <iostream>
+#include <shared_mutex>
 
 namespace Ton {
 namespace {
@@ -43,6 +44,32 @@ constexpr auto kDefaultWorkchainId = 0;
 
 [[nodiscard]] TLError GenerateFakeIncorrectPasswordError() {
 	return tl_error(tl_int32(0), tl_string("KEY_DECRYPT"));
+}
+
+tl::boxed<TLftabi_function> TokenBalanceOf() {
+	static std::optional<TLftabi_function> function;
+	if (!function.has_value()) {
+		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
+			tl_string("balanceOf"),
+			tl_vector(
+				QVector<TLftabi_Param>{
+					tl_ftabi_paramTime(tl_string("time")),
+					tl_ftabi_paramExpire(tl_string("expire")),
+				}),
+			tl_vector(
+				QVector<TLftabi_Param>{
+					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+					tl_ftabi_paramAddress(tl_string("account")),
+				}),
+			tl_vector(
+				QVector<TLftabi_Param>{
+					tl_ftabi_paramUint(tl_string("value0"), tl_int32(256))
+				})
+		));
+		Expects(createdFunction.has_value());
+		function = createdFunction.value();
+	}
+	return function.value();
 }
 
 tl::boxed<TLftabi_function> TokenTransferFunction() {
@@ -892,6 +919,12 @@ void Wallet::openGate(const QString &rawAddress) {
 	QDesktopServices::openUrl(url);
 }
 
+void Wallet::openReveal(const QString &ethereumAddress) {
+	auto url = QUrl(_gateUrl);
+	url.setQuery(QString{"reveal=%1"}.arg(ethereumAddress));
+	QDesktopServices::openUrl(url);
+}
+
 void Wallet::requestState(
 		const QString &address,
 		const Callback<AccountState> &done) {
@@ -920,64 +953,89 @@ void Wallet::requestTransactions(
 	}).send();
 }
 
-void Wallet::requestTokenState(
+void Wallet::requestTokenStates(
 		const QString &address,
-		TokenKind token,
-		const Callback<TokenState> &done) {
+		std::unordered_set<TokenKind> &&tokens,
+		const Callback<TokenMap<TokenState>> &done) {
 	const auto tokenContractAddress = _external->settings().net().tokenContractAddress;
 
-	const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-		tl_string("balanceOf"),
-		tl_vector(
-			QVector<TLftabi_Param>{
-				tl_ftabi_paramTime(tl_string("time")),
-				tl_ftabi_paramExpire(tl_string("expire")),
-			}),
-		tl_vector(
-			QVector<TLftabi_Param>{
-				tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
-				tl_ftabi_paramAddress(tl_string("account")),
-			}),
-		tl_vector(
-			QVector<TLftabi_Param>{
-				tl_ftabi_paramUint(tl_string("value0"), tl_int32(256))
-			})
-	));
-	if (!createdFunction.has_value()) {
-		return InvokeCallback(done, createdFunction.error());
-	}
-
-	_external->lib().request(TLftabi_RunLocal(
-		tl_accountAddress(tl_string(tokenContractAddress)),
-		createdFunction.value(),
-		tl_ftabi_functionCallExternal(
-			{},
-			tl_vector(QVector<TLftabi_Value>{
-				tl_ftabi_valueInt(
-					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
-					tl_int64(static_cast<int64_t>(token))),
-				tl_ftabi_valueAddress(
-					tl_ftabi_paramAddress(tl_string("account")),
-					tl_accountAddress(tl_string(address))),
-			})
-		))
-	).done([=](const TLftabi_decodedOutput &result) {
-		const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
-		if (results.empty() || results[0].type() != id_ftabi_valueInt) {
-			InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
-		} else {
-			const auto fullBalance = results[0].c_ftabi_valueInt().vvalue().v;
-
-			std::cout << "Received token state for " << static_cast<int32>(token) << " " << fullBalance << std::endl;
-
-			InvokeCallback(done, TokenState {
-				.token = token,
-				.fullBalance = fullBalance
-			});
+	struct StateContext {
+		explicit StateContext(std::unordered_set<TokenKind> &&tokens, const Callback<TokenMap<TokenState>> &done)
+			: requestedTokens{std::move(tokens)}
+			, done{done} {
 		}
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
+
+		void notifySuccess(TokenState &&tokenState) {
+			std::unique_lock lock{mutex};
+			const auto token = tokenState.token;
+			result.insert(std::make_pair(token, tokenState));
+			checkComplete(token);
+		}
+
+		void notifyError(TokenKind token) {
+			std::unique_lock lock{mutex};
+			checkComplete(token);
+		}
+
+		void checkComplete(TokenKind token) {
+			requestedTokens.erase(token);
+			if (requestedTokens.empty()) {
+				InvokeCallback(done, std::move(result));
+			}
+		}
+
+		std::unordered_set<TokenKind> requestedTokens{};
+		TokenMap<TokenState> result;
+		Callback<TokenMap<TokenState>> done;
+		std::shared_mutex mutex;
+	};
+
+	std::shared_ptr<StateContext> ctx{new StateContext{std::move(tokens), done}};
+
+	std::shared_lock lock{ctx->mutex};
+	for (const auto& token : ctx->requestedTokens) {
+		_external->lib().request(TLftabi_RunLocal(
+			tl_accountAddress(tl_string(tokenContractAddress)),
+			TokenBalanceOf(),
+			tl_ftabi_functionCallExternal(
+				{},
+				tl_vector(QVector<TLftabi_Value>{
+					tl_ftabi_valueInt(
+						tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+						tl_int64(static_cast<int64_t>(token))),
+					tl_ftabi_valueAddress(
+						tl_ftabi_paramAddress(tl_string("account")),
+						tl_accountAddress(tl_string(address))),
+				})
+			))
+		).done([=](const TLftabi_decodedOutput &result) {
+			const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
+			if (results.empty() || results[0].type() != id_ftabi_valueInt) {
+				//InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
+				std::cout << "failed to parse results";
+				ctx->notifyError(token);
+			} else {
+				const auto fullBalance = results[0].c_ftabi_valueInt().vvalue().v;
+
+				std::cout << "Received token state for " << static_cast<int32>(token) << " " << fullBalance << std::endl;
+
+				ctx->notifySuccess(TokenState {
+					.token = token,
+					.fullBalance = fullBalance
+				});
+			}
+		}).fail([=](const TLError &error) {
+			std::cout << error.c_error().vmessage().v.toStdString() << std::endl;
+			ctx->notifyError(token);
+			//InvokeCallback(done, ErrorFromLib(error));
+		}).send();
+	}
+}
+
+void Wallet::requestAvailableTokens(
+		const Callback<TokenMap<TokenInfo>> &done) {
+	// TODO:
+	throw std::runtime_error("Unimplemented");
 }
 
 void Wallet::decrypt(
