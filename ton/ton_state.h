@@ -23,19 +23,33 @@ struct TransactionId {
 };
 
 enum class TokenKind {
-    DefaultToken = 0x0,
+	DefaultToken = 0x0,
 	Ton = 0x0,
 	USDT = 0x1,
+	USDC = 0x2,
+	DAI = 0x3,
+	WBTC = 0x4,
+	WETH = 0x5,
 };
 
 bool operator!(const TokenKind &kind);
+bool operator<(const TokenKind &left, const TokenKind &right);
+bool operator>(const TokenKind &left, const TokenKind &right);
 
 template <typename T>
 using TokenMap = std::unordered_map<Ton::TokenKind, T>;
 
 QString toString(TokenKind kind);
-TokenKind tokenFromString(QString token);
+TokenKind tokenFromString(const QString &token);
 uint32_t countDecimals(TokenKind kind);
+
+struct TokenInfo {
+	TokenKind token;
+	int64 decimals;
+	int64 ethereumDecimals;
+	QString name;
+	QString symbol;
+};
 
 bool operator==(
 	const TransactionId &a,

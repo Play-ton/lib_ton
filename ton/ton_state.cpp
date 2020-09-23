@@ -6,41 +6,79 @@
 //
 #include "ton/ton_state.h"
 
+#include <QHash>
+
+namespace std {
+template<> struct hash<QString> {
+	std::size_t operator()(const QString& s) const noexcept {
+		return static_cast<size_t>(qHash(s));
+	}
+};
+}
+
 namespace Ton {
 
 QString toString(TokenKind token) {
-	switch (token) {
-		case TokenKind::Ton:
-			return "TON";
-		case TokenKind::USDT:
-			return "USDT";
-		default:
-			return "unknown";
+	static std::unordered_map<TokenKind, QString> kindToName = {
+		{TokenKind::Ton, "TON"},
+		{TokenKind::USDT, "USDT"},
+		{TokenKind::USDC, "USDC"},
+		{TokenKind::DAI, "DAI"},
+		{TokenKind::WBTC, "WBTC"},
+		{TokenKind::WETH, "WETH"}
+	};
+	const auto it = kindToName.find(token);
+	if (it == kindToName.end()) {
+		return "unknown";
+	} else {
+		return it->second;
 	}
 }
 
-TokenKind tokenFromString(QString token) {
-    if (token == "TON") {
-        return TokenKind::Ton;
-    } else if (token == "USDT") {
-        return TokenKind::USDT;
-    }
-    return TokenKind::DefaultToken;
+TokenKind tokenFromString(const QString &token) {
+	static std::unordered_map<QString, TokenKind> nameToKind = {
+		{"ton", TokenKind::Ton},
+		{"usdt", TokenKind::USDT},
+		{"usdc", TokenKind::USDC},
+		{"dai", TokenKind::DAI},
+		{"wbtc", TokenKind::WBTC},
+		{"weth", TokenKind::WETH}
+	};
+	const auto it = nameToKind.find(token.toLower());
+	if (it == nameToKind.end()) {
+		return TokenKind::DefaultToken;
+	} else {
+		return it->second;
+	}
 }
 
 uint32_t countDecimals(TokenKind token) {
-	switch (token) {
-		case TokenKind::Ton:
-			return 9;
-		case TokenKind::USDT:
-			return 6;
-		default:
-			return 1;
+	static std::unordered_map<TokenKind, uint32_t> kindToDecimals = {
+		{TokenKind::Ton, 9},
+		{TokenKind::USDT, 6},
+		{TokenKind::USDC, 6},
+		{TokenKind::DAI, 9},
+		{TokenKind::WBTC, 8},
+		{TokenKind::WETH, 9}
+	};
+	const auto it = kindToDecimals.find(token);
+	if (it == kindToDecimals.end()) {
+		return 1;
+	} else {
+		return it->second;
 	}
 }
 
 bool operator!(const TokenKind &token) {
 	return token == Ton::TokenKind::Ton;
+}
+
+bool operator<(const TokenKind &left, const TokenKind &right) {
+	return static_cast<uint32_t>(left) < static_cast<uint32_t>(right);
+}
+
+bool operator>(const TokenKind &left, const TokenKind &right) {
+	return static_cast<uint32_t>(left) > static_cast<uint32_t>(right);
 }
 
 bool operator<(const TransactionId &a, const TransactionId &b) {
