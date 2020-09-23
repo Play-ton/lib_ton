@@ -109,8 +109,8 @@ tl::boxed<TLftabi_function> TokenSwapBackFunction() {
 			tl_vector(
 				QVector<TLftabi_Param>{
 					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
+					tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)),
 					tl_ftabi_paramUint(tl_string("ethereumAddress"), tl_int32(256)),
-					tl_ftabi_paramUint(tl_string("amount"), tl_int32(256))
 				}),
 			{}
 		));
@@ -159,15 +159,15 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
 	const auto args = decodedSwapBackInput.value().c_ftabi_decodedInput().vvalues().v;
 	if (args.size() != 3 ||
 		args[0].type() != id_ftabi_valueInt ||
-		args[1].type() != id_ftabi_valueBigInt ||
-		args[2].type() != id_ftabi_valueInt)
+		args[1].type() != id_ftabi_valueInt ||
+		args[2].type() != id_ftabi_valueBigInt)
 	{
 		return std::nullopt;
 	}
 
 	constexpr auto ethereumAddressByteCount = 20;
 
-	auto address = args[1].c_ftabi_valueBigInt().vvalue().v;
+	auto address = args[2].c_ftabi_valueBigInt().vvalue().v;
 	auto addressSize = address.size();
 	if (addressSize < ethereumAddressByteCount) {
 		return std::nullopt;
@@ -180,7 +180,7 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
 	return TokenSwapBack {
 		.token = static_cast<Ton::TokenKind>(args[0].c_ftabi_valueInt().vvalue().v),
 		.dest = "0x" + address.toHex(),
-		.value = args[2].c_ftabi_valueInt().vvalue().v
+		.value = args[1].c_ftabi_valueInt().vvalue().v
 	};
 }
 
