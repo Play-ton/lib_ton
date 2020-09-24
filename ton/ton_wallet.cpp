@@ -312,14 +312,8 @@ std::optional<Ton::TokenTransaction> Wallet::ParseTokenTransaction(const Ton::Me
 	}
 
 	if (auto transfer = ParseTokenTransfer(message.data); transfer.has_value()) {
-		std::cout << "Tranfer: " << std::endl;
-		std::cout << "\t" << transfer.value().value << " " << Ton::toString(transfer.value().token).toStdString() << "\n";
-		std::cout << "\t to: " << transfer.value().dest.toStdString() << "\n" << std::endl;
 		return transfer.value();
 	} else if (auto swapBack = ParseTokenSwapBack(message.data); swapBack.has_value()) {
-		std::cout << "Swap back: " << std::endl;
-		std::cout << "\t" << swapBack.value().value << " " << Ton::toString(swapBack.value().token).toStdString() << "\n";
-		std::cout << "\t to: " << swapBack.value().dest.toStdString() << "\n" << std::endl;
 		return swapBack.value();
 	} else {
 		return std::nullopt;
@@ -912,10 +906,14 @@ void Wallet::sendTokens(
 	}).send();
 }
 
-void Wallet::openGate(const QString &rawAddress) {
-	const auto ethereumTokenAddress = "0xdac17f958d2ee523a2206206994597c13d831ec7";
+void Wallet::openGate(const QString &rawAddress, std::optional<TokenKind> token) {
 	auto url = QUrl(_gateUrl);
-	url.setQuery(QString{"TONAddress=%1&ethereumTokenAddress=%2"}.arg(rawAddress, ethereumTokenAddress));
+	auto params = "TONAddress=" + rawAddress;
+	if (token.has_value()) {
+		params += "&ethereumTokenAddress=" + contractAddress(token.value());
+	}
+
+	url.setQuery(params);
 	QDesktopServices::openUrl(url);
 }
 
@@ -1030,12 +1028,6 @@ void Wallet::requestTokenStates(
 			//InvokeCallback(done, ErrorFromLib(error));
 		}).send();
 	}
-}
-
-void Wallet::requestAvailableTokens(
-		const Callback<TokenMap<TokenInfo>> &done) {
-	// TODO:
-	throw std::runtime_error("Unimplemented");
 }
 
 void Wallet::decrypt(

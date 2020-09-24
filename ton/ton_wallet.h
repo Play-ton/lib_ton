@@ -98,7 +98,7 @@ public:
 		Callback<PendingTransaction> ready,
 		Callback<> done);
 
-	void openGate(const QString &rawAddress);
+	void openGate(const QString &rawAddress, std::optional<TokenKind> token = {});
 	void openReveal(const QString &rawAddress, const QString &ethereumAddress);
 
 	static void EnableLogging(bool enabled, const QString &basePath);
@@ -141,8 +141,6 @@ public:
 		const QString &address,
 		std::unordered_set<TokenKind> &&tokens,
 		const Callback<TokenMap<TokenState>> &done);
-	void requestAvailableTokens(
-		const Callback<TokenMap<TokenInfo>> &done);
 
 private:
 	struct ViewersPassword {

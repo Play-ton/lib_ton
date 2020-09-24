@@ -18,20 +18,50 @@ template<> struct hash<QString> {
 
 namespace Ton {
 
-QString toString(TokenKind token) {
-	static std::unordered_map<TokenKind, QString> kindToName = {
-		{TokenKind::Ton, "TON"},
-		{TokenKind::USDT, "USDT"},
-		{TokenKind::USDC, "USDC"},
-		{TokenKind::DAI, "DAI"},
-		{TokenKind::WBTC, "WBTC"},
-		{TokenKind::WETH, "WETH"}
+struct TokenInfo {
+	QString symbol{};
+	int64 decimals{};
+	QString contract{};
+};
+
+TokenInfo* FindTokenInfo(TokenKind token) {
+	static std::unordered_map<TokenKind, TokenInfo> kindToInfo = {
+		{TokenKind::Ton,  { .symbol = "TON", .decimals = 9 }},
+		{TokenKind::USDT, { .symbol = "USDT", .decimals = 6, .contract = "0xdac17f958d2ee523a2206206994597c13d831ec7" }},
+		{TokenKind::USDC, { .symbol = "USDC", .decimals = 6, .contract = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" }},
+		{TokenKind::DAI,  { .symbol = "DAI", .decimals = 9, .contract = "0x6b175474e89094c44da98b954eedeac495271d0f" }},
+		{TokenKind::WBTC, { .symbol = "WBTC", .decimals = 8, .contract = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599" }},
+		{TokenKind::WETH, { .symbol = "WETH", .decimals = 9, .contract = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" }},
 	};
-	const auto it = kindToName.find(token);
-	if (it == kindToName.end()) {
-		return "unknown";
+	const auto it = kindToInfo.find(token);
+	if (it != kindToInfo.end()) {
+		return &it->second;
 	} else {
-		return it->second;
+		return nullptr;
+	}
+}
+
+QString toString(TokenKind token) {
+	if (const auto* info = FindTokenInfo(token)) {
+		return info->symbol;
+	} else {
+		return "unknown";
+	}
+}
+
+uint32_t countDecimals(TokenKind token) {
+	if (const auto* info = FindTokenInfo(token)) {
+		return info->decimals;
+	} else {
+		return 1;
+	}
+}
+
+QString contractAddress(TokenKind token) {
+	if (const auto* info = FindTokenInfo(token)) {
+		return info->contract;
+	} else {
+		return {};
 	}
 }
 
@@ -47,23 +77,6 @@ TokenKind tokenFromString(const QString &token) {
 	const auto it = nameToKind.find(token.toLower());
 	if (it == nameToKind.end()) {
 		return TokenKind::DefaultToken;
-	} else {
-		return it->second;
-	}
-}
-
-uint32_t countDecimals(TokenKind token) {
-	static std::unordered_map<TokenKind, uint32_t> kindToDecimals = {
-		{TokenKind::Ton, 9},
-		{TokenKind::USDT, 6},
-		{TokenKind::USDC, 6},
-		{TokenKind::DAI, 9},
-		{TokenKind::WBTC, 8},
-		{TokenKind::WETH, 9}
-	};
-	const auto it = kindToDecimals.find(token);
-	if (it == kindToDecimals.end()) {
-		return 1;
 	} else {
 		return it->second;
 	}

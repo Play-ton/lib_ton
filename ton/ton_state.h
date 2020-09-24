@@ -37,17 +37,10 @@ bool operator!(const TokenKind &kind);
 template <typename T>
 using TokenMap = std::unordered_map<Ton::TokenKind, T>;
 
-QString toString(TokenKind kind);
+QString toString(TokenKind token);
+uint32_t countDecimals(TokenKind token);
+QString contractAddress(TokenKind token);
 TokenKind tokenFromString(const QString &token);
-uint32_t countDecimals(TokenKind kind);
-
-struct TokenInfo {
-	TokenKind token;
-	int64 decimals;
-	int64 ethereumDecimals;
-	QString name;
-	QString symbol;
-};
 
 bool operator==(
 	const TransactionId &a,
