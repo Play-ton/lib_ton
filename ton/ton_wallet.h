@@ -99,7 +99,7 @@ public:
 		Callback<> done);
 
 	void openGate(const QString &rawAddress);
-	void openReveal(const QString &ethereumAddress);
+	void openReveal(const QString &rawAddress, const QString &ethereumAddress);
 
 	static void EnableLogging(bool enabled, const QString &basePath);
 	static void LogMessage(const QString &message);

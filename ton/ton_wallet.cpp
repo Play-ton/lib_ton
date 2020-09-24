@@ -919,9 +919,9 @@ void Wallet::openGate(const QString &rawAddress) {
 	QDesktopServices::openUrl(url);
 }
 
-void Wallet::openReveal(const QString &ethereumAddress) {
+void Wallet::openReveal(const QString &rawAddress, const QString &ethereumAddress) {
 	auto url = QUrl(_gateUrl);
-	url.setQuery(QString{"revealEthereumAddress=%1"}.arg(ethereumAddress));
+	url.setQuery(QString{"TONAddress=%1&revealEthereumAddress=%2"}.arg(rawAddress, ethereumAddress));
 	QDesktopServices::openUrl(url);
 }
 
