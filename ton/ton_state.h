@@ -33,8 +33,6 @@ enum class TokenKind {
 };
 
 bool operator!(const TokenKind &kind);
-bool operator<(const TokenKind &left, const TokenKind &right);
-bool operator>(const TokenKind &left, const TokenKind &right);
 
 template <typename T>
 using TokenMap = std::unordered_map<Ton::TokenKind, T>;

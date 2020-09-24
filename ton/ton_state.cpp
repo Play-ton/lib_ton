@@ -73,14 +73,6 @@ bool operator!(const TokenKind &token) {
 	return token == Ton::TokenKind::Ton;
 }
 
-bool operator<(const TokenKind &left, const TokenKind &right) {
-	return static_cast<uint32_t>(left) < static_cast<uint32_t>(right);
-}
-
-bool operator>(const TokenKind &left, const TokenKind &right) {
-	return static_cast<uint32_t>(left) > static_cast<uint32_t>(right);
-}
-
 bool operator<(const TransactionId &a, const TransactionId &b) {
 	return (a.lt < b.lt);
 }
