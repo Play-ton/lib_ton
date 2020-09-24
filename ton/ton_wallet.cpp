@@ -1015,8 +1015,6 @@ void Wallet::requestTokenStates(
 			} else {
 				const auto fullBalance = results[0].c_ftabi_valueInt().vvalue().v;
 
-				std::cout << "Received token state for " << static_cast<int32>(token) << " " << fullBalance << std::endl;
-
 				ctx->notifySuccess(TokenState {
 					.token = token,
 					.fullBalance = fullBalance
