@@ -69,7 +69,7 @@ tl::boxed<TLftabi_function> TokenBalanceOf() {
 		Expects(createdFunction.has_value());
 		function = createdFunction.value();
 	}
-	return function.value();
+	return *function;
 }
 
 tl::boxed<TLftabi_function> TokenTransferFunction() {
@@ -93,7 +93,7 @@ tl::boxed<TLftabi_function> TokenTransferFunction() {
 		Expects(createdFunction.has_value());
 		function = createdFunction.value();
 	}
-	return function.value();
+	return *function;
 }
 
 tl::boxed<TLftabi_function> TokenSwapBackFunction() {
@@ -117,7 +117,7 @@ tl::boxed<TLftabi_function> TokenSwapBackFunction() {
 		Expects(createdFunction.has_value());
 		function = createdFunction.value();
 	}
-	return function.value();
+	return *function;
 }
 
 std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
@@ -312,9 +312,9 @@ std::optional<Ton::TokenTransaction> Wallet::ParseTokenTransaction(const Ton::Me
 	}
 
 	if (auto transfer = ParseTokenTransfer(message.data); transfer.has_value()) {
-		return transfer.value();
+		return *transfer;
 	} else if (auto swapBack = ParseTokenSwapBack(message.data); swapBack.has_value()) {
-		return swapBack.value();
+		return *swapBack;
 	} else {
 		return std::nullopt;
 	}
@@ -910,7 +910,7 @@ void Wallet::openGate(const QString &rawAddress, std::optional<TokenKind> token)
 	auto url = QUrl(_gateUrl);
 	auto params = "TONAddress=" + rawAddress;
 	if (token.has_value()) {
-		params += "&ethereumTokenAddress=" + contractAddress(token.value());
+		params += "&ethereumTokenAddress=" + contractAddress(*token);
 	}
 
 	url.setQuery(params);

@@ -7,6 +7,7 @@
 #pragma once
 
 #include "ton/ton_settings.h"
+#include <unordered_map>
 
 namespace Ton {
 
