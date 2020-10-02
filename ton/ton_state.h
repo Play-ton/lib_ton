@@ -75,7 +75,7 @@ bool operator!=(const AccountState &a, const AccountState &b);
 
 struct TokenState {
 	TokenKind token;
-	int64 fullBalance = kUnknownBalance;
+	uint256 fullBalance = kUnknownBalance;
 };
 
 bool operator==(const TokenState &a, const TokenState &b);
@@ -91,13 +91,13 @@ enum class MessageDataType {
 struct TokenTransfer {
 	TokenKind token;
 	QString dest;
-	int64 value = 0;
+	int256 value = 0;
 };
 
 struct TokenSwapBack {
 	TokenKind token;
 	QString dest;
-	int64 value = 0;
+	int256 value = 0;
 };
 
 using TokenTransaction = std::variant<
@@ -158,7 +158,7 @@ bool operator!=(
 	const TransactionsSlice &b);
 
 struct TransactionToSend {
-	int64 amount = 0;
+    int64 amount = 0;
 	QString recipient;
 	QString comment;
 	int timeout = 0;
@@ -169,7 +169,7 @@ struct TransactionToSend {
 struct TokenTransactionToSend {
 	TokenKind token;
 	int64 realAmount = 10000000; // default 0.01 TON will be recalculated after check
-	int64 amount = 0;
+    uint256 amount = 0;
 	QString recipient;
 	int timeout = 0;
 	bool swapBack = false;

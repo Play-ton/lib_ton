@@ -187,7 +187,7 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
 Result<QByteArray> CreateTokenMessage(
 	Ton::TokenKind token,
 	const QString &recipient,
-	int64 amount) {
+    uint256 amount) {
 	const auto tokenKind = static_cast<int32_t>(token);
 
 	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
@@ -201,7 +201,7 @@ Result<QByteArray> CreateTokenMessage(
 				tl_ftabi_valueAddress(
 					tl_ftabi_paramAddress(tl_string("recipient")),
 					tl_accountAddress(tl_string(recipient))),
-				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
+				tl_ftabi_valueBigInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_bytes(tl::Uint256ToBytesBE(amount))),
 			})
 		)));
 	if (!encodedBody.has_value()) {
@@ -214,7 +214,7 @@ Result<QByteArray> CreateTokenMessage(
 Result<QByteArray> CreateSwapBackMessage(
 	Ton::TokenKind token,
 	const QString &etheriumAddress,
-	int64 amount) {
+	uint256 amount) {
 	if (!etheriumAddress.startsWith("0x")) {
 		return Error { Error::Type::IO, "invalid etherium address" };
 	}
@@ -231,7 +231,7 @@ Result<QByteArray> CreateSwapBackMessage(
 				tl_ftabi_valueInt(
 					tl_ftabi_paramUint(tl_string("tokenID"), tl_int32(256)),
 					tl_int64(static_cast<int64_t>(tokenKind))),
-				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_int64(amount)),
+				tl_ftabi_valueBigInt(tl_ftabi_paramUint(tl_string("amount"), tl_int32(256)), tl_bytes(tl::Uint256ToBytesBE(amount))),
 				tl_ftabi_valueBigInt(
 					tl_ftabi_paramUint(tl_string("ethereumAddress"), tl_int32(256)),
 					tl_string(targetBytes))

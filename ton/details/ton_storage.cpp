@@ -347,14 +347,14 @@ PendingTransaction Deserialize(const TLstorage_PendingTransaction &data) {
 TLstorage_TokenState Serialize(const TokenState &data) {
 	return make_storage_tokenState(
 		tl_int32(static_cast<int32_t>(data.token)),
-		tl_int64(data.fullBalance));
+		tl_bytes(tl::Uint256ToBytesBE(data.fullBalance)));
 }
 
 TokenState Deserialize(const TLstorage_TokenState &data) {
 	return data.match([&](const TLDstorage_tokenState &data) {
 		return TokenState {
 			.token = static_cast<TokenKind>(data.vkind().v),
-			.fullBalance = data.vfullBalance().v
+			.fullBalance = tl::BytesBEToUint256(data.vfullBalance().v)
 		};
 	});
 }

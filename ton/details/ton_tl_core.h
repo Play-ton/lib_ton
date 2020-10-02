@@ -14,6 +14,7 @@ namespace Ton::details {
 using TLint32 = tl::int_type;
 using TLint53 = tl::int64_type;
 using TLint64 = tl::int64_type;
+using TLint256 = tl::int256_type;
 using TLdouble = tl::double_type;
 using TLstring = tl::string_type;
 using TLbytes = tl::bytes_type;
@@ -29,6 +30,13 @@ inline TLint53 tl_int53(int64 value) {
 inline TLint64 tl_int64(int64 value) {
 	return tl::make_int64(value);
 }
+//inline TLint256 tl_int256(mp::int256_t value) {
+//    return tl::make_int256(value);
+//}
+
+//inline TLint256 tl_int256(int256 value) {
+//    return tl::make_int256(value);
+//}
 inline TLdouble tl_double(float64 value) {
 	return tl::make_double(value);
 }

@@ -8,6 +8,8 @@
 
 #include "base/unixtime.h"
 
+#include "tl/tl_basic_types.h"
+
 #include <QtCore/QDateTime>
 
 namespace Ton::details {
