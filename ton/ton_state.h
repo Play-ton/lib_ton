@@ -81,6 +81,16 @@ struct TokenState {
 bool operator==(const TokenState &a, const TokenState &b);
 bool operator!=(const TokenState &a, const TokenState &b);
 
+struct DePoolParticipantState {
+	int64 total = 0;
+	int64 withdrawValue = 0;
+	bool reinvest = false;
+	int64 reward = 0;
+};
+
+bool operator==(const DePoolParticipantState &a, const DePoolParticipantState &b);
+bool operator!=(const DePoolParticipantState &a, const DePoolParticipantState &b);
+
 enum class MessageDataType {
 	PlainText,
 	EncryptedText,

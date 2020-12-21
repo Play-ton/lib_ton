@@ -46,6 +46,10 @@ constexpr auto kDefaultWorkchainId = 0;
 	return tl_error(tl_int32(0), tl_string("KEY_DECRYPT"));
 }
 
+[[nodiscard]] TLError GenerateInvalidAbiError() {
+	return tl_error(tl_int32(500), tl_string("INVALID_ABI"));
+}
+
 TLftabi_Function TokenBalanceOf() {
 	static std::optional<TLftabi_function> function;
 	if (!function.has_value()) {
@@ -136,6 +140,59 @@ TLftabi_Function OrdinaryStakeFunction() {
 				}),
 			{}
 		));
+		Expects(createdFunction.has_value());
+		function = createdFunction.value();
+	}
+	return *function;
+}
+
+TLftabi_Function DePoolParticipantInfoFunction() {
+	static std::optional<TLftabi_function> function;
+	if (!function.has_value()) {
+		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
+			tl_string("getParticipantInfo"),
+			tl_vector(
+				QVector<TLftabi_namedParam>{
+					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+				}),
+			tl_vector(
+				QVector<TLftabi_Param>{
+					tl_ftabi_paramAddress(), // addr
+				}),
+			tl_vector(
+				QVector<TLftabi_Param>{
+					tl_ftabi_paramUint(tl_int32(64)), // total
+					tl_ftabi_paramUint(tl_int32(64)), // withdrawValue
+					tl_ftabi_paramBool(),             // reinvest
+					tl_ftabi_paramUint(tl_int32(64)), // reward
+					tl_ftabi_paramMap(tl_ftabi_paramUint(tl_int32(64)), tl_ftabi_paramUint(tl_int32(64))), // stakes
+					tl_ftabi_paramMap(
+						tl_ftabi_paramUint(tl_int32(64)),
+						tl_ftabi_paramTuple(
+							tl_vector(
+								QVector<TLftabi_Param>{
+									tl_ftabi_paramUint(tl_int32(64)), // remainingAmount
+									tl_ftabi_paramUint(tl_int32(64)), // lastWithdrawalTime
+									tl_ftabi_paramUint(tl_int32(32)), // withdrawalPeriod
+									tl_ftabi_paramUint(tl_int32(64)), // withdrawalValue
+									tl_ftabi_paramAddress(),          // owner
+								}))), // vestings
+					tl_ftabi_paramMap(
+						tl_ftabi_paramUint(tl_int32(64)),
+						tl_ftabi_paramTuple(
+							tl_vector(
+								QVector<TLftabi_Param>{
+									tl_ftabi_paramUint(tl_int32(64)), // remainingAmount
+									tl_ftabi_paramUint(tl_int32(64)), // lastWithdrawalTime
+									tl_ftabi_paramUint(tl_int32(32)), // withdrawalPeriod
+									tl_ftabi_paramUint(tl_int32(64)), // withdrawalValue
+									tl_ftabi_paramAddress(),          // owner
+								}))), // locks
+				})
+		));
+		Expects(createdFunction.has_value());
+		function = createdFunction.value();
 	}
 	return *function;
 }
@@ -1124,6 +1181,42 @@ void Wallet::requestTokenStates(
 	}
 }
 
+void Wallet::requestDePoolParticipantInfo(
+	const QByteArray &publicKey,
+	const QString &address,
+	const Callback<DePoolParticipantState> &done) {
+	const auto walletAddress = getUsedAddress(publicKey);
+	Assert(!walletAddress.isEmpty());
+
+	_external->lib().request(TLftabi_RunLocal(
+		tl_accountAddress(tl_string(address)),
+		DePoolParticipantInfoFunction(),
+		tl_ftabi_functionCallExternal(
+			{},
+			tl_vector(QVector<TLftabi_Value>{
+				tl_ftabi_valueAddress(
+					tl_ftabi_paramAddress(),
+					tl_accountAddress(tl_string(walletAddress))), // account
+			})
+		)
+	)).done([=](const TLftabi_decodedOutput &result) {
+		const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
+		if (results.size() < 4) {
+			InvokeCallback(done, ErrorFromLib(GenerateInvalidAbiError()));
+			return;
+		}
+
+		InvokeCallback(done, DePoolParticipantState {
+			.total = results[0].c_ftabi_valueInt().vvalue().v,
+			.withdrawValue = results[1].c_ftabi_valueInt().vvalue().v,
+			.reinvest = results[2].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
+			.reward = results[3].c_ftabi_valueInt().vvalue().v,
+		});
+	}).fail([=](const TLError &error) {
+		InvokeCallback(done, ErrorFromLib(error));
+	}).send();
+}
+
 void Wallet::decrypt(
 	const QByteArray &publicKey,
 	std::vector<Transaction> &&list,
@@ -1318,7 +1411,6 @@ void Wallet::checkLocalTime(BlockchainTime time) {
 			[=] { _localTimeSyncer = nullptr; });
 	}
 }
-
 
 auto Wallet::makeSendCallback(Callback<> done) -> std::function<void(int64)> {
 	return [this, done = std::move(done)](int64 id) {
