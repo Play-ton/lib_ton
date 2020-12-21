@@ -80,9 +80,15 @@ public:
 		const QByteArray &publicKey,
 		const TransactionToSend &transaction,
 		Callback<TransactionCheckResult> done);
+
 	void checkSendTokens(
 		const QByteArray &publicKey,
 		const TokenTransactionToSend &transaction,
+		Callback<TransactionCheckResult> done);
+
+	void checkSendStake(
+		const QByteArray &publicKey,
+		const StakeTransactionToSend &transaction,
 		Callback<TransactionCheckResult> done);
 
 	void sendGrams(
@@ -91,10 +97,18 @@ public:
 		const TransactionToSend &transaction,
 		Callback<PendingTransaction> ready,
 		Callback<> done);
+
 	void sendTokens(
 		const QByteArray &publicKey,
 		const QByteArray &password,
 		const TokenTransactionToSend &transaction,
+		Callback<PendingTransaction> ready,
+		Callback<> done);
+
+	void sendStake(
+		const QByteArray &publicKey,
+		const QByteArray &password,
+		const StakeTransactionToSend &transaction,
 		Callback<PendingTransaction> ready,
 		Callback<> done);
 
@@ -165,6 +179,9 @@ private:
 		int generation,
 		const details::TLerror &error,
 		Callback<> done);
+
+	auto makeSendCallback(Callback<> done) -> std::function<void(int64)>;
+	auto makeEstimateFeesCallback(Callback<TransactionCheckResult> done) -> std::function<void(int64)>;
 
 	std::optional<ConfigInfo> _configInfo;
 	rpl::event_stream<Update> _updates;

@@ -166,6 +166,13 @@ struct TransactionToSend {
 	bool sendUnencryptedText = false;
 };
 
+struct StakeTransactionToSend {
+	int64 stake = 0;
+	int64 depoolFee = 500000000; // 0.5 TON
+	QString depoolAddress;
+	int timeout = 0;
+};
+
 struct TokenTransactionToSend {
 	TokenKind token;
 	int64 realAmount = 10000000; // default 0.01 TON will be recalculated after check
