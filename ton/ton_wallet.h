@@ -154,11 +154,11 @@ public:
 	void requestTokenStates(
 		const QString &address,
 		std::unordered_set<TokenKind> &&tokens,
-		const Callback<TokenMap<TokenState>> &done);
+		const Callback<TokenMap<TokenState>> &done) const;
 	void requestDePoolParticipantInfo(
 		const QByteArray &publicKey,
 		const QString &address,
-		const Callback<DePoolParticipantState> &done);
+		const Callback<DePoolParticipantState> &done) const;
 
 private:
 	struct ViewersPassword {

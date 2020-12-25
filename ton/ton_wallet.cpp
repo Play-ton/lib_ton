@@ -1107,7 +1107,7 @@ void Wallet::requestTransactions(
 void Wallet::requestTokenStates(
 		const QString &address,
 		std::unordered_set<TokenKind> &&tokens,
-		const Callback<TokenMap<TokenState>> &done) {
+		const Callback<TokenMap<TokenState>> &done) const {
 	const auto tokenContractAddress = _external->settings().net().tokenContractAddress;
 
 	struct StateContext {
@@ -1184,7 +1184,7 @@ void Wallet::requestTokenStates(
 void Wallet::requestDePoolParticipantInfo(
 	const QByteArray &publicKey,
 	const QString &address,
-	const Callback<DePoolParticipantState> &done) {
+	const Callback<DePoolParticipantState> &done) const {
 	const auto walletAddress = getUsedAddress(publicKey);
 	Assert(!walletAddress.isEmpty());
 

@@ -14,6 +14,7 @@
 #include "storage/cache/storage_cache_database.h"
 
 #include <iostream>
+#include <shared_mutex>
 
 namespace Ton::details {
 namespace {
@@ -115,28 +116,28 @@ void AccountViewers::saveNewState(
 	}
 }
 
-void AccountViewers::saveTokensState(AccountViewers::Viewers &viewers, WalletState &&state) {
-	viewers.state = std::move(state);
-}
-
 void AccountViewers::checkPendingForSameState(
 		const QString &address,
 		Viewers &viewers,
-		const TokenMap<TokenState>& tokenStates,
+		const TokenMap<TokenState> &tokenStates,
+		const std::map<QString, DePoolParticipantState> &dePoolStates,
 		const AccountState &state) {
 	auto pending = ComputePendingTransactions(
 		viewers.state.current().pendingTransactions,
 		state,
 		TransactionsSlice());
 	const auto &currentState = viewers.state.current();
-	if (tokenStates != currentState.tokenStates || currentState.pendingTransactions != pending) {
+	if (tokenStates != currentState.tokenStates
+		|| dePoolStates != currentState.dePoolParticipantStates
+		|| currentState.pendingTransactions != pending) {
 		// Some pending transactions were discarded by the sync time.
 		saveNewState(viewers, WalletState{
-			address,
-			state,
-			viewers.state.current().lastTransactions,
-			std::move(pending),
-			tokenStates
+			.address = address,
+			.account = state,
+			.lastTransactions = viewers.state.current().lastTransactions,
+			.pendingTransactions = std::move(pending),
+			.tokenStates = tokenStates,
+			.dePoolParticipantStates = dePoolStates,
 		}, RefreshSource::Remote);
 	}
 	else {
@@ -150,62 +151,148 @@ void AccountViewers::refreshAccount(
 		Viewers &viewers) {
 	const auto requested = crl::now();
 	viewers.refreshing = true;
+
+	using StateWithViewer = std::pair<AccountState, AccountViewers::Viewers*>;
+	using TokensMap = std::map<TokenKind, TokenState>;
+	using DePoolsMap = std::map<QString, DePoolParticipantState>;
+	using ContextData = std::tuple<StateWithViewer, TokensMap, DePoolsMap>;
+
+	struct StateContext {
+		using Done = Callback<ContextData>;
+
+		explicit StateContext(const Done &done)
+			: done{done} {
+		}
+
+		void setAccount(AccountState&& state, AccountViewers::Viewers* viewers) {
+			std::unique_lock lock{mutex};
+			account = std::make_pair(std::forward<AccountState>(state), viewers);
+			checkComplete();
+		}
+
+		void setTokenStates(TokensMap&& value) {
+			std::unique_lock lock{mutex};
+			tokenStates = std::forward<TokensMap>(value);
+			checkComplete();
+		}
+
+		void setDePoolParticipantStates(DePoolsMap&& value) {
+			std::unique_lock lock{mutex};
+			dePoolParticipantStates = std::forward<DePoolsMap>(value);
+			checkComplete();
+		}
+
+		void checkComplete() {
+			if (account.has_value()
+				&& tokenStates.has_value()
+				&& dePoolParticipantStates.has_value())
+			{
+				InvokeCallback(done, std::forward_as_tuple(
+					std::move(*account),
+					std::move(*tokenStates),
+					std::move(*dePoolParticipantStates)));
+			}
+		}
+
+		std::optional<StateWithViewer> account;
+		std::optional<TokensMap> tokenStates;
+		std::optional<DePoolsMap> dePoolParticipantStates;
+
+		Done done;
+		std::shared_mutex mutex;
+	};
+
+	std::shared_ptr<StateContext> ctx{new StateContext{[=](Result<ContextData> result) {
+		const auto [state, tokenStates, dePoolParticipantStates] = std::move(result.value());
+		const auto [account, viewers] = std::move(state);
+
+		if (account == viewers->state.current().account) {
+			checkPendingForSameState(
+				address,
+				*viewers,
+				tokenStates,
+				dePoolParticipantStates,
+				account);
+			return;
+		}
+
+		const auto lastTransactionId = account.lastTransactionId;
+
+		const auto received =
+			[this, address, account = std::move(account), tokenStates = std::move(
+				tokenStates), dePoolParticipantStates = std::move(
+				dePoolParticipantStates)](Result<TransactionsSlice> result) {
+			const auto viewers = findRefreshingViewers(address);
+			if (viewers == nullptr || reportError(*viewers, result)) {
+				return;
+			}
+
+			saveNewStateEncrypted(
+				address,
+				*viewers,
+				WalletState{
+					.address = address,
+					.account = account,
+					.lastTransactions = std::move(*result),
+					.tokenStates = std::move(tokenStates),
+					.dePoolParticipantStates = std::move(dePoolParticipantStates)},
+				RefreshSource::Remote);
+		};
+		_owner->requestTransactions(
+			viewers->publicKey,
+			address,
+			lastTransactionId,
+			received);
+	}}};
+
+	std::shared_lock lock{ctx->mutex};
+
 	_owner->requestState(address, [=](Result<AccountState> result) {
 		const auto viewers = findRefreshingViewers(address);
 		if (!viewers || reportError(*viewers, result)) {
 			return;
 		}
-		const auto &state = *result;
+		auto account = std::move(result.value());
 		if (LocalTimeSyncer::IsRequestFastEnough(requested, crl::now())) {
-			_blockchainTime.fire({ requested, TimeId(state.syncTime) });
+			_blockchainTime.fire({requested, TimeId(account.syncTime)});
 		}
 
-		const auto onTokenStatesReceived = [=](Result<TokenMap<TokenState>> tokenStates) {
+		ctx->setAccount(std::move(account), viewers);
+	});
+
+	_owner->requestTokenStates(
+		address,
+		{
+			Ton::TokenKind::USDT,
+			Ton::TokenKind::USDC,
+			Ton::TokenKind::DAI,
+			Ton::TokenKind::WBTC,
+			Ton::TokenKind::WETH,
+		},
+		[=](Result<TokenMap<TokenState>> tokenStates) {
 			if (!tokenStates.has_value()) {
 				std::cout << tokenStates.error().details.toStdString() << std::endl;
-			}
-
-			if (!tokenStates.has_value()) {
 				tokenStates.emplace(TokenMap<TokenState>{});
 			}
+			ctx->setTokenStates(std::move(tokenStates.value()));
+		});
 
-			if (state == viewers->state.current().account) {
-				checkPendingForSameState(address, *viewers, tokenStates.value(), state);
-				return;
-			}
-			const auto received = [=](Result<TransactionsSlice> result) {
-				const auto viewers = findRefreshingViewers(address);
-				if (viewers == nullptr || reportError(*viewers, result)) {
-					return;
-				}
+	const QString testDepool = "0:c67d35b249ee156cd3364e320d71f0af60463f0533ec01982452305589596ce0";
 
-				saveNewStateEncrypted(
-					address,
-					*viewers,
-					WalletState{
-						.address = address,
-						.account = state,
-						.lastTransactions = std::move(*result),
-						.tokenStates = std::move(tokenStates.value())},
-					RefreshSource::Remote);
-			};
-			_owner->requestTransactions(
-				viewers->publicKey,
-				address,
-				state.lastTransactionId,
-				received);
-		};
-
-		_owner->requestTokenStates(
-			address,
-			{
-				Ton::TokenKind::USDT,
-				Ton::TokenKind::USDC,
-				Ton::TokenKind::DAI,
-				Ton::TokenKind::WBTC,
-				Ton::TokenKind::WETH,
-			},
-			onTokenStatesReceived);
+	_owner->requestDePoolParticipantInfo(viewers.publicKey, testDepool, [=](Result<DePoolParticipantState> state) {
+		DePoolsMap depools{};
+		if (state.has_value()) {
+			depools.emplace(testDepool, state.value());
+		} else {
+			std::cout << state.error().details.toStdString() << std::endl;
+			depools.emplace(testDepool, DePoolParticipantState {
+				.total = 0,
+				.withdrawValue = 0,
+				.reinvest = true,
+				.reward = 0,
+			});
+		}
+		ctx->setDePoolParticipantStates(std::move(depools));
 	});
 }
 
@@ -218,6 +305,7 @@ void AccountViewers::saveNewStateEncrypted(
 	const auto &existingPending = full.pendingTransactions;
 	const auto &state = full.account;
 	const auto &tokenStates = full.tokenStates;
+	const auto &dePoolStates = full.dePoolParticipantStates;
 	const auto finish = [=](Viewers &viewers, TransactionsSlice &&last) {
 		auto pending = (source == RefreshSource::Database)
 			? existingPending
@@ -226,11 +314,12 @@ void AccountViewers::saveNewStateEncrypted(
 				state,
 				last);
 		saveNewState(viewers, WalletState{
-			address,
-			state,
-			std::move(last),
-			std::move(pending),
-			std::move(tokenStates),
+			.address = address,
+			.account = state,
+			.lastTransactions = std::move(last),
+			.pendingTransactions = std::move(pending),
+			.tokenStates = std::move(tokenStates),
+			.dePoolParticipantStates = std::move(dePoolStates)
 		}, source);
 	};
 	const auto previousId = last.previousId;

@@ -36,7 +36,7 @@ enum class TokenKind {
 bool operator!(const TokenKind &kind);
 
 template <typename T>
-using TokenMap = std::unordered_map<Ton::TokenKind, T>;
+using TokenMap = std::map<Ton::TokenKind, T>;
 
 QString toString(TokenKind token);
 uint32_t countDecimals(TokenKind token);
@@ -114,7 +114,14 @@ using TokenTransaction = std::variant<
 	TokenTransfer,
 	TokenSwapBack>;
 
-bool CheckTokenTransaction(TokenKind token, const TokenTransaction& transaction);
+bool CheckTokenTransaction(TokenKind selectedToken, const TokenTransaction& transaction);
+
+struct DePoolOrdinaryStakeTransaction {
+	int64 stake = 0;
+};
+
+using DePoolTransaction = std::variant<
+	DePoolOrdinaryStakeTransaction>;
 
 struct MessageData {
 	QString text;
@@ -224,7 +231,8 @@ struct WalletState {
 	AccountState account;
 	TransactionsSlice lastTransactions;
 	std::vector<PendingTransaction> pendingTransactions;
-	std::unordered_map<TokenKind, TokenState> tokenStates;
+	std::map<TokenKind, TokenState> tokenStates;
+	std::map<QString, DePoolParticipantState> dePoolParticipantStates;
 };
 
 bool operator==(const WalletState &a, const WalletState &b);

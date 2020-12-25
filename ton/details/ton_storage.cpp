@@ -48,6 +48,11 @@ constexpr auto kWalletMainListKey = Storage::Cache::Key{ 1ULL, 2ULL };
 	return (name == "mainnet") ? "mainnet-test" : name;
 }
 
+struct NamedDePoolState {
+	QString address;
+	DePoolParticipantState state;
+};
+
 TLstorage_Bool Serialize(const bool &data);
 bool Deserialize(const TLstorage_Bool &data);
 TLstorage_WalletEntry Serialize(const WalletList::Entry &data);
@@ -70,6 +75,8 @@ TLstorage_PendingTransaction Serialize(const PendingTransaction &data);
 PendingTransaction Deserialize(const TLstorage_PendingTransaction &data);
 TLstorage_TokenState Serialize(const TokenState &data);
 TokenState Deserialize(const TLstorage_TokenState &data);
+TLstorage_DePoolState Serialize(const NamedDePoolState &data);
+NamedDePoolState Deserialize(const TLstorage_DePoolState &data);
 TLstorage_WalletState Serialize(const WalletState &data);
 WalletState Deserialize(const TLstorage_WalletState &data);
 TLstorage_Settings Serialize(const Settings &data);
@@ -359,6 +366,28 @@ TokenState Deserialize(const TLstorage_TokenState &data) {
 	});
 }
 
+TLstorage_DePoolState Serialize(const NamedDePoolState &data) {
+	return make_storage_dePoolState(
+		tl_string(data.address),
+		tl_int64(data.state.total),
+		tl_int64(data.state.withdrawValue),
+		Serialize(data.state.reinvest),
+		tl_int64(data.state.reward));
+}
+
+NamedDePoolState Deserialize(const TLstorage_DePoolState &data) {
+	return data.match([&](const TLDstorage_dePoolState &data) {
+		auto address = QString::fromUtf8(data.vaddress().v);
+		auto state = DePoolParticipantState {
+			.total = data.vtotal().v,
+			.withdrawValue = data.vwithdrawValue().v,
+			.reinvest = Deserialize(data.vreinvest()),
+			.reward = data.vreward().v
+		};
+		return NamedDePoolState { std::move(address), state };
+	});
+}
+
 TLstorage_WalletState Serialize(const WalletState &data) {
 	std::vector<TokenState> tokenStates;
 	tokenStates.reserve(data.tokenStates.size());
@@ -366,21 +395,33 @@ TLstorage_WalletState Serialize(const WalletState &data) {
 		tokenStates.push_back(state);
 	}
 
+	std::vector<NamedDePoolState> depoolStates;
+	depoolStates.reserve(data.dePoolParticipantStates.size());
+	for (const auto &[address, state] : data.dePoolParticipantStates) {
+		depoolStates.emplace_back(NamedDePoolState { address, state });
+	}
+
 	return make_storage_walletState(
 		tl_string(data.address),
 		Serialize(data.account),
 		Serialize(data.lastTransactions),
 		Serialize(data.pendingTransactions),
-		Serialize(tokenStates));
+		Serialize(tokenStates),
+		Serialize(depoolStates));
 }
 
 WalletState Deserialize(const TLstorage_WalletState &data) {
 	return data.match([&](const TLDstorage_walletState &data) {
 		auto storedTokenStates = Deserialize(data.vtokenStates());
-
 		TokenMap<TokenState> tokenStates;
 		for (auto& item : storedTokenStates) {
 			tokenStates.insert({item.token, item });
+		}
+
+		auto storedDePoolStates = Deserialize(data.vdePoolStates());
+		std::map<QString, DePoolParticipantState> depoolStates;
+		for (auto& item : storedDePoolStates) {
+			depoolStates.emplace(item.address, item.state);
 		}
 
 		return WalletState{
@@ -388,7 +429,8 @@ WalletState Deserialize(const TLstorage_WalletState &data) {
 			.account = Deserialize(data.vaccount()),
 			.lastTransactions = Deserialize(data.vlastTransactions()),
 			.pendingTransactions = Deserialize(data.vpendingTransactions()),
-			.tokenStates = std::move(tokenStates)
+			.tokenStates = std::move(tokenStates),
+			.dePoolParticipantStates = std::move(depoolStates),
 		};
 	});
 }

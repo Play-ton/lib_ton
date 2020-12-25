@@ -25,7 +25,7 @@ struct TokenInfo {
 };
 
 TokenInfo* FindTokenInfo(TokenKind token) {
-	static std::unordered_map<TokenKind, TokenInfo> kindToInfo = {
+	static std::map<TokenKind, TokenInfo> kindToInfo = {
 		{TokenKind::Ton,  { .symbol = "TON", .decimals = 9 }},
 		{TokenKind::USDT, { .symbol = "USDT", .decimals = 6, .contract = "0xdac17f958d2ee523a2206206994597c13d831ec7" }},
 		{TokenKind::USDC, { .symbol = "USDC", .decimals = 6, .contract = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" }},
@@ -120,11 +120,11 @@ bool operator!=(const DePoolParticipantState &a, const DePoolParticipantState &b
 		|| (a.reward != b.reward);
 }
 
-bool CheckTokenTransaction(TokenKind token, const TokenTransaction& transaction) {
+bool CheckTokenTransaction(TokenKind selectedToken, const TokenTransaction& transaction) {
 	return v::match(transaction, [&](const TokenTransfer &transfer) {
-		return transfer.token == token;
+		return transfer.token == selectedToken;
 	}, [&](const TokenSwapBack &swapBack) {
-		return swapBack.token == token;
+		return swapBack.token == selectedToken;
 	});
 }
 
@@ -178,7 +178,8 @@ bool operator==(const WalletState &a, const WalletState &b) {
 		&& (a.account == b.account)
 		&& (a.lastTransactions == b.lastTransactions)
 		&& (a.pendingTransactions == b.pendingTransactions)
-		&& (a.tokenStates == b.tokenStates);
+		&& (a.tokenStates == b.tokenStates)
+		&& (a.dePoolParticipantStates == b.dePoolParticipantStates);
 }
 
 bool operator!=(const WalletState &a, const WalletState &b) {
