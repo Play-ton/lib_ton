@@ -91,6 +91,11 @@ public:
 		const StakeTransactionToSend &transaction,
 		Callback<TransactionCheckResult> done);
 
+	void checkWithdraw(
+		const QByteArray &publicKey,
+		const WithdrawalTransactionToSend &transaction,
+		Callback<TransactionCheckResult> done);
+
 	void sendGrams(
 		const QByteArray &publicKey,
 		const QByteArray &password,
@@ -109,6 +114,13 @@ public:
 		const QByteArray &publicKey,
 		const QByteArray &password,
 		const StakeTransactionToSend &transaction,
+		Callback<PendingTransaction> ready,
+		Callback<> done);
+
+	void withdraw(
+		const QByteArray &publicKey,
+		const QByteArray &password,
+		const WithdrawalTransactionToSend &transaction,
 		Callback<PendingTransaction> ready,
 		Callback<> done);
 

@@ -106,18 +106,29 @@ bool operator!=(const TokenState &a, const TokenState &b) {
 	return (a.token != b.token) || (a.fullBalance != b.fullBalance);
 }
 
+bool operator==(const InvestParams &a, const InvestParams &b) {
+	return (a.remainingAmount == b.remainingAmount)
+		&& (a.lastWithdrawalTime == b.lastWithdrawalTime)
+		&& (a.withdrawalPeriod == b.withdrawalPeriod)
+		&& (a.withdrawalValue == b.withdrawalValue)
+		&& (a.owner == b.owner);
+}
+
+bool operator!=(const InvestParams &a, const InvestParams &b) {
+	return !(a == b);
+}
+
 bool operator==(const DePoolParticipantState &a, const DePoolParticipantState &b) {
 	return (a.total == b.total)
 		&& (a.withdrawValue == b.withdrawValue)
 		&& (a.reinvest == b.reinvest)
-		&& (a.reward == b.reward);
+		&& (a.reward == b.reward)
+		&& (a.vestings == b.vestings)
+		&& (a.locks == b.locks);
 }
 
 bool operator!=(const DePoolParticipantState &a, const DePoolParticipantState &b) {
-	return (a.total != b.total)
-		|| (a.withdrawValue != b.withdrawValue)
-		|| (a.reinvest != b.reinvest)
-		|| (a.reward != b.reward);
+	return !(a == b);
 }
 
 bool CheckTokenTransaction(TokenKind selectedToken, const TokenTransaction& transaction) {

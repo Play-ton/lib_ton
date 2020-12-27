@@ -81,11 +81,25 @@ struct TokenState {
 bool operator==(const TokenState &a, const TokenState &b);
 bool operator!=(const TokenState &a, const TokenState &b);
 
+struct InvestParams {
+	int64 remainingAmount{};
+	int64 lastWithdrawalTime{};
+	int32 withdrawalPeriod{};
+	int64 withdrawalValue{};
+	QString owner{};
+};
+
+bool operator==(const InvestParams &a, const InvestParams &b);
+bool operator!=(const InvestParams &a, const InvestParams &b);
+
 struct DePoolParticipantState {
 	int64 total = 0;
 	int64 withdrawValue = 0;
 	bool reinvest = false;
 	int64 reward = 0;
+	std::map<int64, int64> stakes{};
+	std::map<int64, InvestParams> vestings{};
+	std::map<int64, InvestParams> locks{};
 };
 
 bool operator==(const DePoolParticipantState &a, const DePoolParticipantState &b);
@@ -120,8 +134,14 @@ struct DePoolOrdinaryStakeTransaction {
 	int64 stake = 0;
 };
 
+struct DePoolWithdrawTransaction {
+	int64 amount = 0;
+	bool all = false;
+};
+
 using DePoolTransaction = std::variant<
-	DePoolOrdinaryStakeTransaction>;
+	DePoolOrdinaryStakeTransaction,
+	DePoolWithdrawTransaction>;
 
 struct MessageData {
 	QString text;
@@ -183,13 +203,6 @@ struct TransactionToSend {
 	bool sendUnencryptedText = false;
 };
 
-struct StakeTransactionToSend {
-	int64 stake = 0;
-	int64 depoolFee = 500000000; // 0.5 TON
-	QString depoolAddress;
-	int timeout = 0;
-};
-
 struct TokenTransactionToSend {
 	TokenKind token;
 	int64 realAmount = 10000000; // default 0.01 TON will be recalculated after check
@@ -197,7 +210,21 @@ struct TokenTransactionToSend {
 	QString recipient;
 	int timeout = 0;
 	bool swapBack = false;
-	bool allowSendToUninited = false;
+};
+
+struct StakeTransactionToSend {
+	int64 stake = 0;
+	int64 depoolFee = 500000000; // 0.5 TON
+	QString depoolAddress;
+	int timeout = 0;
+};
+
+struct WithdrawalTransactionToSend {
+	int64 depoolFee = 500000000; // 0.5 TON
+	int64 amount = 0;
+	bool all = 0;
+	QString depoolAddress;
+	int timeout = 0;
 };
 
 struct TransactionFees {
