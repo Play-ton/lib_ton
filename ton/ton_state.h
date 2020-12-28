@@ -134,14 +134,19 @@ struct DePoolOrdinaryStakeTransaction {
 	int64 stake = 0;
 };
 
-struct DePoolWithdrawTransaction {
-	int64 amount = 0;
-	bool all = false;
+struct DePoolOnRoundCompleteTransaction {
+	int64 roundId{};
+	int64 reward{};
+	int64 ordinaryStake{};
+	int64 vestingStake{};
+	int64 lockStake{};
+	bool reinvest{};
+	uint8 reason{};
 };
 
 using DePoolTransaction = std::variant<
 	DePoolOrdinaryStakeTransaction,
-	DePoolWithdrawTransaction>;
+	DePoolOnRoundCompleteTransaction>;
 
 struct MessageData {
 	QString text;

@@ -250,6 +250,34 @@ TLftabi_Function DePoolCancelWithdrawalFunction() {
 	return *function;
 }
 
+TLftabi_Function DePoolOnRoundCompleteFunction() {
+	static std::optional<TLftabi_function> function;
+	if (!function.has_value()) {
+		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
+			tl_string("onRoundComplete"),
+			tl_vector(
+				QVector<TLftabi_namedParam>{
+					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+				}),
+			tl_vector(
+				QVector<TLftabi_Param>{
+					tl_ftabi_paramUint(tl_int32(64)), // roundId
+					tl_ftabi_paramUint(tl_int32(64)), // reward
+					tl_ftabi_paramUint(tl_int32(64)), // ordinaryStake
+					tl_ftabi_paramUint(tl_int32(64)), // vestingStake
+					tl_ftabi_paramUint(tl_int32(64)), // lockStake
+					tl_ftabi_paramBool(),             // reinvest
+					tl_ftabi_paramUint(tl_int32(8)),  // reason
+				}),
+			{}
+		));
+		Expects(createdFunction.has_value());
+		function = createdFunction.value();
+	}
+	return *function;
+}
+
 TLftabi_Function DePoolParticipantInfoFunction() {
 	static std::optional<TLftabi_function> function;
 	if (!function.has_value()) {
@@ -324,6 +352,50 @@ std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
 		.token = static_cast<Ton::TokenKind>(args[0].c_ftabi_valueInt().vvalue().v),
 		.dest = args[1].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
 		.value = args[2].c_ftabi_valueInt().vvalue().v
+	};
+}
+
+std::optional<DePoolOrdinaryStakeTransaction> ParseOrdinaryStakeTransfer(const QByteArray &body) {
+	const auto decodedInput = RequestSender::Execute(TLftabi_DecodeInput(
+		OrdinaryStakeFunction(),
+		tl_bytes(body),
+		tl_boolTrue()));
+	if (!decodedInput.has_value()) {
+		return std::nullopt;
+	}
+
+	const auto args = decodedInput.value().c_ftabi_decodedInput().vvalues().v;
+	if (args.size() != 1 || args[0].type() != id_ftabi_valueInt) {
+		return std::nullopt;
+	}
+
+	return DePoolOrdinaryStakeTransaction {
+		.stake = args[0].c_ftabi_valueInt().vvalue().v
+	};
+}
+
+std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const QByteArray &body) {
+	const auto decodedInput = RequestSender::Execute(TLftabi_DecodeInput(
+		DePoolOnRoundCompleteFunction(),
+		tl_bytes(body),
+		tl_boolTrue()));
+	if (!decodedInput.has_value()) {
+		return std::nullopt;
+	}
+
+	const auto args = decodedInput.value().c_ftabi_decodedInput().vvalues().v;
+	if (args.size() != 7) {
+		return std::nullopt;
+	}
+
+	return DePoolOnRoundCompleteTransaction {
+		.roundId = args[0].c_ftabi_valueInt().vvalue().v,
+		.reward = args[1].c_ftabi_valueInt().vvalue().v,
+		.ordinaryStake = args[2].c_ftabi_valueInt().vvalue().v,
+		.vestingStake = args[3].c_ftabi_valueInt().vvalue().v,
+		.lockStake = args[4].c_ftabi_valueInt().vvalue().v,
+		.reinvest = args[5].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
+		.reason = static_cast<uint8>(args[6].c_ftabi_valueInt().vvalue().v),
 	};
 }
 
@@ -543,6 +615,24 @@ std::optional<Ton::TokenTransaction> Wallet::ParseTokenTransaction(const Ton::Me
 	} else {
 		return std::nullopt;
 	}
+}
+
+std::optional<Ton::DePoolTransaction> Wallet::ParseDePoolTransaction(const Ton::MessageData& message, bool incoming) {
+	if (message.type != Ton::MessageDataType::RawBody) {
+		return std::nullopt;
+	}
+
+	if (incoming) {
+		if (auto onRoundComplete = ParseDePoolOnRoundComplete(message.data); onRoundComplete.has_value()) {
+			return *onRoundComplete;
+		}
+	} else {
+		if (auto ordinaryState = ParseOrdinaryStakeTransfer(message.data); ordinaryState.has_value()) {
+			return *ordinaryState;
+		}
+	}
+
+	return std::nullopt;
 }
 
 base::flat_set<QString> Wallet::GetValidWords() {

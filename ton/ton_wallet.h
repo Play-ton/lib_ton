@@ -133,6 +133,8 @@ public:
 	[[nodiscard]] static QString ConvertIntoRaw(const QString &address);
 	[[nodiscard]] static std::optional<Ton::TokenTransaction> ParseTokenTransaction(
 		const Ton::MessageData& message);
+	[[nodiscard]] static std::optional<Ton::DePoolTransaction> ParseDePoolTransaction(
+		const Ton::MessageData& message, bool incoming);
 	[[nodiscard]] static base::flat_set<QString> GetValidWords();
 	[[nodiscard]] static bool IsIncorrectPasswordError(const Error &error);
 
