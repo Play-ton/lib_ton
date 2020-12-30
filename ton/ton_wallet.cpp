@@ -65,7 +65,7 @@ constexpr auto kDefaultWorkchainId = 0;
 			  .owner = values[4].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
 			}));
 	}
-	return std::move(result);
+	return result;
 }
 
 TLftabi_Function TokenBalanceOf() {
@@ -1521,7 +1521,7 @@ void Wallet::requestDePoolParticipantInfo(
 		}
 
 		std::map<int64, int64> stakes;
-		for (const auto item : results[4].c_ftabi_valueMap().vvalues().v) {
+		for (const auto &item : results[4].c_ftabi_valueMap().vvalues().v) {
 			const auto key = item.c_ftabi_valueMapItem().vkey().c_ftabi_valueInt().vvalue().v;
 			const auto value = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueInt().vvalue().v;
 			stakes.emplace(std::make_pair(key, value));
