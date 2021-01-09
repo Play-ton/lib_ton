@@ -232,6 +232,12 @@ struct WithdrawalTransactionToSend {
 	int timeout = 0;
 };
 
+struct CancelWithdrawalTransactionToSend {
+	constexpr static int64 depoolFee = 500000000; // 0.5 TON
+	QString depoolAddress;
+	int timeout = 0;
+};
+
 struct TransactionFees {
 	int64 inForward = 0;
 	int64 storage = 0;

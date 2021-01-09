@@ -96,6 +96,11 @@ public:
 		const WithdrawalTransactionToSend &transaction,
 		Callback<TransactionCheckResult> done);
 
+	void checkCancelWithdraw(
+		const QByteArray &publicKey,
+		const CancelWithdrawalTransactionToSend &transaction,
+		Callback<TransactionCheckResult> done);
+
 	void sendGrams(
 		const QByteArray &publicKey,
 		const QByteArray &password,
@@ -121,6 +126,13 @@ public:
 		const QByteArray &publicKey,
 		const QByteArray &password,
 		const WithdrawalTransactionToSend &transaction,
+		Callback<PendingTransaction> ready,
+		Callback<> done);
+
+	void cancelWithdrawal(
+		const QByteArray &publicKey,
+		const QByteArray &password,
+		const CancelWithdrawalTransactionToSend &transaction,
 		Callback<PendingTransaction> ready,
 		Callback<> done);
 

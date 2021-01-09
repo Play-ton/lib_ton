@@ -541,6 +541,17 @@ Result<QByteArray> CreateWithdrawalMessage(int64 amount, bool all) {
 	return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
+Result<QByteArray> CreateCancelWithdrawalMessage() {
+	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
+		DePoolCancelWithdrawalFunction(),
+		tl_ftabi_functionCallInternal({}, {})));
+	if (!encodedBody.has_value()) {
+		return encodedBody.error();
+	}
+
+	return encodedBody.value().c_ftabi_messageBody().vdata().v;
+}
+
 } // namespace
 
 namespace details {
@@ -1088,8 +1099,7 @@ void Wallet::checkSendStake(
 
 	const auto body = CreateStakeMessage(transaction.stake);
 	if (!body.has_value()) {
-		InvokeCallback(done, body.error());
-		return;
+		return InvokeCallback(done, body.error());
 	}
 
 	_external->lib().request(TLCreateQuery(
@@ -1116,8 +1126,7 @@ void Wallet::checkSendStake(
 void Wallet::checkWithdraw(
 		const QByteArray &publicKey,
 		const WithdrawalTransactionToSend &transaction,
-		Callback<TransactionCheckResult> done)
-{
+		Callback<TransactionCheckResult> done) {
 	Expects(transaction.all || transaction.amount >= 0);
 
 	const auto sender = getUsedAddress(publicKey);
@@ -1128,7 +1137,41 @@ void Wallet::checkWithdraw(
 	const auto body = CreateWithdrawalMessage(transaction.amount, transaction.all);
 	if (!body.has_value()) {
 		return InvokeCallback(done, body.error());
-		return;
+	}
+
+	_external->lib().request(TLCreateQuery(
+		tl_inputKeyFake(),
+		tl_accountAddress(tl_string(sender)),
+		tl_int32(transaction.timeout),
+		tl_actionMsg(
+			tl_vector(1, tl_msg_message(
+				tl_accountAddress(tl_string(transaction.depoolAddress)),
+				tl_string(),
+				tl_int64(transaction.depoolFee),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+			tl_boolFalse()),
+		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
+	)).done([=](const TLquery_Info &result) {
+		result.match([&](const TLDquery_info &data) {
+			check(data.vid().v);
+		});
+	}).fail([=](const TLError &error) {
+		InvokeCallback(done, ErrorFromLib(error));
+	}).send();
+}
+
+void Wallet::checkCancelWithdraw(
+		const QByteArray &publicKey,
+		const CancelWithdrawalTransactionToSend &transaction,
+		Callback<TransactionCheckResult> done) {
+	const auto sender = getUsedAddress(publicKey);
+	Assert(!sender.isEmpty());
+
+	const auto check = makeEstimateFeesCallback(done);
+
+	const auto body = CreateCancelWithdrawalMessage();
+	if (!body.has_value()) {
+		return InvokeCallback(done, body.error());
 	}
 
 	_external->lib().request(TLCreateQuery(
@@ -1274,8 +1317,59 @@ void Wallet::withdraw(
 
 	const auto body = CreateWithdrawalMessage(transaction.amount, transaction.all);
 	if (!body.has_value()) {
-		InvokeCallback(done, body.error());
-		return;
+		return InvokeCallback(done, body.error());
+	}
+
+	const auto send = makeSendCallback(std::move(done));
+
+	_external->lib().request(TLCreateQuery(
+		prepareInputKey(publicKey, password),
+		tl_accountAddress(tl_string(sender)),
+		tl_int32(transaction.timeout),
+		tl_actionMsg(
+			tl_vector(1, tl_msg_message(
+				tl_accountAddress(tl_string(transaction.depoolAddress)),
+				tl_string(),
+				tl_int64(transaction.depoolFee),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+			tl_boolFalse()),
+		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
+	)).done([=](const TLquery_Info &result) {
+		result.match([&](const TLDquery_info &data) {
+			const auto weak = base::make_weak(this);
+			auto pending = Parse(result, sender, TransactionToSend {
+				.amount = transaction.depoolFee,
+				.recipient = transaction.depoolAddress,
+				.timeout = transaction.timeout,
+				.allowSendToUninited = false,
+			});
+			_accountViewers->addPendingTransaction(pending);
+			if (!weak) {
+				return;
+			}
+			InvokeCallback(ready, std::move(pending));
+			if (!weak) {
+				return;
+			}
+			send(data.vid().v);
+		});
+	}).fail([=](const TLError &error) {
+		InvokeCallback(ready, ErrorFromLib(error));
+	}).send();
+}
+
+void Wallet::cancelWithdrawal(
+		const QByteArray &publicKey,
+		const QByteArray &password,
+		const CancelWithdrawalTransactionToSend &transaction,
+		Callback<PendingTransaction> ready,
+		Callback<> done) {
+	const auto sender = getUsedAddress(publicKey);
+	Assert(!sender.isEmpty());
+
+	const auto body = CreateCancelWithdrawalMessage();
+	if (!body.has_value()) {
+		return InvokeCallback(done, body.error());
 	}
 
 	const auto send = makeSendCallback(std::move(done));
