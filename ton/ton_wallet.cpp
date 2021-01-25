@@ -41,6 +41,7 @@ constexpr auto kViewersPasswordExpires = 15 * 60 * crl::time(1000);
 constexpr auto kDefaultSmcRevision = 0;
 constexpr auto kLegacySmcRevision = 1;
 constexpr auto kDefaultWorkchainId = 0;
+constexpr auto kDefaultMessageFlags = 3;
 
 [[nodiscard]] TLError GenerateFakeIncorrectPasswordError() {
 	return tl_error(tl_int32(0), tl_string("KEY_DECRYPT"));
@@ -1026,7 +1027,8 @@ void Wallet::checkSendGrams(
 				(transaction.sendUnencryptedText
 					? tl_msg_dataText
 					: tl_msg_dataDecryptedText)(
-						tl_string(transaction.comment)))),
+						tl_string(transaction.comment)),
+				tl_int32(kDefaultMessageFlags))),
 			tl_from(transaction.allowSendToUninited)),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
 	)).done([=](const TLquery_Info &result) {
@@ -1072,7 +1074,8 @@ void Wallet::checkSendTokens(
 				tl_accountAddress(tl_string(tokenContractAddress)),
 				tl_string(),
 				tl_int64(transaction.realAmount),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+				tl_int32(kDefaultMessageFlags))),
 			tl_from(false)),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
 	)).done([=](const TLquery_Info &result) {
@@ -1111,7 +1114,8 @@ void Wallet::checkSendStake(
 				tl_accountAddress(tl_string(transaction.depoolAddress)),
 				tl_string(),
 				tl_int64(realAmount),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+				tl_int32(kDefaultMessageFlags))),
 			tl_boolFalse()),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
 	)).done([=](const TLquery_Info &result) {
@@ -1148,7 +1152,8 @@ void Wallet::checkWithdraw(
 				tl_accountAddress(tl_string(transaction.depoolAddress)),
 				tl_string(),
 				tl_int64(transaction.depoolFee),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+				tl_int32(kDefaultMessageFlags))),
 			tl_boolFalse()),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
 	)).done([=](const TLquery_Info &result) {
@@ -1183,7 +1188,8 @@ void Wallet::checkCancelWithdraw(
 				tl_accountAddress(tl_string(transaction.depoolAddress)),
 				tl_string(),
 				tl_int64(transaction.depoolFee),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+				tl_int32(kDefaultMessageFlags))),
 			tl_boolFalse()),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
 	)).done([=](const TLquery_Info &result) {
@@ -1220,7 +1226,8 @@ void Wallet::sendGrams(
 				(transaction.sendUnencryptedText
 					? tl_msg_dataText
 					: tl_msg_dataDecryptedText)(
-						tl_string(transaction.comment)))),
+						tl_string(transaction.comment)),
+				tl_int32(kDefaultMessageFlags))),
 			tl_from(transaction.allowSendToUninited)),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
 	)).done([=](const TLquery_Info &result) {
@@ -1277,7 +1284,8 @@ void Wallet::sendTokens(
 				tl_accountAddress(tl_string(tokenContractAddress)),
 				tl_string(),
 				tl_int64(transaction.realAmount),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+				tl_int32(kDefaultMessageFlags))),
 			tl_from(false)),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
 	)).done([=](const TLquery_Info &result) {
@@ -1331,7 +1339,8 @@ void Wallet::withdraw(
 				tl_accountAddress(tl_string(transaction.depoolAddress)),
 				tl_string(),
 				tl_int64(transaction.depoolFee),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+				tl_int32(kDefaultMessageFlags))),
 			tl_boolFalse()),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
 	)).done([=](const TLquery_Info &result) {
@@ -1383,7 +1392,8 @@ void Wallet::cancelWithdrawal(
 				tl_accountAddress(tl_string(transaction.depoolAddress)),
 				tl_string(),
 				tl_int64(transaction.depoolFee),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+				tl_int32(kDefaultMessageFlags))),
 			tl_boolFalse()),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
 	)).done([=](const TLquery_Info &result) {
@@ -1440,7 +1450,8 @@ void Wallet::sendStake(
 				tl_accountAddress(tl_string(transaction.depoolAddress)),
 				tl_string(),
 				tl_int64(realAmount),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()))),
+				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+				tl_int32(kDefaultMessageFlags))),
 			tl_boolFalse()),
 		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
 	)).done([=](const TLquery_Info &result) {
