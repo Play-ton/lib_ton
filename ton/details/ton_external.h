@@ -15,12 +15,12 @@
 
 namespace Storage::Cache {
 class Database;
-} // namespace Storage::Cache
+}  // namespace Storage::Cache
 
 namespace Ton {
 struct Update;
 struct ConfigInfo;
-} // namespace Ton
+}  // namespace Ton
 
 namespace Ton::details {
 
@@ -28,55 +28,49 @@ class RequestSender;
 struct WalletList;
 
 class External final : public base::has_weak_ptr {
-public:
-	External(const QString &path, Fn<void(Update)> &&updateCallback);
+ public:
+  External(const QString &path, Fn<void(Update)> &&updateCallback);
 
-	void open(
-		const QByteArray &globalPassword,
-		const Settings &defaultSettings,
-		Callback<WalletList> done);
-	void start(Callback<ConfigInfo> done);
+  void open(const QByteArray &globalPassword, const Settings &defaultSettings, Callback<WalletList> done);
+  void start(Callback<ConfigInfo> done);
 
-	[[nodiscard]] const Settings &settings() const;
-	void updateSettings(const Settings &settings, Callback<ConfigInfo> done);
-	void switchNetwork(Callback<ConfigInfo> done);
+  [[nodiscard]] const Settings &settings() const;
+  void updateSettings(const Settings &settings, Callback<ConfigInfo> done);
+  void switchNetwork(Callback<ConfigInfo> done);
 
-	[[nodiscard]] RequestSender &lib();
-	[[nodiscard]] Storage::Cache::Database &db();
+  [[nodiscard]] RequestSender &lib();
+  [[nodiscard]] Storage::Cache::Database &db();
 
-	static void EnableLogging(bool enabled, const QString &basePath);
-	static void LogMessage(const QString &message);
+  static void EnableLogging(bool enabled, const QString &basePath);
+  static void LogMessage(const QString &message);
 
-private:
-	enum class State {
-		Initial,
-		Opening,
-		Opened,
-	};
+ private:
+  enum class State {
+    Initial,
+    Opening,
+    Opened,
+  };
 
-	[[nodiscard]] Result<> loadSalt();
-	[[nodiscard]] Result<> writeNewSalt();
-	[[nodiscard]] Fn<void(const TLUpdate &)> generateUpdateCallback() const;
-	void openDatabase(
-		const QByteArray &globalPassword,
-		Callback<Settings> done);
-	void startLibrary(Callback<> done);
-	void resetNetwork();
-	void applyLocalSettings(const Settings &localSettings);
+  [[nodiscard]] Result<> loadSalt();
+  [[nodiscard]] Result<> writeNewSalt();
+  [[nodiscard]] Fn<void(const TLUpdate &)> generateUpdateCallback() const;
+  void openDatabase(const QByteArray &globalPassword, Callback<Settings> done);
+  void startLibrary(Callback<> done);
+  void resetNetwork();
+  void applyLocalSettings(const Settings &localSettings);
 
-	const QString _basePath;
-	const Fn<void(Update)> _updateCallback;
-	Settings _settings;
-	RequestSender _lib;
-	Storage::DatabasePointer _db;
-	ConfigUpgrade _configUpgrade = ConfigUpgrade::None;
+  const QString _basePath;
+  const Fn<void(Update)> _updateCallback;
+  Settings _settings;
+  RequestSender _lib;
+  Storage::DatabasePointer _db;
+  ConfigUpgrade _configUpgrade = ConfigUpgrade::None;
 
-	State _state = State::Initial;
-	bytes::vector _salt;
+  State _state = State::Initial;
+  bytes::vector _salt;
 
-	int _failedRequestsSinceSetConfig = 0;
-	rpl::lifetime _lifetime;
-
+  int _failedRequestsSinceSetConfig = 0;
+  rpl::lifetime _lifetime;
 };
 
-} // namespace Ton::details
+}  // namespace Ton::details

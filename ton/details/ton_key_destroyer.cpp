@@ -12,42 +12,25 @@
 
 namespace Ton::details {
 
-KeyDestroyer::KeyDestroyer(
-		not_null<details::RequestSender*> lib,
-		not_null<Storage::Cache::Database*> db,
-		const details::WalletList &existing,
-		index_type index,
-		bool useTestNetwork,
-		Callback<> done) {
-	Expects(index >= 0 && index < existing.entries.size());
+KeyDestroyer::KeyDestroyer(not_null<details::RequestSender *> lib, not_null<Storage::Cache::Database *> db,
+                           const details::WalletList &existing, index_type index, bool useTestNetwork,
+                           Callback<> done) {
+  Expects(index >= 0 && index < existing.entries.size());
 
-	const auto &entry = existing.entries[index];
-	auto removeFromDatabase = crl::guard(this, [=](Result<>) {
-		auto copy = existing;
-		copy.entries.erase(begin(copy.entries) + index);
-		SaveWalletList(db, copy, useTestNetwork, crl::guard(this, done));
-	});
-	DeletePublicKey(
-		lib,
-		entry.publicKey,
-		entry.secret,
-		std::move(removeFromDatabase));
+  const auto &entry = existing.entries[index];
+  auto removeFromDatabase = crl::guard(this, [=](Result<>) {
+    auto copy = existing;
+    copy.entries.erase(begin(copy.entries) + index);
+    SaveWalletList(db, copy, useTestNetwork, crl::guard(this, done));
+  });
+  DeletePublicKey(lib, entry.publicKey, entry.secret, std::move(removeFromDatabase));
 }
 
-KeyDestroyer::KeyDestroyer(
-		not_null<RequestSender*> lib,
-		not_null<Storage::Cache::Database*> db,
-		bool useTestNetwork,
-		Callback<> done) {
-	const auto removeFromDatabase = crl::guard(this, [=](const auto&) {
-		SaveWalletList(db, {}, useTestNetwork, crl::guard(this, done));
-	});
-	lib->request(TLDeleteAllKeys(
-	)).done(
-		removeFromDatabase
-	).fail(
-		removeFromDatabase
-	).send();
+KeyDestroyer::KeyDestroyer(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, bool useTestNetwork,
+                           Callback<> done) {
+  const auto removeFromDatabase =
+      crl::guard(this, [=](const auto &) { SaveWalletList(db, {}, useTestNetwork, crl::guard(this, done)); });
+  lib->request(TLDeleteAllKeys()).done(removeFromDatabase).fail(removeFromDatabase).send();
 }
 
-} // namespace Ton::details
+}  // namespace Ton::details

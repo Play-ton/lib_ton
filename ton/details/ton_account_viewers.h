@@ -14,84 +14,69 @@
 
 namespace Storage::Cache {
 class Database;
-} // namespace Storage::Cache
+}  // namespace Storage::Cache
 
 namespace Ton {
 class Wallet;
 class AccountViewer;
 struct PendingTransaction;
-} // namespace Ton
+}  // namespace Ton
 
 namespace Ton::details {
 
 class RequestSender;
 
 class AccountViewers final : public base::has_weak_ptr {
-public:
-	AccountViewers(
-		not_null<Wallet*> owner,
-		not_null<RequestSender*> lib,
-		not_null<Storage::Cache::Database*> db);
-	~AccountViewers();
+ public:
+  AccountViewers(not_null<Wallet *> owner, not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db);
+  ~AccountViewers();
 
-	[[nodiscard]] std::unique_ptr<AccountViewer> createAccountViewer(
-		const QByteArray &publicKey,
-		const QString &address);
-	void addPendingTransaction(const PendingTransaction &pending);
+  [[nodiscard]] std::unique_ptr<AccountViewer> createAccountViewer(const QByteArray &publicKey, const QString &address);
+  void addPendingTransaction(const PendingTransaction &pending);
 
-	[[nodiscard]] rpl::producer<BlockchainTime> blockchainTime() const;
+  [[nodiscard]] rpl::producer<BlockchainTime> blockchainTime() const;
 
-private:
-	struct Viewers {
-		QByteArray publicKey;
-		rpl::variable<WalletState> state;
-		rpl::variable<crl::time> lastGoodRefresh = 0;
-		rpl::variable<bool> refreshing = false;
-		crl::time lastRefreshFinished = 0;
-		crl::time nextRefresh = 0;
-		Callback<> refreshed;
-		std::vector<not_null<AccountViewer*>> list;
-		rpl::lifetime lifetime;
-	};
-	enum class RefreshSource {
-		Database,
-		Remote,
-		Pending,
-	};
+ private:
+  struct Viewers {
+    QByteArray publicKey;
+    rpl::variable<WalletState> state;
+    rpl::variable<crl::time> lastGoodRefresh = 0;
+    rpl::variable<bool> refreshing = false;
+    crl::time lastRefreshFinished = 0;
+    crl::time nextRefresh = 0;
+    Callback<> refreshed;
+    std::vector<not_null<AccountViewer *>> list;
+    rpl::lifetime lifetime;
+  };
 
-	void refreshFromDatabase(const QString &address, Viewers &viewers);
-	void refreshAccount(const QString &address, Viewers &viewers);
-	void checkPendingForSameState(
-		const QString &address,
-		Viewers &viewers,
-		const TokenMap<TokenState>& tokenStates,
-		const std::map<QString, DePoolParticipantState> &dePoolStates,
-		const AccountState &state);
-	void checkNextRefresh();
-	Viewers *findRefreshingViewers(const QString &address);
-	void finishRefreshing(Viewers &viewers, Result<> result = {});
-	template <typename Data>
-	bool reportError(Viewers &viewers, Result<Data> result);
-	void saveNewStateEncrypted(
-		const QString &address,
-		Viewers &viewers,
-		WalletState &&full,
-		RefreshSource source);
-	void saveNewState(
-		Viewers &viewers,
-		WalletState &&state,
-		RefreshSource source);
+  enum class RefreshSource {
+    Database,
+    Remote,
+    Pending,
+  };
 
-	const not_null<Wallet*> _owner;
-	const not_null<RequestSender*> _lib;
-	const not_null<Storage::Cache::Database*> _db;
+  void refreshFromDatabase(const QString &address, Viewers &viewers);
+  void refreshAccount(const QString &address, Viewers &viewers);
+  void checkPendingForSameState(const QString &address, Viewers &viewers, const CurrencyMap<TokenStateValue> &tokenStates,
+                                const std::map<QString, DePoolParticipantState> &dePoolStates,
+                                const AccountState &state);
+  void checkNextRefresh();
+  Viewers *findRefreshingViewers(const QString &address);
+  void finishRefreshing(Viewers &viewers, Result<> result = {});
+  template <typename Data>
+  bool reportError(Viewers &viewers, Result<Data> result);
+  void saveNewStateEncrypted(const QString &address, Viewers &viewers, WalletState &&full, RefreshSource source);
+  void saveNewState(Viewers &viewers, WalletState &&state, RefreshSource source);
 
-	base::flat_map<QString, Viewers> _map;
+  const not_null<Wallet *> _owner;
+  const not_null<RequestSender *> _lib;
+  const not_null<Storage::Cache::Database *> _db;
 
-	base::Timer _refreshTimer;
+  base::flat_map<QString, Viewers> _map;
 
-	rpl::event_stream<BlockchainTime> _blockchainTime;
+  base::Timer _refreshTimer;
 
+  rpl::event_stream<BlockchainTime> _blockchainTime;
 };
 
-} // namespace Ton::details
+}  // namespace Ton::details

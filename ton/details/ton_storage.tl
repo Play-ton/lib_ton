@@ -19,7 +19,12 @@ storage.message2 source:string destination:string value:int64 created:int64 body
 storage.transaction id:storage.TransactionId time:int64 fee:int64 storageFee:int64 otherFee:int64 incoming:storage.Message outgoing:vector<storage.Message> = storage.Transaction;
 storage.transactionsSlice list:vector<storage.Transaction> previousId:storage.TransactionId = storage.TransactionsSlice;
 storage.pendingTransaction fake:storage.Transaction sentUntilSyncTime:int64 = storage.PendingTransaction;
-storage.tokenState kind:int32 fullBalance:int64 = storage.TokenState;
+storage.tokenState
+    rootContractAddress:bytes
+    walletContractAddress:bytes
+    name:bytes
+    decimals:int32
+    balance:int64 = storage.TokenState;
 storage.dePoolState
     address:string
     total:int64
@@ -33,7 +38,7 @@ storage.walletState
     pendingTransactions:vector<storage.PendingTransaction>
     tokenStates:vector<storage.TokenState>
     dePoolStates:vector<storage.DePoolState> = storage.WalletState;
-storage.network blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool tokenContractAddress:string = storage.Network;
+storage.network blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool = storage.Network;
 
 storage.settings blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool useNetworkCallbacks:storage.Bool = storage.Settings; // old
 storage.settings2 blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool useNetworkCallbacks:storage.Bool version:int32 = storage.Settings; // old

@@ -13,33 +13,27 @@ namespace Ton::details {
 class RequestSender;
 
 struct BlockchainTime {
-	crl::time when = 0;
-	TimeId what = 0;
+  crl::time when = 0;
+  TimeId what = 0;
 };
 
 class LocalTimeSyncer final {
-public:
-	LocalTimeSyncer(
-		BlockchainTime time,
-		not_null<RequestSender*> lib,
-		Fn<void()> destroy);
+ public:
+  LocalTimeSyncer(BlockchainTime time, not_null<RequestSender *> lib, Fn<void()> destroy);
 
-	void updateBlockchainTime(BlockchainTime time);
+  void updateBlockchainTime(BlockchainTime time);
 
-	[[nodiscard]] static bool IsRequestFastEnough(
-		crl::time sent,
-		crl::time done);
-	[[nodiscard]] static bool IsLocalTimeBad(BlockchainTime time);
+  [[nodiscard]] static bool IsRequestFastEnough(crl::time sent, crl::time done);
+  [[nodiscard]] static bool IsLocalTimeBad(BlockchainTime time);
 
-private:
-	void getLiteServerTime();
-	void sync(const TLliteServer_Info &result);
+ private:
+  void getLiteServerTime();
+  void sync(const TLliteServer_Info &result);
 
-	const not_null<RequestSender*> _lib;
-	const Fn<void()> _destroy;
+  const not_null<RequestSender *> _lib;
+  const Fn<void()> _destroy;
 
-	BlockchainTime _blockchainTime;
-
+  BlockchainTime _blockchainTime;
 };
 
-} // namespace Ton::details
+}  // namespace Ton::details

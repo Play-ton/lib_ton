@@ -21,46 +21,43 @@ namespace tonlib_api = ::ton::tonlib_api;
 using RequestId = uint32;
 
 class Client final : public base::has_weak_ptr {
-public:
-	using LibRequest = tonlib_api::object_ptr<tonlib_api::Function>;
-	using LibResponse = tonlib_api::object_ptr<tonlib_api::Object>;
-	using LibUpdate = tonlib_api::object_ptr<tonlib_api::Update>;
+ public:
+  using LibRequest = tonlib_api::object_ptr<tonlib_api::Function>;
+  using LibResponse = tonlib_api::object_ptr<tonlib_api::Object>;
+  using LibUpdate = tonlib_api::object_ptr<tonlib_api::Update>;
 
-	explicit Client(Fn<void(LibUpdate)> updateCallback);
-	~Client();
+  explicit Client(Fn<void(LibUpdate)> updateCallback);
+  ~Client();
 
-	RequestId send(
-		Fn<LibRequest()> request,
-		FnMut<bool(LibResponse)> handler);
-	void cancel(RequestId requestId);
+  RequestId send(Fn<LibRequest()> request, FnMut<bool(LibResponse)> handler);
+  void cancel(RequestId requestId);
 
-	[[nodiscard]] rpl::producer<RequestId> resendingOnError() const;
+  [[nodiscard]] rpl::producer<RequestId> resendingOnError() const;
 
-	static LibResponse Execute(LibRequest request);
+  static LibResponse Execute(LibRequest request);
 
-private:
-	void check();
-	void scheduleResendOnError(RequestId requestId);
-	void resend(RequestId requestId);
+ private:
+  void check();
+  void scheduleResendOnError(RequestId requestId);
+  void resend(RequestId requestId);
 
-	tonlib::Client _wrapped;
-	std::atomic<RequestId> _requestIdAutoIncrement = 0;
-	std::atomic<uint32> _libRequestIdAutoIncrement = 0;
-	const Fn<void(LibUpdate)> _updateCallback;
+  tonlib::Client _wrapped;
+  std::atomic<RequestId> _requestIdAutoIncrement = 0;
+  std::atomic<uint32> _libRequestIdAutoIncrement = 0;
+  const Fn<void(LibUpdate)> _updateCallback;
 
-	QMutex _mutex;
-	base::flat_map<uint32, RequestId> _requestIdByLibRequestId;
-	base::flat_map<RequestId, Fn<LibRequest()>> _requests;
-	base::flat_map<RequestId, FnMut<bool(LibResponse)>> _handlers;
+  QMutex _mutex;
+  base::flat_map<uint32, RequestId> _requestIdByLibRequestId;
+  base::flat_map<RequestId, Fn<LibRequest()>> _requests;
+  base::flat_map<RequestId, FnMut<bool(LibResponse)>> _handlers;
 
-	std::thread _thread;
-	std::atomic<bool> _finished = false;
+  std::thread _thread;
+  std::atomic<bool> _finished = false;
 
-	// Accessed from main thread only.
-	base::flat_map<RequestId, crl::time> _requestResendDelays;
-	base::DelayedCallTimer _resendTimer;
-	rpl::event_stream<RequestId> _resendingOnError;
-
+  // Accessed from main thread only.
+  base::flat_map<RequestId, crl::time> _requestResendDelays;
+  base::DelayedCallTimer _resendTimer;
+  rpl::event_stream<RequestId> _resendingOnError;
 };
 
-} // namespace Ton::details
+}  // namespace Ton::details

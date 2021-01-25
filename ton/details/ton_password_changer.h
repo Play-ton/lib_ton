@@ -13,11 +13,11 @@
 
 namespace Storage::Cache {
 class Database;
-} // namespace Storage::Cache
+}  // namespace Storage::Cache
 
 namespace Ton {
 struct Error;
-} // namespace Ton
+}  // namespace Ton
 
 namespace Ton::details {
 
@@ -25,31 +25,25 @@ class RequestSender;
 struct WalletList;
 
 class PasswordChanger final : public base::has_weak_ptr {
-public:
-	PasswordChanger(
-		not_null<RequestSender*> lib,
-		not_null<Storage::Cache::Database*> db,
-		const QByteArray &oldPassword,
-		const QByteArray &newPassword,
-		WalletList existing,
-		bool useTestNetwork,
-		Callback<std::vector<QByteArray>> done);
+ public:
+  PasswordChanger(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, const QByteArray &oldPassword,
+                  const QByteArray &newPassword, WalletList existing, bool useTestNetwork,
+                  Callback<std::vector<QByteArray>> done);
 
-private:
-	void changeNext();
-	void savedNext(const QByteArray &newSecret);
-	void rollback(Error error);
-	void rollforward();
+ private:
+  void changeNext();
+  void savedNext(const QByteArray &newSecret);
+  void rollback(Error error);
+  void rollforward();
 
-	const not_null<RequestSender*> _lib;
-	const not_null<Storage::Cache::Database*> _db;
-	const QByteArray _oldPassword;
-	const QByteArray _newPassword;
-	const Callback<std::vector<QByteArray>> _done;
-	const bool _useTestNetwork = false;
-	WalletList _list;
-	std::vector<QByteArray> _newSecrets;
-
+  const not_null<RequestSender *> _lib;
+  const not_null<Storage::Cache::Database *> _db;
+  const QByteArray _oldPassword;
+  const QByteArray _newPassword;
+  const Callback<std::vector<QByteArray>> _done;
+  const bool _useTestNetwork = false;
+  WalletList _list;
+  std::vector<QByteArray> _newSecrets;
 };
 
-} // namespace Ton::details
+}  // namespace Ton::details

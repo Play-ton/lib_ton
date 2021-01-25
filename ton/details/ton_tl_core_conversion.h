@@ -25,24 +25,24 @@ bool tl_to(const TLbool &value);
 
 template <typename T>
 auto tl_from(std::vector<T> &&value) {
-	using U = decltype(tl_from(std::declval<T>()));
-	auto result = QVector<U>();
-	result.reserve(value.size());
-	for (auto &element : value) {
-		result.push_back(tl_from(std::move(element)));
-	}
-	return tl_vector<U>(std::move(result));
+  using U = decltype(tl_from(std::declval<T>()));
+  auto result = QVector<U>();
+  result.reserve(value.size());
+  for (auto &element : value) {
+    result.push_back(tl_from(std::move(element)));
+  }
+  return tl_vector<U>(std::move(result));
 }
 
 template <typename T>
 auto tl_to(const TLvector<T> &value) {
-	using U = decltype(tl_to(std::declval<T>()));
-	auto result = std::vector<U>();
-	result.reserve(value.v.size());
-	for (const auto &element : value.v) {
-		result.push_back(tl_to(element));
-	}
-	return result;
+  using U = decltype(tl_to(std::declval<T>()));
+  auto result = std::vector<U>();
+  result.reserve(value.v.size());
+  for (const auto &element : value.v) {
+    result.push_back(tl_to(element));
+  }
+  return result;
 }
 
-} // namespace Ton::details
+}  // namespace Ton::details

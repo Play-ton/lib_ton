@@ -6,7 +6,6 @@
 //
 #include "ton/ton_account_viewer.h"
 
-#include "ton/ton_state.h"
 #include "ton/ton_wallet.h"
 #include "ton/details/ton_parse_state.h"
 
@@ -17,77 +16,67 @@ using namespace details;
 
 constexpr auto kDefaultRefreshEach = 60 * crl::time(1000);
 
-} // namespace
+}  // namespace
 
-AccountViewer::AccountViewer(
-	not_null<Wallet*> wallet,
-	const QByteArray &publicKey,
-	const QString &address,
-	rpl::producer<WalletViewerState> state)
-: _wallet(wallet)
-, _publicKey(publicKey)
-, _address(address)
-, _state(std::move(state))
-, _refreshEach(kDefaultRefreshEach) {
+AccountViewer::AccountViewer(not_null<Wallet *> wallet, QByteArray publicKey, QString address,
+                             rpl::producer<WalletViewerState> state)
+    : _wallet(wallet)
+    , _publicKey(std::move(publicKey))
+    , _address(std::move(address))
+    , _state(std::move(state))
+    , _refreshEach(kDefaultRefreshEach) {
 }
 
 rpl::producer<WalletViewerState> AccountViewer::state() const {
-	return rpl::duplicate(_state);
+  return rpl::duplicate(_state);
 }
 
 rpl::producer<Result<LoadedSlice>> AccountViewer::loaded() const {
-	return _loadedResults.events();
+  return _loadedResults.events();
 }
 
 void AccountViewer::refreshNow(Callback<> done) {
-	_refreshNowRequests.fire(std::move(done));
+  _refreshNowRequests.fire(std::move(done));
 }
 
 rpl::producer<Callback<>> AccountViewer::refreshNowRequests() const {
-	return _refreshNowRequests.events();
+  return _refreshNowRequests.events();
 }
 
 void AccountViewer::setRefreshEach(crl::time delay) {
-	_refreshEach = delay;
+  _refreshEach = delay;
 }
 
 crl::time AccountViewer::refreshEach() const {
-	return _refreshEach.current();
+  return _refreshEach.current();
 }
 
 rpl::producer<crl::time> AccountViewer::refreshEachValue() const {
-	return _refreshEach.value();
+  return _refreshEach.value();
 }
 
 void AccountViewer::preloadSlice(const TransactionId &lastId) {
-	if (_preloadIds.contains(lastId)) {
-		return;
-	}
-	_preloadIds.emplace(lastId);
-	const auto done = [=](Result<TransactionsSlice> result) {
-		if (!result) {
-			_loadedResults.fire(std::move(result.error()));
-			return;
-		}
-		const auto previousId = result->previousId;
-		const auto done = [=](Result<std::vector<Transaction>> &&result) {
-			if (!result) {
-				_loadedResults.fire(std::move(result.error()));
-				return;
-			}
-			_preloadIds.remove(lastId);
-			_loadedResults.fire(LoadedSlice{
-				lastId,
-				TransactionsSlice{ std::move(*result), previousId }
-			});
-		};
-		_wallet->trySilentDecrypt(_publicKey, std::move(result->list), done);
-	};
-	_wallet->requestTransactions(
-		_publicKey,
-		_address,
-		lastId,
-		crl::guard(this, done));
+  if (_preloadIds.contains(lastId)) {
+    return;
+  }
+  _preloadIds.emplace(lastId);
+  const auto done = [=](Result<TransactionsSlice> result) {
+    if (!result) {
+      _loadedResults.fire(std::move(result.error()));
+      return;
+    }
+    const auto previousId = result->previousId;
+    const auto done = [=](Result<std::vector<Transaction>> &&result) {
+      if (!result) {
+        _loadedResults.fire(std::move(result.error()));
+        return;
+      }
+      _preloadIds.remove(lastId);
+      _loadedResults.fire(LoadedSlice{lastId, TransactionsSlice{std::move(*result), previousId}});
+    };
+    _wallet->trySilentDecrypt(_publicKey, std::move(result->list), done);
+  };
+  _wallet->requestTransactions(_publicKey, _address, lastId, crl::guard(this, done));
 }
 
-} // namespace Ton
+}  // namespace Ton

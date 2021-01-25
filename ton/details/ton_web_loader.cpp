@@ -12,52 +12,52 @@
 namespace Ton::details {
 namespace {
 
-Result<QByteArray> ParseResult(not_null<QNetworkReply*> reply) {
-	if (reply->error() != QNetworkReply::NoError) {
-		return Error{ Error::Type::Web, reply->errorString() };
-	}
-	return reply->readAll();
+Result<QByteArray> ParseResult(not_null<QNetworkReply *> reply) {
+  if (reply->error() != QNetworkReply::NoError) {
+    return Error{Error::Type::Web, reply->errorString()};
+  }
+  return reply->readAll();
 }
 
-} // namespace
+}  // namespace
 
 WebLoader::WebLoader(Fn<void()> finished) : _finished(std::move(finished)) {
 }
 
 WebLoader::~WebLoader() {
-	_requests.clear();
+  _requests.clear();
 }
 
 void WebLoader::load(const QString &url, Callback<QByteArray> done) {
-	auto &list = _requests[url];
-	list.push_back(std::move(done));
-	if (list.size() > 1) {
-		return;
-	}
+  auto &list = _requests[url];
+  list.push_back(std::move(done));
+  if (list.size() > 1) {
+    return;
+  }
 
-	const auto weak = QPointer<QNetworkAccessManager>(&_manager);
-	auto request = QNetworkRequest();
-	request.setUrl(url);
-	const auto reply = _manager.get(request);
-	QObject::connect(reply, &QNetworkReply::finished, [=] {
-		crl::on_main(weak, [=] {
-			reply->deleteLater();
+  const auto weak = QPointer<QNetworkAccessManager>(&_manager);
+  auto request = QNetworkRequest();
+  request.setUrl(url);
+  const auto reply = _manager.get(request);
+  QObject::connect(reply, &QNetworkReply::finished, [=] {
+    crl::on_main(weak, [=] {
+      reply->deleteLater();
 
-			const auto result = ParseResult(reply);
-			if (auto list = _requests.take(url)) {
-				for (auto callback : *list) {
-					callback(result);
-					if (!weak) {
-						return;
-					}
-				}
-			}
-			if (_requests.empty()) {
-				const auto onstack = _finished;
-				onstack();
-			}
-		});
-	});
+      const auto result = ParseResult(reply);
+      if (auto list = _requests.take(url)) {
+        for (auto callback : *list) {
+          callback(result);
+          if (!weak) {
+            return;
+          }
+        }
+      }
+      if (_requests.empty()) {
+        const auto onstack = _finished;
+        onstack();
+      }
+    });
+  });
 }
 
-} // namespace Ton::details
+}  // namespace Ton::details

@@ -39,124 +39,104 @@ TLsecureString LocalPassword();
 TLsecureString MnemonicPassword();
 
 TLsecureString LocalPassword() {
-	static constexpr auto kLocalPasswordSize = 256;
-	using array = std::array<char, kLocalPasswordSize>;
-	static auto kLocalPassword = openssl::RandomValue<array>();
-	return TLsecureString{ QByteArray::fromRawData(
-		kLocalPassword.data(),
-		kLocalPassword.size()) };
+  static constexpr auto kLocalPasswordSize = 256;
+  using array = std::array<char, kLocalPasswordSize>;
+  static auto kLocalPassword = openssl::RandomValue<array>();
+  return TLsecureString{QByteArray::fromRawData(kLocalPassword.data(), kLocalPassword.size())};
 }
 
 TLsecureString MnemonicPassword() {
-	return TLsecureString{ QByteArray() };
+  return TLsecureString{QByteArray()};
 }
 
 template <typename T>
 Fn<void(const TLerror &)> ErrorHandler(Callback<T> handler) {
-	return [=](const TLerror &error) {
-		handler(ErrorFromLib(error));
-	};
+  return [=](const TLerror &error) { handler(ErrorFromLib(error)); };
 }
 
-} // namespace
+}  // namespace
 
 void Start(Callback<> done) {
-	Expects(!GlobalSender);
+  Expects(!GlobalSender);
 
-	const auto ok1 = RequestSender::Execute(TLSetLogStream(
-		tl_logStreamEmpty()));
-	Assert(ok1);
+  const auto ok1 = RequestSender::Execute(TLSetLogStream(tl_logStreamEmpty()));
+  Assert(ok1);
 
-	const auto ok2 = RequestSender::Execute(TLSetLogVerbosityLevel(
-		tl_int32(0)));
-	Assert(ok2);
+  const auto ok2 = RequestSender::Execute(TLSetLogVerbosityLevel(tl_int32(0)));
+  Assert(ok2);
 
-	GlobalSender = std::make_unique<RequestSender>();
-	GlobalSender->request(TLInit(
-		tl_options(
-			nullptr,
-			tl_keyStoreTypeInMemory())
-	)).done([=] {
-		done({});
-	}).fail(ErrorHandler(done)).send();
+  GlobalSender = std::make_unique<RequestSender>();
+  GlobalSender->request(TLInit(tl_options(nullptr, tl_keyStoreTypeInMemory())))
+      .done([=] { done({}); })
+      .fail(ErrorHandler(done))
+      .send();
 }
 
-void CreateKey(
-		const QByteArray &seed,
-		Callback<UtilityKey> done) {
-	Expects(GlobalSender != nullptr);
+void CreateKey(const QByteArray &seed, Callback<UtilityKey> done) {
+  Expects(GlobalSender != nullptr);
 
-	const auto deleteAfterCreate = [=](
-			QByteArray secret,
-			const UtilityKey &key) {
-		GlobalSender->request(TLDeleteKey(
-			tl_key(tl_string(key.publicKey), TLsecureString{ secret })
-		)).done([=] {
-			done(key);
-		}).fail([=] {
-			done(key);
-		}).send();
-	};
-	GlobalSender->request(TLCreateNewKey(
-		LocalPassword(),
-		MnemonicPassword(),
-		TLsecureString{ seed }
-	)).done([=](const TLkey &result) {
-		result.match([=](const TLDkey &result) {
-			const auto publicKey = result.vpublic_key().v;
-			const auto secret = result.vsecret().v;
-			GlobalSender->request(TLExportKey(
-				tl_inputKeyRegular(
-					tl_key(tl_string(publicKey), TLsecureString{ secret }),
-					LocalPassword())
-			)).done([=](const TLexportedKey &result) {
-				result.match([&](const TLDexportedKey &data) {
-					auto key = UtilityKey();
-					key.publicKey = publicKey;
-					key.words.reserve(data.vword_list().v.size());
-					for (const auto &word : data.vword_list().v) {
-						key.words.push_back(word.v);
-					}
-					deleteAfterCreate(secret, key);
-				});
-			}).fail(ErrorHandler(done)).send();
-		});
-	}).fail(ErrorHandler(done)).send();
+  const auto deleteAfterCreate = [=](QByteArray secret, const UtilityKey &key) {
+    GlobalSender->request(TLDeleteKey(tl_key(tl_string(key.publicKey), TLsecureString{secret})))
+        .done([=] { done(key); })
+        .fail([=] { done(key); })
+        .send();
+  };
+  GlobalSender->request(TLCreateNewKey(LocalPassword(), MnemonicPassword(), TLsecureString{seed}))
+      .done([=](const TLkey &result) {
+        result.match([=](const TLDkey &result) {
+          const auto publicKey = result.vpublic_key().v;
+          const auto secret = result.vsecret().v;
+          GlobalSender
+              ->request(TLExportKey(
+                  tl_inputKeyRegular(tl_key(tl_string(publicKey), TLsecureString{secret}), LocalPassword())))
+              .done([=](const TLexportedKey &result) {
+                result.match([&](const TLDexportedKey &data) {
+                  auto key = UtilityKey();
+                  key.publicKey = publicKey;
+                  key.words.reserve(data.vword_list().v.size());
+                  for (const auto &word : data.vword_list().v) {
+                    key.words.push_back(word.v);
+                  }
+                  deleteAfterCreate(secret, key);
+                });
+              })
+              .fail(ErrorHandler(done))
+              .send();
+        });
+      })
+      .fail(ErrorHandler(done))
+      .send();
 }
 
-void CheckKey(
-		const std::vector<QByteArray> &words,
-		Callback<QByteArray> done) {
-	Expects(GlobalSender != nullptr);
+void CheckKey(const std::vector<QByteArray> &words, Callback<QByteArray> done) {
+  Expects(GlobalSender != nullptr);
 
-	auto wrapped = QVector<TLsecureString>();
-	for (const auto &word : words) {
-		wrapped.push_back(TLsecureString{ word });
-	}
+  auto wrapped = QVector<TLsecureString>();
+  for (const auto &word : words) {
+    wrapped.push_back(TLsecureString{word});
+  }
 
-	GlobalSender->request(TLImportKey(
-		LocalPassword(),
-		MnemonicPassword(),
-		tl_exportedKey(tl_vector<TLsecureString>(std::move(wrapped)))
-	)).done([=](const TLkey &result) {
-		result.match([=](const TLDkey &result) {
-			const auto publicKey = result.vpublic_key().v;
-			const auto secret = result.vsecret().v;
-			GlobalSender->request(TLDeleteKey(
-				tl_key(tl_string(publicKey), TLsecureString{ secret })
-			)).done([=] {
-				done(publicKey);
-			}).fail([=] {
-				done(publicKey);
-			}).send();
-		});
-	}).fail(ErrorHandler(done)).send();
+  GlobalSender
+      ->request(TLImportKey(LocalPassword(), MnemonicPassword(),
+                            tl_exportedKey(tl_vector<TLsecureString>(std::move(wrapped)))))
+      .done([=](const TLkey &result) {
+        result.match([=](const TLDkey &result) {
+          const auto publicKey = result.vpublic_key().v;
+          const auto secret = result.vsecret().v;
+          GlobalSender->request(TLDeleteKey(tl_key(tl_string(publicKey), TLsecureString{secret})))
+              .done([=] { done(publicKey); })
+              .fail([=] { done(publicKey); })
+              .send();
+        });
+      })
+      .fail(ErrorHandler(done))
+      .send();
 }
 
 void Finish() {
-	Expects(GlobalSender != nullptr);
+  Expects(GlobalSender != nullptr);
 
-	GlobalSender = nullptr;
+  GlobalSender = nullptr;
 }
 
-} // namespace Ton
+}  // namespace Ton

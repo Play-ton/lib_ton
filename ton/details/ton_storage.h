@@ -11,7 +11,7 @@
 namespace Storage::Cache {
 class Database;
 struct Error;
-} // namespace Storage::Cache
+}  // namespace Storage::Cache
 
 namespace Ton {
 struct TransactionId;
@@ -22,55 +22,34 @@ struct TransactionsSlice;
 struct PendingTransaction;
 struct WalletState;
 struct Settings;
-} // namespace Ton
+}  // namespace Ton
 
 namespace Ton::details {
 
 class RequestSender;
 
 struct WalletList {
-	struct Entry {
-		QByteArray publicKey;
-		QByteArray secret;
-		QString address;
-	};
-	std::vector<Entry> entries;
+  struct Entry {
+    QByteArray publicKey;
+    QByteArray secret;
+    QString address;
+  };
+  std::vector<Entry> entries;
 };
 
-[[nodiscard]] std::optional<Error> ErrorFromStorage(
-	const Storage::Cache::Error &error);
+[[nodiscard]] std::optional<Error> ErrorFromStorage(const Storage::Cache::Error &error);
 
-void DeletePublicKey(
-	not_null<RequestSender*> lib,
-	const QByteArray &publicKey,
-	const QByteArray &secret,
-	Callback<> done);
+void DeletePublicKey(not_null<RequestSender *> lib, const QByteArray &publicKey, const QByteArray &secret,
+                     Callback<> done);
 
-void SaveWalletList(
-	not_null<Storage::Cache::Database*> db,
-	const WalletList &list,
-	bool useTestNetwork,
-	Callback<> done);
-void LoadWalletList(
-	not_null<Storage::Cache::Database*> db,
-	bool useTestNetwork,
-	Fn<void(WalletList&&)> done);
+void SaveWalletList(not_null<Storage::Cache::Database *> db, const WalletList &list, bool useTestNetwork,
+                    Callback<> done);
+void LoadWalletList(not_null<Storage::Cache::Database *> db, bool useTestNetwork, Fn<void(WalletList &&)> done);
 
-void SaveWalletState(
-	not_null<Storage::Cache::Database*> db,
-	const WalletState &state,
-	Callback<> done);
-void LoadWalletState(
-	not_null<Storage::Cache::Database*> db,
-	const QString &address,
-	Fn<void(WalletState&&)> done);
+void SaveWalletState(not_null<Storage::Cache::Database *> db, const WalletState &state, Callback<> done);
+void LoadWalletState(not_null<Storage::Cache::Database *> db, const QString &address, Fn<void(WalletState &&)> done);
 
-void SaveSettings(
-	not_null<Storage::Cache::Database*> db,
-	const Settings &settings,
-	Callback<> done);
-void LoadSettings(
-	not_null<Storage::Cache::Database*> db,
-	Fn<void(Settings&&)> done);
+void SaveSettings(not_null<Storage::Cache::Database *> db, const Settings &settings, Callback<> done);
+void LoadSettings(not_null<Storage::Cache::Database *> db, Fn<void(Settings &&)> done);
 
-} // namespace Ton::details
+}  // namespace Ton::details

@@ -44,1829 +44,1489 @@ constexpr auto kDefaultWorkchainId = 0;
 constexpr auto kDefaultMessageFlags = 3;
 
 [[nodiscard]] TLError GenerateFakeIncorrectPasswordError() {
-	return tl_error(tl_int32(0), tl_string("KEY_DECRYPT"));
+  return tl_error(tl_int32(0), tl_string("KEY_DECRYPT"));
 }
 
 [[nodiscard]] TLError GenerateInvalidAbiError() {
-	return tl_error(tl_int32(500), tl_string("INVALID_ABI"));
+  return tl_error(tl_int32(500), tl_string("INVALID_ABI"));
 }
 
 [[nodiscard]] std::map<int64, InvestParams> parseInvestParamsMap(const TLDftabi_valueMap &map) {
-	std::map<int64, InvestParams> result;
-	for (const auto &item : map.vvalues().v) {
-		const auto key = item.c_ftabi_valueMapItem().vkey().c_ftabi_valueInt().vvalue().v;
-		const auto values = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueTuple().vvalues().v;
+  std::map<int64, InvestParams> result;
+  for (const auto &item : map.vvalues().v) {
+    const auto key = item.c_ftabi_valueMapItem().vkey().c_ftabi_valueInt().vvalue().v;
+    const auto values = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueTuple().vvalues().v;
 
-		result.emplace(std::make_pair(key,
-			InvestParams {
-			  .remainingAmount = values[0].c_ftabi_valueInt().vvalue().v,
-			  .lastWithdrawalTime = values[1].c_ftabi_valueInt().vvalue().v,
-			  .withdrawalPeriod = static_cast<int32>(values[2].c_ftabi_valueInt().vvalue().v),
-			  .withdrawalValue = values[3].c_ftabi_valueInt().vvalue().v,
-			  .owner = values[4].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
-			}));
-	}
-	return result;
+    result.emplace(std::make_pair(
+        key, InvestParams{
+                 .remainingAmount = values[0].c_ftabi_valueInt().vvalue().v,
+                 .lastWithdrawalTime = values[1].c_ftabi_valueInt().vvalue().v,
+                 .withdrawalPeriod = static_cast<int32>(values[2].c_ftabi_valueInt().vvalue().v),
+                 .withdrawalValue = values[3].c_ftabi_valueInt().vvalue().v,
+                 .owner = values[4].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
+             }));
+  }
+  return result;
 }
 
-TLftabi_Function TokenBalanceOf() {
-	static std::optional<TLftabi_function> function;
-	if (!function.has_value()) {
-		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-			tl_string("balanceOf"),
-			tl_vector(
-				QVector<TLftabi_namedParam>{
-					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-				}),
-			tl_vector(
-				QVector<TLftabi_Param>{
-					tl_ftabi_paramUint(tl_int32(256)), // tokenID
-					tl_ftabi_paramAddress(), // account
-				}),
-			tl_vector(
-				QVector<TLftabi_Param>{
-					tl_ftabi_paramUint(tl_int32(256))
-				})
-		));
-		Expects(createdFunction.has_value());
-		function = createdFunction.value();
-	}
-	return *function;
+TLftabi_Function TokenGetBalance() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("getBalance"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               {}, tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramUint(tl_int32(128))})));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
 }
 
 TLftabi_Function TokenTransferFunction() {
-	static std::optional<TLftabi_function> function;
-	if (!function.has_value()) {
-		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-			tl_string("transfer"),
-			tl_vector(
-				QVector<TLftabi_namedParam>{
-					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-				}),
-			tl_vector(
-				QVector<TLftabi_Param>{
-					tl_ftabi_paramUint(tl_int32(256)), // tokenID
-					tl_ftabi_paramAddress(), // recipient
-					tl_ftabi_paramUint(tl_int32(256)) // amount
-				}),
-			{}
-		));
-		Expects(createdFunction.has_value());
-		function = createdFunction.value();
-	}
-	return *function;
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("transfer"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramAddress(),            // recipient
+                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
+                                   tl_ftabi_paramUint(tl_int32(126))   // grams
+                               }),
+                               {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
 }
 
 TLftabi_Function TokenSwapBackFunction() {
-	static std::optional<TLftabi_function> function;
-	if (!function.has_value()) {
-		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-			tl_string("swapBack"),
-			tl_vector(
-				QVector<TLftabi_namedParam>{
-					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-				}),
-			tl_vector(
-				QVector<TLftabi_Param>{
-					tl_ftabi_paramUint(tl_int32(256)), // tokenID
-					tl_ftabi_paramUint(tl_int32(256)), // amount
-					tl_ftabi_paramUint(tl_int32(256)), // ethereumAddress
-				}),
-			{}
-		));
-		Expects(createdFunction.has_value());
-		function = createdFunction.value();
-	}
-	return *function;
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("burnByOwner"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
+                                   tl_ftabi_paramUint(tl_int32(128)),  // grams
+                                   tl_ftabi_paramAddress(),            // callback_address
+                                   tl_ftabi_paramCell(),               // callback payload
+                               }),
+                               {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
 }
 
 TLftabi_Function OrdinaryStakeFunction() {
-	static std::optional<TLftabi_function> function;
-	if (!function.has_value()) {
-		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-			tl_string("addOrdinaryStake"),
-			tl_vector(
-				QVector<TLftabi_namedParam>{
-					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-				}),
-			tl_vector(
-				QVector<TLftabi_Param>{
-					tl_ftabi_paramUint(tl_int32(64)),
-				}),
-			{}
-		));
-		Expects(createdFunction.has_value());
-		function = createdFunction.value();
-	}
-	return *function;
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("addOrdinaryStake"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(64)),
+                               }),
+                               {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
 }
 
 TLftabi_Function VestingOrLockStakeFunction() {
-	static std::optional<TLftabi_function> function;
-	if (!function.has_value()) {
-		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-			tl_string("addVestingOrLock"),
-			tl_vector(
-				QVector<TLftabi_namedParam>{
-					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-				}),
-			tl_vector(
-				QVector<TLftabi_Param>{
-					tl_ftabi_paramUint(tl_int32(64)), // stake
-					tl_ftabi_paramAddress(),          // beneficiary
-					tl_ftabi_paramUint(tl_int32(32)), // withdrawalPeriod
-					tl_ftabi_paramUint(tl_int32(32)), // totalPeriod
-					tl_ftabi_paramBool(),             // isVesting
-				}),
-			{}
-		));
-		Expects(createdFunction.has_value());
-		function = createdFunction.value();
-	}
-	return *function;
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("addVestingOrLock"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(64)),  // stake
+                                   tl_ftabi_paramAddress(),           // beneficiary
+                                   tl_ftabi_paramUint(tl_int32(32)),  // withdrawalPeriod
+                                   tl_ftabi_paramUint(tl_int32(32)),  // totalPeriod
+                                   tl_ftabi_paramBool(),              // isVesting
+                               }),
+                               {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
 }
 
 TLftabi_Function DePoolWithdrawPartFunction() {
-	static std::optional<TLftabi_function> function;
-	if (!function.has_value()) {
-		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-			tl_string("withdrawPart"),
-			tl_vector(
-				QVector<TLftabi_namedParam>{
-					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-				}),
-			tl_vector(
-				QVector<TLftabi_Param>{
-					tl_ftabi_paramUint(tl_int32(64)), // withdrawValue
-				}),
-			{}
-		));
-		Expects(createdFunction.has_value());
-		function = createdFunction.value();
-	}
-	return *function;
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("withdrawPart"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(64)),  // withdrawValue
+                               }),
+                               {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
 }
 
 TLftabi_Function DePoolWithdrawAllFunction() {
-	static std::optional<TLftabi_function> function;
-	if (!function.has_value()) {
-		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-			tl_string("withdrawAll"),
-			tl_vector(
-				QVector<TLftabi_namedParam>{
-					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-				}),
-			{},
-			{}
-		));
-		Expects(createdFunction.has_value());
-		function = createdFunction.value();
-	}
-	return *function;
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("withdrawAll"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               {}, {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
 }
 
 TLftabi_Function DePoolCancelWithdrawalFunction() {
-	static std::optional<TLftabi_function> function;
-	if (!function.has_value()) {
-		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-			tl_string("cancelWithdrawal"),
-			tl_vector(
-				QVector<TLftabi_namedParam>{
-					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-				}),
-			{},
-			{}
-		));
-		Expects(createdFunction.has_value());
-		function = createdFunction.value();
-	}
-	return *function;
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("cancelWithdrawal"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               {}, {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
 }
 
 TLftabi_Function DePoolOnRoundCompleteFunction() {
-	static std::optional<TLftabi_function> function;
-	if (!function.has_value()) {
-		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-			tl_string("onRoundComplete"),
-			tl_vector(
-				QVector<TLftabi_namedParam>{
-					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-				}),
-			tl_vector(
-				QVector<TLftabi_Param>{
-					tl_ftabi_paramUint(tl_int32(64)), // roundId
-					tl_ftabi_paramUint(tl_int32(64)), // reward
-					tl_ftabi_paramUint(tl_int32(64)), // ordinaryStake
-					tl_ftabi_paramUint(tl_int32(64)), // vestingStake
-					tl_ftabi_paramUint(tl_int32(64)), // lockStake
-					tl_ftabi_paramBool(),             // reinvest
-					tl_ftabi_paramUint(tl_int32(8)),  // reason
-				}),
-			{}
-		));
-		Expects(createdFunction.has_value());
-		function = createdFunction.value();
-	}
-	return *function;
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("onRoundComplete"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(64)),  // roundId
+                                   tl_ftabi_paramUint(tl_int32(64)),  // reward
+                                   tl_ftabi_paramUint(tl_int32(64)),  // ordinaryStake
+                                   tl_ftabi_paramUint(tl_int32(64)),  // vestingStake
+                                   tl_ftabi_paramUint(tl_int32(64)),  // lockStake
+                                   tl_ftabi_paramBool(),              // reinvest
+                                   tl_ftabi_paramUint(tl_int32(8)),   // reason
+                               }),
+                               {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
 }
 
 TLftabi_Function DePoolParticipantInfoFunction() {
-	static std::optional<TLftabi_function> function;
-	if (!function.has_value()) {
-		const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-			tl_string("getParticipantInfo"),
-			tl_vector(
-				QVector<TLftabi_namedParam>{
-					tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-					tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-				}),
-			tl_vector(
-				QVector<TLftabi_Param>{
-					tl_ftabi_paramAddress(), // addr
-				}),
-			tl_vector(
-				QVector<TLftabi_Param>{
-					tl_ftabi_paramUint(tl_int32(64)), // total
-					tl_ftabi_paramUint(tl_int32(64)), // withdrawValue
-					tl_ftabi_paramBool(),             // reinvest
-					tl_ftabi_paramUint(tl_int32(64)), // reward
-					tl_ftabi_paramMap(tl_ftabi_paramUint(tl_int32(64)), tl_ftabi_paramUint(tl_int32(64))), // stakes
-					tl_ftabi_paramMap(
-						tl_ftabi_paramUint(tl_int32(64)),
-						tl_ftabi_paramTuple(
-							tl_vector(
-								QVector<TLftabi_Param>{
-									tl_ftabi_paramUint(tl_int32(64)), // remainingAmount
-									tl_ftabi_paramUint(tl_int32(64)), // lastWithdrawalTime
-									tl_ftabi_paramUint(tl_int32(32)), // withdrawalPeriod
-									tl_ftabi_paramUint(tl_int32(64)), // withdrawalValue
-									tl_ftabi_paramAddress(),          // owner
-								}))), // vestings
-					tl_ftabi_paramMap(
-						tl_ftabi_paramUint(tl_int32(64)),
-						tl_ftabi_paramTuple(
-							tl_vector(
-								QVector<TLftabi_Param>{
-									tl_ftabi_paramUint(tl_int32(64)), // remainingAmount
-									tl_ftabi_paramUint(tl_int32(64)), // lastWithdrawalTime
-									tl_ftabi_paramUint(tl_int32(32)), // withdrawalPeriod
-									tl_ftabi_paramUint(tl_int32(64)), // withdrawalValue
-									tl_ftabi_paramAddress(),          // owner
-								}))), // locks
-				})
-		));
-		Expects(createdFunction.has_value());
-		function = createdFunction.value();
-	}
-	return *function;
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
+        tl_string("getParticipantInfo"),
+        tl_vector(QVector<TLftabi_namedParam>{
+            tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+            tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+        }),
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramAddress(),  // addr
+        }),
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(64)),                                                       // total
+            tl_ftabi_paramUint(tl_int32(64)),                                                       // withdrawValue
+            tl_ftabi_paramBool(),                                                                   // reinvest
+            tl_ftabi_paramUint(tl_int32(64)),                                                       // reward
+            tl_ftabi_paramMap(tl_ftabi_paramUint(tl_int32(64)), tl_ftabi_paramUint(tl_int32(64))),  // stakes
+            tl_ftabi_paramMap(tl_ftabi_paramUint(tl_int32(64)),
+                              tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
+                                  tl_ftabi_paramUint(tl_int32(64)),  // remainingAmount
+                                  tl_ftabi_paramUint(tl_int32(64)),  // lastWithdrawalTime
+                                  tl_ftabi_paramUint(tl_int32(32)),  // withdrawalPeriod
+                                  tl_ftabi_paramUint(tl_int32(64)),  // withdrawalValue
+                                  tl_ftabi_paramAddress(),           // owner
+                              }))),                                  // vestings
+            tl_ftabi_paramMap(tl_ftabi_paramUint(tl_int32(64)),
+                              tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
+                                  tl_ftabi_paramUint(tl_int32(64)),  // remainingAmount
+                                  tl_ftabi_paramUint(tl_int32(64)),  // lastWithdrawalTime
+                                  tl_ftabi_paramUint(tl_int32(32)),  // withdrawalPeriod
+                                  tl_ftabi_paramUint(tl_int32(64)),  // withdrawalValue
+                                  tl_ftabi_paramAddress(),           // owner
+                              }))),                                  // locks
+        })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
 }
 
 std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
-	const auto decodedTransferInput = RequestSender::Execute(TLftabi_DecodeInput(
-		TokenTransferFunction(),
-		tl_bytes(body),
-		tl_boolTrue()
-	));
-	if (!decodedTransferInput.has_value()) {
-		return std::nullopt;
-	}
+  const auto decodedTransferInput =
+      RequestSender::Execute(TLftabi_DecodeInput(TokenTransferFunction(), tl_bytes(body), tl_boolTrue()));
+  if (!decodedTransferInput.has_value()) {
+    return std::nullopt;
+  }
 
-	const auto args = decodedTransferInput.value().c_ftabi_decodedInput().vvalues().v;
-	if (args.size() != 3 ||
-		args[0].type() != id_ftabi_valueInt ||
-		args[1].type() != id_ftabi_valueAddress ||
-		args[2].type() != id_ftabi_valueInt)
-	{
-		return std::nullopt;
-	}
+  const auto args = decodedTransferInput.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 3 || args[0].type() != id_ftabi_valueAddress || args[1].type() != id_ftabi_valueInt ||
+      args[2].type() != id_ftabi_valueInt) {
+    return std::nullopt;
+  }
 
-	return TokenTransfer {
-		.token = static_cast<Ton::TokenKind>(args[0].c_ftabi_valueInt().vvalue().v),
-		.dest = args[1].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
-		.value = args[2].c_ftabi_valueInt().vvalue().v
-	};
-}
-
-std::optional<DePoolOrdinaryStakeTransaction> ParseOrdinaryStakeTransfer(const QByteArray &body) {
-	const auto decodedInput = RequestSender::Execute(TLftabi_DecodeInput(
-		OrdinaryStakeFunction(),
-		tl_bytes(body),
-		tl_boolTrue()));
-	if (!decodedInput.has_value()) {
-		return std::nullopt;
-	}
-
-	const auto args = decodedInput.value().c_ftabi_decodedInput().vvalues().v;
-	if (args.size() != 1 || args[0].type() != id_ftabi_valueInt) {
-		return std::nullopt;
-	}
-
-	return DePoolOrdinaryStakeTransaction {
-		.stake = args[0].c_ftabi_valueInt().vvalue().v
-	};
-}
-
-std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const QByteArray &body) {
-	const auto decodedInput = RequestSender::Execute(TLftabi_DecodeInput(
-		DePoolOnRoundCompleteFunction(),
-		tl_bytes(body),
-		tl_boolTrue()));
-	if (!decodedInput.has_value()) {
-		return std::nullopt;
-	}
-
-	const auto args = decodedInput.value().c_ftabi_decodedInput().vvalues().v;
-	if (args.size() != 7) {
-		return std::nullopt;
-	}
-
-	return DePoolOnRoundCompleteTransaction {
-		.roundId = args[0].c_ftabi_valueInt().vvalue().v,
-		.reward = args[1].c_ftabi_valueInt().vvalue().v,
-		.ordinaryStake = args[2].c_ftabi_valueInt().vvalue().v,
-		.vestingStake = args[3].c_ftabi_valueInt().vvalue().v,
-		.lockStake = args[4].c_ftabi_valueInt().vvalue().v,
-		.reinvest = args[5].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
-		.reason = static_cast<uint8>(args[6].c_ftabi_valueInt().vvalue().v),
-	};
+  return TokenTransfer{.dest = args[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
+                       .value = args[1].c_ftabi_valueInt().vvalue().v};
 }
 
 std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
-	const auto decodedSwapBackInput = RequestSender::Execute(TLftabi_DecodeInput(
-		TokenSwapBackFunction(),
-		tl_bytes(body),
-		tl_boolTrue()
-	));
-	if (!decodedSwapBackInput.has_value()) {
-		return std::nullopt;
-	}
+  const auto decodedSwapBackInput =
+      RequestSender::Execute(TLftabi_DecodeInput(TokenSwapBackFunction(), tl_bytes(body), tl_boolTrue()));
+  if (!decodedSwapBackInput.has_value()) {
+    return std::nullopt;
+  }
 
-	const auto args = decodedSwapBackInput.value().c_ftabi_decodedInput().vvalues().v;
-	if (args.size() != 3 ||
-		args[0].type() != id_ftabi_valueInt ||
-		args[1].type() != id_ftabi_valueInt ||
-		args[2].type() != id_ftabi_valueBigInt)
-	{
-		return std::nullopt;
-	}
+  const auto args = decodedSwapBackInput.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 4 || args[0].type() != id_ftabi_valueInt || args[1].type() != id_ftabi_valueInt ||
+      args[2].type() != id_ftabi_valueAddress || args[3].type() != id_ftabi_valueCell) {
+    return std::nullopt;
+  }
 
-	constexpr auto ethereumAddressByteCount = 20;
+  // TODO:
 
-	auto address = args[2].c_ftabi_valueBigInt().vvalue().v;
-	auto addressSize = address.size();
-	if (addressSize < ethereumAddressByteCount) {
-		return std::nullopt;
-	} else if (addressSize > ethereumAddressByteCount) {
-		auto addressDelta = addressSize - ethereumAddressByteCount;
-		std::memmove(address.data(), address.data() + addressDelta, ethereumAddressByteCount);
-		address.resize(ethereumAddressByteCount);
-	}
+  /*
+  constexpr auto ethereumAddressByteCount = 20;
 
-	return TokenSwapBack {
-		.token = static_cast<Ton::TokenKind>(args[0].c_ftabi_valueInt().vvalue().v),
-		.dest = "0x" + address.toHex(),
-		.value = args[1].c_ftabi_valueInt().vvalue().v
-	};
+  auto address = args[2].c_ftabi_valueBigInt().vvalue().v;
+  auto addressSize = address.size();
+  if (addressSize < ethereumAddressByteCount) {
+    return std::nullopt;
+  } else if (addressSize > ethereumAddressByteCount) {
+    auto addressDelta = addressSize - ethereumAddressByteCount;
+    std::memmove(address.data(), address.data() + addressDelta, ethereumAddressByteCount);
+    address.resize(ethereumAddressByteCount);
+  }
+  */
+
+  return TokenSwapBack{.dest = "0xTODO", .value = args[0].c_ftabi_valueInt().vvalue().v};
 }
 
-Result<QByteArray> CreateTokenMessage(
-	Ton::TokenKind token,
-	const QString &recipient,
-	int64 amount) {
-	const auto tokenKind = static_cast<int32_t>(token);
+std::optional<DePoolOrdinaryStakeTransaction> ParseOrdinaryStakeTransfer(const QByteArray &body) {
+  const auto decodedInput =
+      RequestSender::Execute(TLftabi_DecodeInput(OrdinaryStakeFunction(), tl_bytes(body), tl_boolTrue()));
+  if (!decodedInput.has_value()) {
+    return std::nullopt;
+  }
 
-	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-		TokenTransferFunction(),
-		tl_ftabi_functionCallInternal(
-			{},
-			tl_vector(QVector<TLftabi_Value>{
-				tl_ftabi_valueInt(
-					tl_ftabi_paramUint(tl_int32(256)), // tokenID
-					tl_int64(static_cast<int64_t>(tokenKind))),
-				tl_ftabi_valueAddress(
-					tl_ftabi_paramAddress(), // recipient
-					tl_accountAddress(tl_string(recipient))),
-				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(amount)), // amount
-			})
-		)));
-	if (!encodedBody.has_value()) {
-		return encodedBody.error();
-	}
+  const auto args = decodedInput.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 1 || args[0].type() != id_ftabi_valueInt) {
+    return std::nullopt;
+  }
 
-	return encodedBody.value().c_ftabi_messageBody().vdata().v;
+  return DePoolOrdinaryStakeTransaction{.stake = args[0].c_ftabi_valueInt().vvalue().v};
 }
 
-Result<QByteArray> CreateSwapBackMessage(
-	Ton::TokenKind token,
-	const QString &etheriumAddress,
-	int64 amount) {
-	if (!etheriumAddress.startsWith("0x")) {
-		return Error { Error::Type::IO, "invalid etherium address" };
-	}
-	const auto target = etheriumAddress.mid(2, -1);
-	const auto targetBytes = QByteArray::fromHex(target.toUtf8());
+std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const QByteArray &body) {
+  const auto decodedInput =
+      RequestSender::Execute(TLftabi_DecodeInput(DePoolOnRoundCompleteFunction(), tl_bytes(body), tl_boolTrue()));
+  if (!decodedInput.has_value()) {
+    return std::nullopt;
+  }
 
-	const auto tokenKind = static_cast<int32_t>(token);
+  const auto args = decodedInput.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 7) {
+    return std::nullopt;
+  }
 
-	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-		TokenSwapBackFunction(),
-		tl_ftabi_functionCallInternal(
-			{},
-			tl_vector(QVector<TLftabi_Value>{
-				tl_ftabi_valueInt(
-					tl_ftabi_paramUint(tl_int32(256)),
-					tl_int64(static_cast<int64_t>(tokenKind))),  // tokenID
-				tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(amount)), // amount
-				tl_ftabi_valueBigInt(
-					tl_ftabi_paramUint(tl_int32(256)),
-					tl_string(targetBytes)) // ethereumAddress
-			})
-		)));
-	if (!encodedBody.has_value()) {
-		return encodedBody.error();
-	}
+  return DePoolOnRoundCompleteTransaction{
+      .roundId = args[0].c_ftabi_valueInt().vvalue().v,
+      .reward = args[1].c_ftabi_valueInt().vvalue().v,
+      .ordinaryStake = args[2].c_ftabi_valueInt().vvalue().v,
+      .vestingStake = args[3].c_ftabi_valueInt().vvalue().v,
+      .lockStake = args[4].c_ftabi_valueInt().vvalue().v,
+      .reinvest = args[5].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
+      .reason = static_cast<uint8>(args[6].c_ftabi_valueInt().vvalue().v),
+  };
+}
 
-	return encodedBody.value().c_ftabi_messageBody().vdata().v;
+Result<QByteArray> CreateTokenMessage(const QString &recipient, int64 amount) {
+  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
+      TokenTransferFunction(),
+      tl_ftabi_functionCallInternal(
+          {}, tl_vector(QVector<TLftabi_Value>{
+                  tl_ftabi_valueAddress(tl_ftabi_paramAddress(),  // to
+                                        tl_accountAddress(tl_string(recipient))),
+                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(amount)),  // amount
+                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(0)),       // grams
+              }))));
+  if (!encodedBody.has_value()) {
+    return encodedBody.error();
+  }
+
+  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+}
+
+Result<QByteArray> CreateSwapBackMessage(const QString &etheriumAddress, int64 amount) {
+  if (!etheriumAddress.startsWith("0x")) {
+    return Error{Error::Type::IO, "invalid etherium address"};
+  }
+  const auto target = etheriumAddress.mid(2, -1);
+  const auto targetBytes = QByteArray::fromHex(target.toUtf8());
+
+  // TODO:
+
+  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
+      TokenSwapBackFunction(),
+      tl_ftabi_functionCallInternal(
+          {}, tl_vector(QVector<TLftabi_Value>{
+                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(amount)),  // tokens
+                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(0)),       // grams
+                  tl_ftabi_valueBigInt(tl_ftabi_paramUint(tl_int32(256)),
+                                       tl_string(targetBytes))  // ethereumAddress
+              }))));
+  if (!encodedBody.has_value()) {
+    return encodedBody.error();
+  }
+
+  return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
 Result<QByteArray> CreateStakeMessage(int64 stake) {
-	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-		OrdinaryStakeFunction(),
-		tl_ftabi_functionCallInternal(
-			{},
-			tl_vector(QVector<TLftabi_Value>{
-				tl_ftabi_valueInt(
-					tl_ftabi_paramUint(tl_int32(64)),
-					tl_int64(stake)), // stake
-			})
-		)));
-	if (!encodedBody.has_value()) {
-		return encodedBody.error();
-	}
+  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
+      OrdinaryStakeFunction(), tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
+                                                                     tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(64)),
+                                                                                       tl_int64(stake)),  // stake
+                                                                 }))));
+  if (!encodedBody.has_value()) {
+    return encodedBody.error();
+  }
 
-	return encodedBody.value().c_ftabi_messageBody().vdata().v;
+  return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
 Result<QByteArray> CreateWithdrawalMessage(int64 amount, bool all) {
-	TLftabi_Function function{};
-	TLftabi_FunctionCall functionCall{};
-	if (all) {
-		function = DePoolWithdrawAllFunction();
-		functionCall = tl_ftabi_functionCallInternal({}, {});
-	} else {
-		function = DePoolWithdrawPartFunction();
-		functionCall = tl_ftabi_functionCallInternal(
-			{},
-			tl_vector(QVector<TLftabi_Value>{
-				tl_ftabi_valueInt(
-					tl_ftabi_paramUint(tl_int32(64)),
-					tl_int64(amount)), // withdrawValue
-			}));
-	}
-	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-		std::move(function),
-		std::move(functionCall)));
-	if (!encodedBody.has_value()) {
-		return encodedBody.error();
-	}
+  TLftabi_Function function{};
+  TLftabi_FunctionCall functionCall{};
+  if (all) {
+    function = DePoolWithdrawAllFunction();
+    functionCall = tl_ftabi_functionCallInternal({}, {});
+  } else {
+    function = DePoolWithdrawPartFunction();
+    functionCall = tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
+                                                         tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(64)),
+                                                                           tl_int64(amount)),  // withdrawValue
+                                                     }));
+  }
+  const auto encodedBody =
+      RequestSender::Execute(TLftabi_CreateMessageBody(std::move(function), std::move(functionCall)));
+  if (!encodedBody.has_value()) {
+    return encodedBody.error();
+  }
 
-	return encodedBody.value().c_ftabi_messageBody().vdata().v;
+  return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
 Result<QByteArray> CreateCancelWithdrawalMessage() {
-	const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-		DePoolCancelWithdrawalFunction(),
-		tl_ftabi_functionCallInternal({}, {})));
-	if (!encodedBody.has_value()) {
-		return encodedBody.error();
-	}
+  const auto encodedBody = RequestSender::Execute(
+      TLftabi_CreateMessageBody(DePoolCancelWithdrawalFunction(), tl_ftabi_functionCallInternal({}, {})));
+  if (!encodedBody.has_value()) {
+    return encodedBody.error();
+  }
 
-	return encodedBody.value().c_ftabi_messageBody().vdata().v;
+  return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
-} // namespace
+}  // namespace
 
 namespace details {
 
 struct UnpackedAddress {
-	TLinitialAccountState state;
-	int32 revision = 0;
-	int32 workchainId = 0;
+  TLinitialAccountState state;
+  int32 revision = 0;
+  int32 workchainId = 0;
 };
 
-} // namespace details
+}  // namespace details
 
 Wallet::Wallet(const QString &path)
-: _external(std::make_unique<External>(path, generateUpdatesCallback()))
-, _accountViewers(
-	std::make_unique<AccountViewers>(
-		this,
-		&_external->lib(),
-		&_external->db()))
-, _list(std::make_unique<WalletList>())
-, _viewersPasswordsExpireTimer([=] { checkPasswordsExpiration(); }) {
-	crl::async([] {
-		// Init random, because it is slow.
-		static_cast<void>(openssl::RandomValue<uint8>());
-	});
-	_accountViewers->blockchainTime(
-	) | rpl::start_with_next([=](BlockchainTime time) {
-		checkLocalTime(time);
-	}, _lifetime);
+    : _external(std::make_unique<External>(path, generateUpdatesCallback()))
+    , _accountViewers(std::make_unique<AccountViewers>(this, &_external->lib(), &_external->db()))
+    , _list(std::make_unique<WalletList>())
+    , _viewersPasswordsExpireTimer([=] { checkPasswordsExpiration(); }) {
+  crl::async([] {
+    // Init random, because it is slow.
+    static_cast<void>(openssl::RandomValue<uint8>());
+  });
+  _accountViewers->blockchainTime() |
+      rpl::start_with_next([=](BlockchainTime time) { checkLocalTime(time); }, _lifetime);
 
-	_gateUrl = "https://gate.broxus.com/";
+  _gateUrl = "https://gate.broxus.com/";
 }
 
 Wallet::~Wallet() = default;
 
 void Wallet::EnableLogging(bool enabled, const QString &basePath) {
-	External::EnableLogging(enabled, basePath);
+  External::EnableLogging(enabled, basePath);
 }
 
 void Wallet::LogMessage(const QString &message) {
-	return External::LogMessage(message);
+  return External::LogMessage(message);
 }
 
 bool Wallet::CheckAddress(const QString &address) {
-	return RequestSender::Execute(TLUnpackAccountAddress(
-		tl_string(address)
-	)) ? true : false;
+  return RequestSender::Execute(TLUnpackAccountAddress(tl_string(address))) ? true : false;
 }
 
-QString Wallet::ConvertIntoRaw(const QString& address) {
-	const auto result = RequestSender::Execute(TLUnpackAccountAddress(
-		tl_string(address)
-	));
-	Expects(result.has_value());
+QString Wallet::ConvertIntoRaw(const QString &address) {
+  const auto result = RequestSender::Execute(TLUnpackAccountAddress(tl_string(address)));
+  Expects(result.has_value());
 
-	const auto& unpacked = result->c_unpackedAccountAddress();
-	const auto workchain = unpacked.vworkchain_id().v;
-	const auto addr = QString::fromLocal8Bit(unpacked.vaddr().v.toHex().toUpper());
+  const auto &unpacked = result->c_unpackedAccountAddress();
+  const auto workchain = unpacked.vworkchain_id().v;
+  const auto addr = QString::fromLocal8Bit(unpacked.vaddr().v.toHex().toUpper());
 
-	return QString{ "%1:%2" }.arg(workchain).arg(addr);
+  return QString{"%1:%2"}.arg(workchain).arg(addr);
 }
 
-std::optional<Ton::TokenTransaction> Wallet::ParseTokenTransaction(const Ton::MessageData& message) {
-	if (message.type != Ton::MessageDataType::RawBody) {
-		return std::nullopt;
-	}
+std::optional<Ton::TokenTransaction> Wallet::ParseTokenTransaction(const Ton::MessageData &message) {
+  if (message.type != Ton::MessageDataType::RawBody) {
+    return std::nullopt;
+  }
 
-	if (auto transfer = ParseTokenTransfer(message.data); transfer.has_value()) {
-		return *transfer;
-	} else if (auto swapBack = ParseTokenSwapBack(message.data); swapBack.has_value()) {
-		return *swapBack;
-	} else {
-		return std::nullopt;
-	}
+  if (auto transfer = ParseTokenTransfer(message.data); transfer.has_value()) {
+    return *transfer;
+  } else if (auto swapBack = ParseTokenSwapBack(message.data); swapBack.has_value()) {
+    return *swapBack;
+  } else {
+    return std::nullopt;
+  }
 }
 
-std::optional<Ton::DePoolTransaction> Wallet::ParseDePoolTransaction(const Ton::MessageData& message, bool incoming) {
-	if (message.type != Ton::MessageDataType::RawBody) {
-		return std::nullopt;
-	}
+std::optional<Ton::DePoolTransaction> Wallet::ParseDePoolTransaction(const Ton::MessageData &message, bool incoming) {
+  if (message.type != Ton::MessageDataType::RawBody) {
+    return std::nullopt;
+  }
 
-	if (incoming) {
-		if (auto onRoundComplete = ParseDePoolOnRoundComplete(message.data); onRoundComplete.has_value()) {
-			return *onRoundComplete;
-		}
-	} else {
-		if (auto ordinaryState = ParseOrdinaryStakeTransfer(message.data); ordinaryState.has_value()) {
-			return *ordinaryState;
-		}
-	}
+  if (incoming) {
+    if (auto onRoundComplete = ParseDePoolOnRoundComplete(message.data); onRoundComplete.has_value()) {
+      return *onRoundComplete;
+    }
+  } else {
+    if (auto ordinaryState = ParseOrdinaryStakeTransfer(message.data); ordinaryState.has_value()) {
+      return *ordinaryState;
+    }
+  }
 
-	return std::nullopt;
+  return std::nullopt;
 }
 
 base::flat_set<QString> Wallet::GetValidWords() {
-	const auto result = RequestSender::Execute(TLGetBip39Hints(
-		tl_string()));
-	Assert(result);
+  const auto result = RequestSender::Execute(TLGetBip39Hints(tl_string()));
+  Assert(result);
 
-	return result->match([&](const TLDbip39Hints &data) {
-		auto &&words = ranges::views::all(
-			data.vwords().v
-		) | ranges::views::transform([](const TLstring &word) {
-			return QString::fromUtf8(word.v);
-		});
-		return base::flat_set<QString>{ words.begin(), words.end() };
-	});
+  return result->match([&](const TLDbip39Hints &data) {
+    auto &&words = ranges::views::all(data.vwords().v) |
+                   ranges::views::transform([](const TLstring &word) { return QString::fromUtf8(word.v); });
+    return base::flat_set<QString>{words.begin(), words.end()};
+  });
 }
 
 bool Wallet::IsIncorrectPasswordError(const Error &error) {
-	return error.details.startsWith(qstr("KEY_DECRYPT"));
+  return error.details.startsWith(qstr("KEY_DECRYPT"));
 }
 
-void Wallet::open(
-		const QByteArray &globalPassword,
-		const Settings &defaultSettings,
-		Callback<> done) {
-	auto opened = [=](Result<WalletList> result) {
-		if (!result) {
-			InvokeCallback(done, result.error());
-			return;
-		}
-		setWalletList(*result);
-		if (_switchedToMain) {
-			auto copy = settings();
-			copy.useTestNetwork = false;
-			updateSettings(copy, std::move(done));
-		} else {
-			_external->lib().request(TLSync()).send();
-			InvokeCallback(done);
-		}
-	};
-	_external->open(globalPassword, defaultSettings, std::move(opened));
+void Wallet::open(const QByteArray &globalPassword, const Settings &defaultSettings, Callback<> done) {
+  auto opened = [=](Result<WalletList> result) {
+    if (!result) {
+      InvokeCallback(done, result.error());
+      return;
+    }
+    setWalletList(*result);
+    if (_switchedToMain) {
+      auto copy = settings();
+      copy.useTestNetwork = false;
+      updateSettings(copy, std::move(done));
+    } else {
+      _external->lib().request(TLSync()).send();
+      InvokeCallback(done);
+    }
+  };
+  _external->open(globalPassword, defaultSettings, std::move(opened));
 }
 
 void Wallet::start(Callback<> done) {
-	_external->start([=](Result<ConfigInfo> result) {
-		if (!result) {
-			InvokeCallback(done, result.error());
-			return;
-		}
-		_configInfo = *result;
-		InvokeCallback(done);
-	});
+  _external->start([=](Result<ConfigInfo> result) {
+    if (!result) {
+      InvokeCallback(done, result.error());
+      return;
+    }
+    _configInfo = *result;
+    InvokeCallback(done);
+  });
 }
 
 QString Wallet::getUsedAddress(const QByteArray &publicKey) const {
-	const auto i = ranges::find(
-		_list->entries,
-		publicKey,
-		&WalletList::Entry::publicKey);
-	Assert(i != end(_list->entries));
-	return i->address.isEmpty()
-		? getDefaultAddress(publicKey, kLegacySmcRevision)
-		: i->address;
+  const auto i = ranges::find(_list->entries, publicKey, &WalletList::Entry::publicKey);
+  Assert(i != end(_list->entries));
+  return i->address.isEmpty() ? getDefaultAddress(publicKey, kLegacySmcRevision) : i->address;
 }
 
-QString Wallet::getDefaultAddress(
-		const QByteArray &publicKey,
-		int revision) const {
-	Expects(_configInfo.has_value());
+QString Wallet::getDefaultAddress(const QByteArray &publicKey, int revision) const {
+  Expects(_configInfo.has_value());
 
-	return RequestSender::Execute(TLGetAccountAddress(
-		tl_wallet_v3_initialAccountState(
-			tl_string(publicKey),
-			tl_int64(_configInfo->walletId + kDefaultWorkchainId)),
-		tl_int32(revision),
-		tl_int32(kDefaultWorkchainId)
-	)).value_or(
-		tl_accountAddress(tl_string())
-	).match([&](const TLDaccountAddress &data) {
-		return tl::utf16(data.vaccount_address());
-	});
+  return RequestSender::Execute(
+             TLGetAccountAddress(tl_wallet_v3_initialAccountState(
+                                     tl_string(publicKey), tl_int64(_configInfo->walletId + kDefaultWorkchainId)),
+                                 tl_int32(revision), tl_int32(kDefaultWorkchainId)))
+      .value_or(tl_accountAddress(tl_string()))
+      .match([&](const TLDaccountAddress &data) { return tl::utf16(data.vaccount_address()); });
 }
 
 const Settings &Wallet::settings() const {
-	return _external->settings();
+  return _external->settings();
 }
 
 void Wallet::updateSettings(Settings settings, Callback<> done) {
-	const auto &was = _external->settings();
-	const auto detach = (was.net().blockchainName
-		!= settings.net().blockchainName);
-	const auto change = (was.useTestNetwork != settings.useTestNetwork);
+  const auto &was = _external->settings();
+  const auto detach = (was.net().blockchainName != settings.net().blockchainName);
+  const auto change = (was.useTestNetwork != settings.useTestNetwork);
 
-	if (was.net().tokenContractAddress != settings.net().tokenContractAddress) {
-		_updates.fire({ TokenContractAddressChanged{settings.net().tokenContractAddress} });
-	}
+  // TODO:
 
-	const auto finish = [=](Result<ConfigInfo> result) {
-		if (!result) {
-			InvokeCallback(done, result.error());
-			return;
-		}
-		Expects(!_configInfo
-			|| (_configInfo->walletId == result->walletId)
-			|| detach
-			|| change);
-		_configInfo = *result;
-		InvokeCallback(done);
-	};
-	if (!change) {
-		_external->updateSettings(settings, finish);
-		return;
-	}
-	// First just save the new settings.
-	settings.useTestNetwork = was.useTestNetwork;
-	_external->updateSettings(settings, [=](Result<ConfigInfo> result) {
-		if (!result) {
-			InvokeCallback(done, result.error());
-			return;
-		}
-		// Then logout and switch the network.
-		deleteAllKeys([=](Result<> result) {
-			if (!result) {
-				InvokeCallback(done, result.error());
-				return;
-			}
-			_external->switchNetwork(finish);
-		});
-	});
+  //  if (was.net().tokenContractAddress != settings.net().tokenContractAddress) {
+  //    _updates.fire({NewRootTokenContract{settings.net().tokenContractAddress}});
+  //  }
+
+  const auto finish = [=](Result<ConfigInfo> result) {
+    if (!result) {
+      InvokeCallback(done, result.error());
+      return;
+    }
+    Expects(!_configInfo || (_configInfo->walletId == result->walletId) || detach || change);
+    _configInfo = *result;
+    InvokeCallback(done);
+  };
+  if (!change) {
+    _external->updateSettings(settings, finish);
+    return;
+  }
+  // First just save the new settings.
+  settings.useTestNetwork = was.useTestNetwork;
+  _external->updateSettings(settings, [=](Result<ConfigInfo> result) {
+    if (!result) {
+      InvokeCallback(done, result.error());
+      return;
+    }
+    // Then logout and switch the network.
+    deleteAllKeys([=](Result<> result) {
+      if (!result) {
+        InvokeCallback(done, result.error());
+        return;
+      }
+      _external->switchNetwork(finish);
+    });
+  });
 }
 
 void Wallet::checkConfig(const QByteArray &config, Callback<> done) {
-	// We want to check only validity of config,
-	// not validity in one specific blockchain_name.
-	// So we pass an empty blockchain name.
-	_external->lib().request(TLoptions_ValidateConfig(
-		tl_config(
-			tl_string(config),
-			tl_string(QString()),
-			tl_from(false),
-			tl_from(false))
-	)).done([=] {
-		InvokeCallback(done);
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
+  // We want to check only validity of config,
+  // not validity in one specific blockchain_name.
+  // So we pass an empty blockchain name.
+  _external->lib()
+      .request(
+          TLoptions_ValidateConfig(tl_config(tl_string(config), tl_string(QString()), tl_from(false), tl_from(false))))
+      .done([=] { InvokeCallback(done); })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
 }
 
 void Wallet::sync() {
-	_external->lib().request(TLSync()).send();
+  _external->lib().request(TLSync()).send();
 }
 
 rpl::producer<Update> Wallet::updates() const {
-	return _updates.events();
+  return _updates.events();
 }
 
 std::vector<QByteArray> Wallet::publicKeys() const {
-	return _list->entries | ranges::views::transform(
-		&WalletList::Entry::publicKey
-	) | ranges::to_vector;
+  return _list->entries | ranges::views::transform(&WalletList::Entry::publicKey) | ranges::to_vector;
 }
 
 void Wallet::createKey(Callback<std::vector<QString>> done) {
-	Expects(_keyCreator == nullptr);
-	Expects(_keyDestroyer == nullptr);
-	Expects(_passwordChanger == nullptr);
+  Expects(_keyCreator == nullptr);
+  Expects(_keyDestroyer == nullptr);
+  Expects(_passwordChanger == nullptr);
 
-	auto created = [=](Result<std::vector<QString>> result) {
-		const auto destroyed = result
-			? std::unique_ptr<KeyCreator>()
-			: base::take(_keyCreator);
-		InvokeCallback(done, result);
-	};
-	_keyCreator = std::make_unique<KeyCreator>(
-		&_external->lib(),
-		&_external->db(),
-		std::move(created));
+  auto created = [=](Result<std::vector<QString>> result) {
+    const auto destroyed = result ? std::unique_ptr<KeyCreator>() : base::take(_keyCreator);
+    InvokeCallback(done, result);
+  };
+  _keyCreator = std::make_unique<KeyCreator>(&_external->lib(), &_external->db(), std::move(created));
 }
 
 void Wallet::importKey(const std::vector<QString> &words, Callback<> done) {
-	Expects(_keyCreator == nullptr);
-	Expects(_keyDestroyer == nullptr);
-	Expects(_passwordChanger == nullptr);
+  Expects(_keyCreator == nullptr);
+  Expects(_keyDestroyer == nullptr);
+  Expects(_passwordChanger == nullptr);
 
-	auto created = [=](Result<> result) {
-		const auto destroyed = result
-			? std::unique_ptr<KeyCreator>()
-			: base::take(_keyCreator);
-		InvokeCallback(done, result);
-	};
-	_keyCreator = std::make_unique<KeyCreator>(
-		&_external->lib(),
-		&_external->db(),
-		words,
-		std::move(created));
+  auto created = [=](Result<> result) {
+    const auto destroyed = result ? std::unique_ptr<KeyCreator>() : base::take(_keyCreator);
+    InvokeCallback(done, result);
+  };
+  _keyCreator = std::make_unique<KeyCreator>(&_external->lib(), &_external->db(), words, std::move(created));
 }
 
 void Wallet::queryWalletAddress(Callback<QString> done) {
-	Expects(_keyCreator != nullptr);
-	Expects(_configInfo.has_value());
+  Expects(_keyCreator != nullptr);
+  Expects(_configInfo.has_value());
 
-	_keyCreator->queryWalletAddress(
-		_configInfo->restrictedInitPublicKey,
-		std::move(done));
+  _keyCreator->queryWalletAddress(_configInfo->restrictedInitPublicKey, std::move(done));
 }
 
-void Wallet::saveKey(
-		const QByteArray &password,
-		const QString &address,
-		Callback<QByteArray> done) {
-	Expects(_keyCreator != nullptr);
+void Wallet::saveKey(const QByteArray &password, const QString &address, Callback<QByteArray> done) {
+  Expects(_keyCreator != nullptr);
 
-	auto saved = [=](Result<WalletList::Entry> result) {
-		if (!result) {
-			InvokeCallback(done, result.error());
-			return;
-		}
-		const auto destroyed = base::take(_keyCreator);
-		_list->entries.push_back(*result);
-		InvokeCallback(done, result->publicKey);
-	};
-	_keyCreator->save(
-		password,
-		*_list,
-		(address.isEmpty()
-			? getDefaultAddress(_keyCreator->key(), kDefaultWorkchainId)
-			: address),
-		settings().useTestNetwork,
-		std::move(saved));
+  auto saved = [=](Result<WalletList::Entry> result) {
+    if (!result) {
+      InvokeCallback(done, result.error());
+      return;
+    }
+    const auto destroyed = base::take(_keyCreator);
+    _list->entries.push_back(*result);
+    InvokeCallback(done, result->publicKey);
+  };
+  _keyCreator->save(password, *_list,
+                    (address.isEmpty() ? getDefaultAddress(_keyCreator->key(), kDefaultWorkchainId) : address),
+                    settings().useTestNetwork, std::move(saved));
 }
 
-void Wallet::exportKey(
-		const QByteArray &publicKey,
-		const QByteArray &password,
-		Callback<std::vector<QString>> done) {
-	_external->lib().request(TLExportKey(
-		prepareInputKey(publicKey, password)
-	)).done([=](const TLExportedKey &result) {
-		InvokeCallback(done, Parse(result));
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
+void Wallet::exportKey(const QByteArray &publicKey, const QByteArray &password, Callback<std::vector<QString>> done) {
+  _external->lib()
+      .request(TLExportKey(prepareInputKey(publicKey, password)))
+      .done([=](const TLExportedKey &result) { InvokeCallback(done, Parse(result)); })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
 }
 
-TLinputKey Wallet::prepareInputKey(
-		const QByteArray &publicKey,
-		const QByteArray &password) const {
-	const auto i = ranges::find(
-		_list->entries,
-		publicKey,
-		&WalletList::Entry::publicKey);
-	Assert(i != end(_list->entries));
+TLinputKey Wallet::prepareInputKey(const QByteArray &publicKey, const QByteArray &password) const {
+  const auto i = ranges::find(_list->entries, publicKey, &WalletList::Entry::publicKey);
+  Assert(i != end(_list->entries));
 
-	return tl_inputKeyRegular(
-		tl_key(tl_string(publicKey), TLsecureBytes{ i->secret }),
-		TLsecureBytes{ password });
+  return tl_inputKeyRegular(tl_key(tl_string(publicKey), TLsecureBytes{i->secret}), TLsecureBytes{password});
 }
 
 void Wallet::setWalletList(const WalletList &list) {
-	Expects(_list->entries.empty());
+  Expects(_list->entries.empty());
 
-	*_list = list;
+  *_list = list;
 }
 
-void Wallet::deleteKey(
-		const QByteArray &publicKey,
-		Callback<> done) {
-	Expects(_keyCreator == nullptr);
-	Expects(_keyDestroyer == nullptr);
-	Expects(_passwordChanger == nullptr);
-	Expects(ranges::contains(
-		_list->entries,
-		publicKey,
-		&WalletList::Entry::publicKey));
+void Wallet::deleteKey(const QByteArray &publicKey, Callback<> done) {
+  Expects(_keyCreator == nullptr);
+  Expects(_keyDestroyer == nullptr);
+  Expects(_passwordChanger == nullptr);
+  Expects(ranges::contains(_list->entries, publicKey, &WalletList::Entry::publicKey));
 
-	auto list = *_list;
-	const auto index = ranges::find(
-		list.entries,
-		publicKey,
-		&WalletList::Entry::publicKey
-	) - begin(list.entries);
+  auto list = *_list;
+  const auto index = ranges::find(list.entries, publicKey, &WalletList::Entry::publicKey) - begin(list.entries);
 
-	auto removed = [=](Result<> result) {
-		const auto destroyed = base::take(_keyDestroyer);
-		if (!result) {
-			InvokeCallback(done, result);
-			return;
-		}
-		_list->entries.erase(begin(_list->entries) + index);
-		_viewersPasswords.erase(publicKey);
-		_viewersPasswordsWaiters.erase(publicKey);
-		InvokeCallback(done, result);
-	};
-	_keyDestroyer = std::make_unique<KeyDestroyer>(
-		&_external->lib(),
-		&_external->db(),
-		std::move(list),
-		index,
-		settings().useTestNetwork,
-		std::move(removed));
+  auto removed = [=](Result<> result) {
+    const auto destroyed = base::take(_keyDestroyer);
+    if (!result) {
+      InvokeCallback(done, result);
+      return;
+    }
+    _list->entries.erase(begin(_list->entries) + index);
+    _viewersPasswords.erase(publicKey);
+    _viewersPasswordsWaiters.erase(publicKey);
+    InvokeCallback(done, result);
+  };
+  _keyDestroyer = std::make_unique<KeyDestroyer>(&_external->lib(), &_external->db(), std::move(list), index,
+                                                 settings().useTestNetwork, std::move(removed));
 }
 
 void Wallet::deleteAllKeys(Callback<> done) {
-	Expects(_keyCreator == nullptr);
-	Expects(_keyDestroyer == nullptr);
-	Expects(_passwordChanger == nullptr);
+  Expects(_keyCreator == nullptr);
+  Expects(_keyDestroyer == nullptr);
+  Expects(_passwordChanger == nullptr);
 
-	auto removed = [=](Result<> result) {
-		const auto destroyed = base::take(_keyDestroyer);
-		if (!result) {
-			InvokeCallback(done, result);
-			return;
-		}
-		_list->entries.clear();
-		_viewersPasswords.clear();
-		_viewersPasswordsWaiters.clear();
-		InvokeCallback(done, result);
-	};
-	_keyDestroyer = std::make_unique<KeyDestroyer>(
-		&_external->lib(),
-		&_external->db(),
-		settings().useTestNetwork,
-		std::move(removed));
+  auto removed = [=](Result<> result) {
+    const auto destroyed = base::take(_keyDestroyer);
+    if (!result) {
+      InvokeCallback(done, result);
+      return;
+    }
+    _list->entries.clear();
+    _viewersPasswords.clear();
+    _viewersPasswordsWaiters.clear();
+    InvokeCallback(done, result);
+  };
+  _keyDestroyer = std::make_unique<KeyDestroyer>(&_external->lib(), &_external->db(), settings().useTestNetwork,
+                                                 std::move(removed));
 }
 
-void Wallet::changePassword(
-		const QByteArray &oldPassword,
-		const QByteArray &newPassword,
-		Callback<> done) {
-	Expects(_keyCreator == nullptr);
-	Expects(_keyDestroyer == nullptr);
-	Expects(_passwordChanger == nullptr);
-	Expects(!_list->entries.empty());
+void Wallet::changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, Callback<> done) {
+  Expects(_keyCreator == nullptr);
+  Expects(_keyDestroyer == nullptr);
+  Expects(_passwordChanger == nullptr);
+  Expects(!_list->entries.empty());
 
-	auto changed = [=](Result<std::vector<QByteArray>> result) {
-		const auto destroyed = base::take(_passwordChanger);
-		if (!result) {
-			InvokeCallback(done, result.error());
-			return;
-		}
-		Assert(result->size() == _list->entries.size());
-		for (auto i = 0, count = int(result->size()); i != count; ++i) {
-			_list->entries[i].secret = (*result)[i];
-		}
-		for (auto &[publicKey, password] : _viewersPasswords) {
-			updateViewersPassword(publicKey, newPassword);
-		}
-		InvokeCallback(done);
-	};
-	_passwordChanger = std::make_unique<PasswordChanger>(
-		&_external->lib(),
-		&_external->db(),
-		oldPassword,
-		newPassword,
-		*_list,
-		settings().useTestNetwork,
-		std::move(changed));
+  auto changed = [=](Result<std::vector<QByteArray>> result) {
+    const auto destroyed = base::take(_passwordChanger);
+    if (!result) {
+      InvokeCallback(done, result.error());
+      return;
+    }
+    Assert(result->size() == _list->entries.size());
+    for (auto i = 0, count = int(result->size()); i != count; ++i) {
+      _list->entries[i].secret = (*result)[i];
+    }
+    for (auto &[publicKey, password] : _viewersPasswords) {
+      updateViewersPassword(publicKey, newPassword);
+    }
+    InvokeCallback(done);
+  };
+  _passwordChanger = std::make_unique<PasswordChanger>(&_external->lib(), &_external->db(), oldPassword, newPassword,
+                                                       *_list, settings().useTestNetwork, std::move(changed));
 }
 
-void Wallet::checkSendGrams(
-		const QByteArray &publicKey,
-		const TransactionToSend &transaction,
-		Callback<TransactionCheckResult> done) {
-	Expects(transaction.amount >= 0);
+void Wallet::checkSendGrams(const QByteArray &publicKey, const TransactionToSend &transaction,
+                            Callback<TransactionCheckResult> done) {
+  Expects(transaction.amount >= 0);
 
-	const auto sender = getUsedAddress(publicKey);
-	Assert(!sender.isEmpty());
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
 
-	const auto check = makeEstimateFeesCallback(done);
+  const auto check = makeEstimateFeesCallback(done);
 
-	_external->lib().request(TLCreateQuery(
-		tl_inputKeyFake(),
-		tl_accountAddress(tl_string(sender)),
-		tl_int32(transaction.timeout),
-		tl_actionMsg(
-			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(transaction.recipient)),
-				tl_string(),
-				tl_int64(transaction.amount),
-				(transaction.sendUnencryptedText
-					? tl_msg_dataText
-					: tl_msg_dataDecryptedText)(
-						tl_string(transaction.comment)),
-				tl_int32(kDefaultMessageFlags))),
-			tl_from(transaction.allowSendToUninited)),
-		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
-	)).done([=](const TLquery_Info &result) {
-		result.match([&](const TLDquery_info &data) {
-			check(data.vid().v);
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
+  _external->lib()
+      .request(TLCreateQuery(
+          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
+          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.recipient)), tl_string(),
+                                                   tl_int64(transaction.amount),
+                                                   (transaction.sendUnencryptedText
+                                                        ? tl_msg_dataText
+                                                        : tl_msg_dataDecryptedText)(tl_string(transaction.comment)),
+                                                   tl_int32(kDefaultMessageFlags))),
+                       tl_from(transaction.allowSendToUninited)),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::checkSendTokens(
-	const QByteArray &publicKey,
-	const TokenTransactionToSend &transaction,
-	Callback<TransactionCheckResult> done) {
-	Expects(!!transaction.token);
-	Expects(transaction.amount >= 0);
+void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransactionToSend &transaction,
+                             Callback<TransactionCheckResult> done) {
+  Expects(transaction.amount >= 0);
 
-	const auto sender = getUsedAddress(publicKey);
-	Assert(!sender.isEmpty());
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
 
-	const auto tokenContractAddress = _external->settings().net().tokenContractAddress;
+  Result<QByteArray> body{};
+  if (!transaction.swapBack) {
+    body = CreateTokenMessage(transaction.recipient, transaction.amount);
+  } else {
+    body = CreateSwapBackMessage(transaction.recipient, transaction.amount);
+  }
+  if (!body.has_value()) {
+    InvokeCallback(done, body.error());
+    return;
+  }
 
-	Result<QByteArray> body{};
-	if (!transaction.swapBack) {
-		body = CreateTokenMessage(transaction.token, transaction.recipient, transaction.amount);
-	} else {
-		body = CreateSwapBackMessage(transaction.token, transaction.recipient, transaction.amount);
-	}
-	if (!body.has_value()) {
-		InvokeCallback(done, body.error());
-		return;
-	}
+  const auto check = makeEstimateFeesCallback(done);
 
-	const auto check = makeEstimateFeesCallback(done);
-
-	_external->lib().request(TLCreateQuery(
-		tl_inputKeyFake(),
-		tl_accountAddress(tl_string(sender)),
-		tl_int32(transaction.timeout),
-		tl_actionMsg(
-			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(tokenContractAddress)),
-				tl_string(),
-				tl_int64(transaction.realAmount),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-				tl_int32(kDefaultMessageFlags))),
-			tl_from(false)),
-		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
-	)).done([=](const TLquery_Info &result) {
-		result.match([&](const TLDquery_info &data) {
-			check(data.vid().v);
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
+  _external->lib()
+      .request(TLCreateQuery(
+          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
+          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.walletContractAddress)),
+                                                   tl_string(), tl_int64(transaction.realAmount),
+                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                                                   tl_int32(kDefaultMessageFlags))),
+                       tl_from(false)),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::checkSendStake(
-		const QByteArray &publicKey,
-		const StakeTransactionToSend &transaction,
-		Callback<TransactionCheckResult> done) {
-	Expects(transaction.stake >= 0);
+void Wallet::checkSendStake(const QByteArray &publicKey, const StakeTransactionToSend &transaction,
+                            Callback<TransactionCheckResult> done) {
+  Expects(transaction.stake >= 0);
 
-	const auto sender = getUsedAddress(publicKey);
-	Assert(!sender.isEmpty());
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
 
-	const auto check = makeEstimateFeesCallback(done);
+  const auto check = makeEstimateFeesCallback(done);
 
-	const auto realAmount = transaction.depoolFee + transaction.stake;
+  const auto realAmount = StakeTransactionToSend::depoolFee + transaction.stake;
 
-	const auto body = CreateStakeMessage(transaction.stake);
-	if (!body.has_value()) {
-		return InvokeCallback(done, body.error());
-	}
+  const auto body = CreateStakeMessage(transaction.stake);
+  if (!body.has_value()) {
+    return InvokeCallback(done, body.error());
+  }
 
-	_external->lib().request(TLCreateQuery(
-		tl_inputKeyFake(),
-		tl_accountAddress(tl_string(sender)),
-		tl_int32(transaction.timeout),
-		tl_actionMsg(
-			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(transaction.depoolAddress)),
-				tl_string(),
-				tl_int64(realAmount),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-				tl_int32(kDefaultMessageFlags))),
-			tl_boolFalse()),
-		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
-	)).done([=](const TLquery_Info &result) {
-		result.match([&](const TLDquery_info &data) {
-			check(data.vid().v);
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
+  _external->lib()
+      .request(TLCreateQuery(
+          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
+          tl_actionMsg(
+              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
+                                          tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                                          tl_int32(kDefaultMessageFlags))),
+              tl_boolFalse()),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::checkWithdraw(
-		const QByteArray &publicKey,
-		const WithdrawalTransactionToSend &transaction,
-		Callback<TransactionCheckResult> done) {
-	Expects(transaction.all || transaction.amount >= 0);
+void Wallet::checkWithdraw(const QByteArray &publicKey, const WithdrawalTransactionToSend &transaction,
+                           Callback<TransactionCheckResult> done) {
+  Expects(transaction.all || transaction.amount >= 0);
 
-	const auto sender = getUsedAddress(publicKey);
-	Assert(!sender.isEmpty());
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
 
-	const auto check = makeEstimateFeesCallback(done);
+  const auto check = makeEstimateFeesCallback(done);
 
-	const auto body = CreateWithdrawalMessage(transaction.amount, transaction.all);
-	if (!body.has_value()) {
-		return InvokeCallback(done, body.error());
-	}
+  const auto body = CreateWithdrawalMessage(transaction.amount, transaction.all);
+  if (!body.has_value()) {
+    return InvokeCallback(done, body.error());
+  }
 
-	_external->lib().request(TLCreateQuery(
-		tl_inputKeyFake(),
-		tl_accountAddress(tl_string(sender)),
-		tl_int32(transaction.timeout),
-		tl_actionMsg(
-			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(transaction.depoolAddress)),
-				tl_string(),
-				tl_int64(transaction.depoolFee),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-				tl_int32(kDefaultMessageFlags))),
-			tl_boolFalse()),
-		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
-	)).done([=](const TLquery_Info &result) {
-		result.match([&](const TLDquery_info &data) {
-			check(data.vid().v);
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
+  _external->lib()
+      .request(TLCreateQuery(
+          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
+          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
+                                                   tl_int64(transaction.depoolFee),
+                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                                                   tl_int32(kDefaultMessageFlags))),
+                       tl_boolFalse()),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::checkCancelWithdraw(
-		const QByteArray &publicKey,
-		const CancelWithdrawalTransactionToSend &transaction,
-		Callback<TransactionCheckResult> done) {
-	const auto sender = getUsedAddress(publicKey);
-	Assert(!sender.isEmpty());
+void Wallet::checkCancelWithdraw(const QByteArray &publicKey, const CancelWithdrawalTransactionToSend &transaction,
+                                 Callback<TransactionCheckResult> done) {
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
 
-	const auto check = makeEstimateFeesCallback(done);
+  const auto check = makeEstimateFeesCallback(done);
 
-	const auto body = CreateCancelWithdrawalMessage();
-	if (!body.has_value()) {
-		return InvokeCallback(done, body.error());
-	}
+  const auto body = CreateCancelWithdrawalMessage();
+  if (!body.has_value()) {
+    return InvokeCallback(done, body.error());
+  }
 
-	_external->lib().request(TLCreateQuery(
-		tl_inputKeyFake(),
-		tl_accountAddress(tl_string(sender)),
-		tl_int32(transaction.timeout),
-		tl_actionMsg(
-			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(transaction.depoolAddress)),
-				tl_string(),
-				tl_int64(transaction.depoolFee),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-				tl_int32(kDefaultMessageFlags))),
-			tl_boolFalse()),
-		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
-	)).done([=](const TLquery_Info &result) {
-		result.match([&](const TLDquery_info &data) {
-			check(data.vid().v);
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
+  _external->lib()
+      .request(TLCreateQuery(
+          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
+          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
+                                                   tl_int64(transaction.depoolFee),
+                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                                                   tl_int32(kDefaultMessageFlags))),
+                       tl_boolFalse()),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::sendGrams(
-		const QByteArray &publicKey,
-		const QByteArray &password,
-		const TransactionToSend &transaction,
-		Callback<PendingTransaction> ready,
-		Callback<> done) {
-	Expects(transaction.amount >= 0);
+void Wallet::sendGrams(const QByteArray &publicKey, const QByteArray &password, const TransactionToSend &transaction,
+                       Callback<PendingTransaction> ready, Callback<> done) {
+  Expects(transaction.amount >= 0);
 
-	const auto sender = getUsedAddress(publicKey);
-	Assert(!sender.isEmpty());
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
 
-	const auto send = makeSendCallback(std::move(done));
+  const auto send = makeSendCallback(std::move(done));
 
-	_external->lib().request(TLCreateQuery(
-		prepareInputKey(publicKey, password),
-		tl_accountAddress(tl_string(sender)),
-		tl_int32(transaction.timeout),
-		tl_actionMsg(
-			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(transaction.recipient)),
-				tl_string(),
-				tl_int64(transaction.amount),
-				(transaction.sendUnencryptedText
-					? tl_msg_dataText
-					: tl_msg_dataDecryptedText)(
-						tl_string(transaction.comment)),
-				tl_int32(kDefaultMessageFlags))),
-			tl_from(transaction.allowSendToUninited)),
-		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
-	)).done([=](const TLquery_Info &result) {
-		result.match([&](const TLDquery_info &data) {
-			const auto weak = base::make_weak(this);
-			auto pending = Parse(result, sender, transaction);
-			_accountViewers->addPendingTransaction(pending);
-			if (!weak) {
-				return;
-			}
-			InvokeCallback(ready, std::move(pending));
-			if (!weak) {
-				return;
-			}
-			send(data.vid().v);
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(ready, ErrorFromLib(error));
-	}).send();
+  _external->lib()
+      .request(TLCreateQuery(
+          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
+          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.recipient)), tl_string(),
+                                                   tl_int64(transaction.amount),
+                                                   (transaction.sendUnencryptedText
+                                                        ? tl_msg_dataText
+                                                        : tl_msg_dataDecryptedText)(tl_string(transaction.comment)),
+                                                   tl_int32(kDefaultMessageFlags))),
+                       tl_from(transaction.allowSendToUninited)),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=](const TLquery_Info &result) {
+        result.match([&](const TLDquery_info &data) {
+          const auto weak = base::make_weak(this);
+          auto pending = Parse(result, sender, transaction);
+          _accountViewers->addPendingTransaction(pending);
+          if (!weak) {
+            return;
+          }
+          InvokeCallback(ready, std::move(pending));
+          if (!weak) {
+            return;
+          }
+          send(data.vid().v);
+        });
+      })
+      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::sendTokens(
-		const QByteArray &publicKey,
-		const QByteArray &password,
-		const TokenTransactionToSend &transaction,
-		Callback<PendingTransaction> ready,
-		Callback<> done) {
-	Expects(transaction.amount >= 0);
+void Wallet::sendTokens(const QByteArray &publicKey, const QByteArray &password,
+                        const TokenTransactionToSend &transaction, Callback<PendingTransaction> ready,
+                        Callback<> done) {
+  Expects(transaction.amount >= 0);
 
-	const auto sender = getUsedAddress(publicKey);
-	Assert(!sender.isEmpty());
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
 
-	const auto tokenContractAddress = _external->settings().net().tokenContractAddress;
+  Result<QByteArray> body{};
+  if (!transaction.swapBack) {
+    body = CreateTokenMessage(transaction.recipient, transaction.amount);
+  } else {
+    body = CreateSwapBackMessage(transaction.recipient, transaction.amount);
+  }
+  if (!body.has_value()) {
+    InvokeCallback(done, body.error());
+    return;
+  }
 
-	Result<QByteArray> body{};
-	if (!transaction.swapBack) {
-		body = CreateTokenMessage(transaction.token, transaction.recipient, transaction.amount);
-	} else {
-		body = CreateSwapBackMessage(transaction.token, transaction.recipient, transaction.amount);
-	}
-	if (!body.has_value()) {
-		InvokeCallback(done, body.error());
-		return;
-	}
+  const auto send = makeSendCallback(std::move(done));
 
-	const auto send = makeSendCallback(std::move(done));
-
-	_external->lib().request(TLCreateQuery(
-		prepareInputKey(publicKey, password),
-		tl_accountAddress(tl_string(sender)),
-		tl_int32(transaction.timeout),
-		tl_actionMsg(
-			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(tokenContractAddress)),
-				tl_string(),
-				tl_int64(transaction.realAmount),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-				tl_int32(kDefaultMessageFlags))),
-			tl_from(false)),
-		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
-	)).done([=](const TLquery_Info &result) {
-		result.match([&](const TLDquery_info &data) {
-			const auto weak = base::make_weak(this);
-			auto pending = Parse(result, sender, TransactionToSend {
-				.amount = transaction.realAmount,
-				.recipient = tokenContractAddress,
-				.timeout = transaction.timeout,
-				.allowSendToUninited = false
-			});
-			_accountViewers->addPendingTransaction(pending);
-			if (!weak) {
-				return;
-			}
-			InvokeCallback(ready, std::move(pending));
-			if (!weak) {
-				return;
-			}
-			send(data.vid().v);
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(ready, ErrorFromLib(error));
-	}).send();
+  _external->lib()
+      .request(TLCreateQuery(
+          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
+          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.walletContractAddress)),
+                                                   tl_string(), tl_int64(TokenTransactionToSend::realAmount),
+                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                                                   tl_int32(kDefaultMessageFlags))),
+                       tl_from(false)),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=](const TLquery_Info &result) {
+        result.match([&](const TLDquery_info &data) {
+          const auto weak = base::make_weak(this);
+          auto pending = Parse(result, sender,
+                               TransactionToSend{.amount = TokenTransactionToSend::realAmount,
+                                                 .recipient = transaction.walletContractAddress,
+                                                 .timeout = transaction.timeout,
+                                                 .allowSendToUninited = false});
+          _accountViewers->addPendingTransaction(pending);
+          if (!weak) {
+            return;
+          }
+          InvokeCallback(ready, std::move(pending));
+          if (!weak) {
+            return;
+          }
+          send(data.vid().v);
+        });
+      })
+      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::withdraw(
-		const QByteArray &publicKey,
-		const QByteArray &password,
-		const WithdrawalTransactionToSend &transaction,
-		Callback<PendingTransaction> ready,
-		Callback<> done) {
-	Expects(transaction.all || transaction.amount >= 0);
+void Wallet::withdraw(const QByteArray &publicKey, const QByteArray &password,
+                      const WithdrawalTransactionToSend &transaction, Callback<PendingTransaction> ready,
+                      Callback<> done) {
+  Expects(transaction.all || transaction.amount >= 0);
 
-	const auto sender = getUsedAddress(publicKey);
-	Assert(!sender.isEmpty());
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
 
-	const auto body = CreateWithdrawalMessage(transaction.amount, transaction.all);
-	if (!body.has_value()) {
-		return InvokeCallback(done, body.error());
-	}
+  const auto body = CreateWithdrawalMessage(transaction.amount, transaction.all);
+  if (!body.has_value()) {
+    return InvokeCallback(done, body.error());
+  }
 
-	const auto send = makeSendCallback(std::move(done));
+  const auto send = makeSendCallback(std::move(done));
 
-	_external->lib().request(TLCreateQuery(
-		prepareInputKey(publicKey, password),
-		tl_accountAddress(tl_string(sender)),
-		tl_int32(transaction.timeout),
-		tl_actionMsg(
-			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(transaction.depoolAddress)),
-				tl_string(),
-				tl_int64(transaction.depoolFee),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-				tl_int32(kDefaultMessageFlags))),
-			tl_boolFalse()),
-		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
-	)).done([=](const TLquery_Info &result) {
-		result.match([&](const TLDquery_info &data) {
-			const auto weak = base::make_weak(this);
-			auto pending = Parse(result, sender, TransactionToSend {
-				.amount = transaction.depoolFee,
-				.recipient = transaction.depoolAddress,
-				.timeout = transaction.timeout,
-				.allowSendToUninited = false,
-			});
-			_accountViewers->addPendingTransaction(pending);
-			if (!weak) {
-				return;
-			}
-			InvokeCallback(ready, std::move(pending));
-			if (!weak) {
-				return;
-			}
-			send(data.vid().v);
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(ready, ErrorFromLib(error));
-	}).send();
+  _external->lib()
+      .request(TLCreateQuery(
+          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
+          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
+                                                   tl_int64(transaction.depoolFee),
+                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                                                   tl_int32(kDefaultMessageFlags))),
+                       tl_boolFalse()),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=](const TLquery_Info &result) {
+        result.match([&](const TLDquery_info &data) {
+          const auto weak = base::make_weak(this);
+          auto pending = Parse(result, sender,
+                               TransactionToSend{
+                                   .amount = transaction.depoolFee,
+                                   .recipient = transaction.depoolAddress,
+                                   .timeout = transaction.timeout,
+                                   .allowSendToUninited = false,
+                               });
+          _accountViewers->addPendingTransaction(pending);
+          if (!weak) {
+            return;
+          }
+          InvokeCallback(ready, std::move(pending));
+          if (!weak) {
+            return;
+          }
+          send(data.vid().v);
+        });
+      })
+      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::cancelWithdrawal(
-		const QByteArray &publicKey,
-		const QByteArray &password,
-		const CancelWithdrawalTransactionToSend &transaction,
-		Callback<PendingTransaction> ready,
-		Callback<> done) {
-	const auto sender = getUsedAddress(publicKey);
-	Assert(!sender.isEmpty());
+void Wallet::cancelWithdrawal(const QByteArray &publicKey, const QByteArray &password,
+                              const CancelWithdrawalTransactionToSend &transaction, Callback<PendingTransaction> ready,
+                              Callback<> done) {
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
 
-	const auto body = CreateCancelWithdrawalMessage();
-	if (!body.has_value()) {
-		return InvokeCallback(done, body.error());
-	}
+  const auto body = CreateCancelWithdrawalMessage();
+  if (!body.has_value()) {
+    return InvokeCallback(done, body.error());
+  }
 
-	const auto send = makeSendCallback(std::move(done));
+  const auto send = makeSendCallback(std::move(done));
 
-	_external->lib().request(TLCreateQuery(
-		prepareInputKey(publicKey, password),
-		tl_accountAddress(tl_string(sender)),
-		tl_int32(transaction.timeout),
-		tl_actionMsg(
-			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(transaction.depoolAddress)),
-				tl_string(),
-				tl_int64(transaction.depoolFee),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-				tl_int32(kDefaultMessageFlags))),
-			tl_boolFalse()),
-		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
-	)).done([=](const TLquery_Info &result) {
-		result.match([&](const TLDquery_info &data) {
-			const auto weak = base::make_weak(this);
-			auto pending = Parse(result, sender, TransactionToSend {
-				.amount = transaction.depoolFee,
-				.recipient = transaction.depoolAddress,
-				.timeout = transaction.timeout,
-				.allowSendToUninited = false,
-			});
-			_accountViewers->addPendingTransaction(pending);
-			if (!weak) {
-				return;
-			}
-			InvokeCallback(ready, std::move(pending));
-			if (!weak) {
-				return;
-			}
-			send(data.vid().v);
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(ready, ErrorFromLib(error));
-	}).send();
+  _external->lib()
+      .request(TLCreateQuery(
+          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
+          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
+                                                   tl_int64(transaction.depoolFee),
+                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                                                   tl_int32(kDefaultMessageFlags))),
+                       tl_boolFalse()),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=](const TLquery_Info &result) {
+        result.match([&](const TLDquery_info &data) {
+          const auto weak = base::make_weak(this);
+          auto pending = Parse(result, sender,
+                               TransactionToSend{
+                                   .amount = transaction.depoolFee,
+                                   .recipient = transaction.depoolAddress,
+                                   .timeout = transaction.timeout,
+                                   .allowSendToUninited = false,
+                               });
+          _accountViewers->addPendingTransaction(pending);
+          if (!weak) {
+            return;
+          }
+          InvokeCallback(ready, std::move(pending));
+          if (!weak) {
+            return;
+          }
+          send(data.vid().v);
+        });
+      })
+      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::sendStake(
-		const QByteArray &publicKey,
-		const QByteArray &password,
-		const StakeTransactionToSend &transaction,
-		Callback<PendingTransaction> ready,
-		Callback<> done) {
-	Expects(transaction.stake >= 0);
+void Wallet::sendStake(const QByteArray &publicKey, const QByteArray &password,
+                       const StakeTransactionToSend &transaction, Callback<PendingTransaction> ready, Callback<> done) {
+  Expects(transaction.stake >= 0);
 
-	const auto sender = getUsedAddress(publicKey);
-	Assert(!sender.isEmpty());
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
 
-	const auto body = CreateStakeMessage(transaction.stake);
-	if (!body.has_value()) {
-		InvokeCallback(done, body.error());
-		return;
-	}
+  const auto body = CreateStakeMessage(transaction.stake);
+  if (!body.has_value()) {
+    InvokeCallback(done, body.error());
+    return;
+  }
 
-	const auto send = makeSendCallback(std::move(done));
+  const auto send = makeSendCallback(std::move(done));
 
-	const auto realAmount = transaction.depoolFee + transaction.stake;
+  const auto realAmount = transaction.depoolFee + transaction.stake;
 
-	_external->lib().request(TLCreateQuery(
-		prepareInputKey(publicKey, password),
-		tl_accountAddress(tl_string(sender)),
-		tl_int32(transaction.timeout),
-		tl_actionMsg(
-			tl_vector(1, tl_msg_message(
-				tl_accountAddress(tl_string(transaction.depoolAddress)),
-				tl_string(),
-				tl_int64(realAmount),
-				tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-				tl_int32(kDefaultMessageFlags))),
-			tl_boolFalse()),
-		tl_raw_initialAccountState(tl_bytes(), tl_bytes()) // doesn't matter
-	)).done([=](const TLquery_Info &result) {
-		result.match([&](const TLDquery_info &data) {
-			const auto weak = base::make_weak(this);
-			auto pending = Parse(result, sender, TransactionToSend {
-				.amount = realAmount,
-				.recipient = transaction.depoolAddress,
-				.timeout = transaction.timeout,
-				.allowSendToUninited = false,
-			});
-			_accountViewers->addPendingTransaction(pending);
-			if (!weak) {
-				return;
-			}
-			InvokeCallback(ready, std::move(pending));
-			if (!weak) {
-				return;
-			}
-			send(data.vid().v);
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(ready, ErrorFromLib(error));
-	}).send();
+  _external->lib()
+      .request(TLCreateQuery(
+          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
+          tl_actionMsg(
+              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
+                                          tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                                          tl_int32(kDefaultMessageFlags))),
+              tl_boolFalse()),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=](const TLquery_Info &result) {
+        result.match([&](const TLDquery_info &data) {
+          const auto weak = base::make_weak(this);
+          auto pending = Parse(result, sender,
+                               TransactionToSend{
+                                   .amount = realAmount,
+                                   .recipient = transaction.depoolAddress,
+                                   .timeout = transaction.timeout,
+                                   .allowSendToUninited = false,
+                               });
+          _accountViewers->addPendingTransaction(pending);
+          if (!weak) {
+            return;
+          }
+          InvokeCallback(ready, std::move(pending));
+          if (!weak) {
+            return;
+          }
+          send(data.vid().v);
+        });
+      })
+      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::openGate(const QString &rawAddress, std::optional<TokenKind> token) {
-	auto url = QUrl(_gateUrl);
-	auto params = "TONAddress=" + rawAddress;
-	if (token.has_value()) {
-		params += "&ethereumTokenAddress=" + contractAddress(*token);
-	}
+void Wallet::openGate(const QString &rawAddress, std::optional<Symbol> token) {
+  auto url = QUrl(_gateUrl);
+  auto params = "TONAddress=" + rawAddress;
 
-	url.setQuery(params);
-	QDesktopServices::openUrl(url);
+  // TODO:
+
+  if (token.has_value()) {
+    params += "&ethereumTokenAddress=";
+  }
+
+  url.setQuery(params);
+  QDesktopServices::openUrl(url);
 }
 
 void Wallet::openReveal(const QString &rawAddress, const QString &ethereumAddress) {
-	auto url = QUrl(_gateUrl);
-	url.setQuery(QString{"TONAddress=%1&revealEthereumAddress=%2"}.arg(rawAddress, ethereumAddress));
-	QDesktopServices::openUrl(url);
+  auto url = QUrl(_gateUrl);
+  url.setQuery(QString{"TONAddress=%1&revealEthereumAddress=%2"}.arg(rawAddress, ethereumAddress));
+  QDesktopServices::openUrl(url);
 }
 
-void Wallet::requestState(
-		const QString &address,
-		const Callback<AccountState> &done) {
-	_external->lib().request(TLGetAccountState(
-		tl_accountAddress(tl_string(address))
-	)).done([=](const TLFullAccountState &result) {
-		InvokeCallback(done, Parse(result));
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
+void Wallet::requestState(const QString &address, const Callback<AccountState> &done) {
+  _external->lib()
+      .request(TLGetAccountState(tl_accountAddress(tl_string(address))))
+      .done([=](const TLFullAccountState &result) { InvokeCallback(done, Parse(result)); })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::requestTransactions(
-		const QByteArray &publicKey,
-		const QString &address,
-		const TransactionId &lastId,
-		const Callback<TransactionsSlice> &done) {
-	_external->lib().request(TLraw_GetTransactions(
-		tl_inputKeyFake(),
-		tl_accountAddress(tl_string(address)),
-		tl_internal_transactionId(tl_int64(lastId.lt), tl_bytes(lastId.hash))
-	)).done([=](const TLraw_Transactions &result) {
-		InvokeCallback(done, Parse(result));
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
+void Wallet::requestTransactions(const QByteArray &publicKey, const QString &address, const TransactionId &lastId,
+                                 const Callback<TransactionsSlice> &done) {
+  _external->lib()
+      .request(TLraw_GetTransactions(tl_inputKeyFake(), tl_accountAddress(tl_string(address)),
+                                     tl_internal_transactionId(tl_int64(lastId.lt), tl_bytes(lastId.hash))))
+      .done([=](const TLraw_Transactions &result) { InvokeCallback(done, Parse(result)); })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::requestTokenStates(
-		const QString &address,
-		std::unordered_set<TokenKind> &&tokens,
-		const Callback<TokenMap<TokenState>> &done) const {
-	const auto tokenContractAddress = _external->settings().net().tokenContractAddress;
+void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStates,
+                                const Callback<CurrencyMap<TokenStateValue>> &done) const {
+  struct StateContext {
+    explicit StateContext(const CurrencyMap<TokenStateValue> &tokens,
+                          const Callback<CurrencyMap<TokenStateValue>> &done)
+        : done{done} {
+      for (const auto &item : tokens) {
+        requestedTokens.emplace(item.first);
+      }
+    }
 
-	struct StateContext {
-		explicit StateContext(std::unordered_set<TokenKind> &&tokens, const Callback<TokenMap<TokenState>> &done)
-			: requestedTokens{std::move(tokens)}
-			, done{done} {
-		}
+    void notifySuccess(TokenState &&tokenState) {
+      std::unique_lock lock{mutex};
+      result.insert(std::make_pair(
+          tokenState.token,
+          TokenStateValue{.rootContractAddress = tokenState.rootContractAddress, .balance = tokenState.balance}));
+      checkComplete(tokenState.token);
+    }
 
-		void notifySuccess(TokenState &&tokenState) {
-			std::unique_lock lock{mutex};
-			const auto token = tokenState.token;
-			result.insert(std::make_pair(token, tokenState));
-			checkComplete(token);
-		}
+    void notifyError(const Symbol &symbol) {
+      std::unique_lock lock{mutex};
+      checkComplete(symbol);
+    }
 
-		void notifyError(TokenKind token) {
-			std::unique_lock lock{mutex};
-			checkComplete(token);
-		}
+    void checkComplete(const Symbol &symbol) {
+      requestedTokens.erase(symbol);
+      if (requestedTokens.empty()) {
+        InvokeCallback(done, std::move(result));
+      }
+    }
 
-		void checkComplete(TokenKind token) {
-			requestedTokens.erase(token);
-			if (requestedTokens.empty()) {
-				InvokeCallback(done, std::move(result));
-			}
-		}
+    std::unordered_set<Symbol> requestedTokens{};
+    CurrencyMap<TokenStateValue> result;
+    Callback<CurrencyMap<TokenStateValue>> done;
+    std::shared_mutex mutex;
+  };
 
-		std::unordered_set<TokenKind> requestedTokens{};
-		TokenMap<TokenState> result;
-		Callback<TokenMap<TokenState>> done;
-		std::shared_mutex mutex;
-	};
+  std::shared_ptr<StateContext> ctx{new StateContext{previousStates, done}};
 
-	std::shared_ptr<StateContext> ctx{new StateContext{std::move(tokens), done}};
+  std::shared_lock lock{ctx->mutex};
+  for (const auto &[symbol, token] : previousStates) {
+    _external->lib()
+        .request(TLftabi_RunLocal(tl_accountAddress(tl_string(token.walletContractAddress)), TokenGetBalance(),
+                                  tl_ftabi_functionCallExternal({}, {})))
+        .done([=, symbol = symbol, token = token](const TLftabi_decodedOutput &result) {
+          const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
+          if (results.empty() || results[0].type() != id_ftabi_valueInt) {
+            //InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
+            std::cout << "failed to parse results";
+            ctx->notifyError(symbol);
+          } else {
+            const auto balance = results[0].c_ftabi_valueInt().vvalue().v;
 
-	std::shared_lock lock{ctx->mutex};
-	for (const auto& token : ctx->requestedTokens) {
-		_external->lib().request(TLftabi_RunLocal(
-			tl_accountAddress(tl_string(tokenContractAddress)),
-			TokenBalanceOf(),
-			tl_ftabi_functionCallExternal(
-				{},
-				tl_vector(QVector<TLftabi_Value>{
-					tl_ftabi_valueInt(
-						tl_ftabi_paramUint(tl_int32(256)), // tokenID
-						tl_int64(static_cast<int64_t>(token))),
-					tl_ftabi_valueAddress(
-						tl_ftabi_paramAddress(), // account
-						tl_accountAddress(tl_string(address))),
-				})
-			))
-		).done([=](const TLftabi_decodedOutput &result) {
-			const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
-			if (results.empty() || results[0].type() != id_ftabi_valueInt) {
-				//InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
-				std::cout << "failed to parse results";
-				ctx->notifyError(token);
-			} else {
-				const auto fullBalance = results[0].c_ftabi_valueInt().vvalue().v;
-
-				ctx->notifySuccess(TokenState {
-					.token = token,
-					.fullBalance = fullBalance
-				});
-			}
-		}).fail([=](const TLError &error) {
-			std::cout << error.c_error().vmessage().v.toStdString() << std::endl;
-			ctx->notifyError(token);
-			//InvokeCallback(done, ErrorFromLib(error));
-		}).send();
-	}
+            ctx->notifySuccess(TokenState{.token = symbol,
+                                          .rootContractAddress = token.rootContractAddress,
+                                          .walletContractAddress = token.walletContractAddress,
+                                          .balance = balance});
+          }
+        })
+        .fail([=, symbol = symbol](const TLError &error) {
+          std::cout << error.c_error().vmessage().v.toStdString() << std::endl;
+          ctx->notifyError(symbol);
+          //InvokeCallback(done, ErrorFromLib(error));
+        })
+        .send();
+  }
 }
 
-void Wallet::requestDePoolParticipantInfo(
-	const QByteArray &publicKey,
-	const QString &address,
-	const Callback<DePoolParticipantState> &done) const {
-	const auto walletAddress = getUsedAddress(publicKey);
-	Assert(!walletAddress.isEmpty());
+void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const QString &address,
+                                          const Callback<DePoolParticipantState> &done) const {
+  const auto walletAddress = getUsedAddress(publicKey);
+  Assert(!walletAddress.isEmpty());
 
-	_external->lib().request(TLftabi_RunLocal(
-		tl_accountAddress(tl_string(address)),
-		DePoolParticipantInfoFunction(),
-		tl_ftabi_functionCallExternal(
-			{},
-			tl_vector(QVector<TLftabi_Value>{
-				tl_ftabi_valueAddress(
-					tl_ftabi_paramAddress(),
-					tl_accountAddress(tl_string(walletAddress))), // account
-			})
-		)
-	)).done([=](const TLftabi_decodedOutput &result) {
-		const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
-		if (results.size() < 4) {
-			InvokeCallback(done, ErrorFromLib(GenerateInvalidAbiError()));
-			return;
-		}
+  _external->lib()
+      .request(
+          TLftabi_RunLocal(tl_accountAddress(tl_string(address)), DePoolParticipantInfoFunction(),
+                           tl_ftabi_functionCallExternal(
+                               {}, tl_vector(QVector<TLftabi_Value>{
+                                       tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
+                                                             tl_accountAddress(tl_string(walletAddress))),  // account
+                                   }))))
+      .done([=](const TLftabi_decodedOutput &result) {
+        const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
+        if (results.size() < 4) {
+          InvokeCallback(done, ErrorFromLib(GenerateInvalidAbiError()));
+          return;
+        }
 
-		std::map<int64, int64> stakes;
-		for (const auto &item : results[4].c_ftabi_valueMap().vvalues().v) {
-			const auto key = item.c_ftabi_valueMapItem().vkey().c_ftabi_valueInt().vvalue().v;
-			const auto value = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueInt().vvalue().v;
-			stakes.emplace(std::make_pair(key, value));
-		}
+        std::map<int64, int64> stakes;
+        for (const auto &item : results[4].c_ftabi_valueMap().vvalues().v) {
+          const auto key = item.c_ftabi_valueMapItem().vkey().c_ftabi_valueInt().vvalue().v;
+          const auto value = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueInt().vvalue().v;
+          stakes.emplace(std::make_pair(key, value));
+        }
 
-		InvokeCallback(done, DePoolParticipantState {
-			.total = results[0].c_ftabi_valueInt().vvalue().v,
-			.withdrawValue = results[1].c_ftabi_valueInt().vvalue().v,
-			.reinvest = results[2].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
-			.reward = results[3].c_ftabi_valueInt().vvalue().v,
-			.stakes = std::move(stakes),
-			.vestings = parseInvestParamsMap(results[5].c_ftabi_valueMap()),
-			.locks = parseInvestParamsMap(results[6].c_ftabi_valueMap()),
-		});
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, ErrorFromLib(error));
-	}).send();
+        InvokeCallback(done, DePoolParticipantState{
+                                 .total = results[0].c_ftabi_valueInt().vvalue().v,
+                                 .withdrawValue = results[1].c_ftabi_valueInt().vvalue().v,
+                                 .reinvest = results[2].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
+                                 .reward = results[3].c_ftabi_valueInt().vvalue().v,
+                                 .stakes = std::move(stakes),
+                                 .vestings = parseInvestParamsMap(results[5].c_ftabi_valueMap()),
+                                 .locks = parseInvestParamsMap(results[6].c_ftabi_valueMap()),
+                             });
+      })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
 }
 
-void Wallet::decrypt(
-	const QByteArray &publicKey,
-	std::vector<Transaction> &&list,
-	const Callback<std::vector<Transaction>> &done) {
-	const auto encrypted = CollectEncryptedTexts(list);
-	if (encrypted.empty()) {
-		InvokeCallback(done, std::move(list));
-		return;
-	}
-	const auto shared = std::make_shared<std::vector<Transaction>>(
-		std::move(list));
-	const auto password = _viewersPasswords[publicKey];
-	const auto generation = password.generation;
-	const auto fail = [=](const TLError &error) {
-		handleInputKeyError(publicKey, generation, error, [=](
-			Result<> result) {
-			if (result) {
-				decrypt(publicKey, std::move(*shared), done);
-			} else {
-				InvokeCallback(done, result.error());
-			}
-		});
-	};
-	if (password.bytes.isEmpty()) {
-		fail(GenerateFakeIncorrectPasswordError());
-		return;
-	}
-	_external->lib().request(TLmsg_Decrypt(
-		prepareInputKey(publicKey, password.bytes),
-		MsgDataArrayFromEncrypted(encrypted)
-	)).done([=](const TLmsg_DataDecryptedArray &result) {
-		notifyPasswordGood(publicKey, generation);
-		InvokeCallback(
-			done,
-			AddDecryptedTexts(
-				std::move(*shared),
-				encrypted,
-				MsgDataArrayToDecrypted(result)));
-	}).fail(fail).send();
+void Wallet::decrypt(const QByteArray &publicKey, std::vector<Transaction> &&list,
+                     const Callback<std::vector<Transaction>> &done) {
+  const auto encrypted = CollectEncryptedTexts(list);
+  if (encrypted.empty()) {
+    InvokeCallback(done, std::move(list));
+    return;
+  }
+  const auto shared = std::make_shared<std::vector<Transaction>>(std::move(list));
+  const auto password = _viewersPasswords[publicKey];
+  const auto generation = password.generation;
+  const auto fail = [=](const TLError &error) {
+    handleInputKeyError(publicKey, generation, error, [=](Result<> result) {
+      if (result) {
+        decrypt(publicKey, std::move(*shared), done);
+      } else {
+        InvokeCallback(done, result.error());
+      }
+    });
+  };
+  if (password.bytes.isEmpty()) {
+    fail(GenerateFakeIncorrectPasswordError());
+    return;
+  }
+  _external->lib()
+      .request(TLmsg_Decrypt(prepareInputKey(publicKey, password.bytes), MsgDataArrayFromEncrypted(encrypted)))
+      .done([=](const TLmsg_DataDecryptedArray &result) {
+        notifyPasswordGood(publicKey, generation);
+        InvokeCallback(done, AddDecryptedTexts(std::move(*shared), encrypted, MsgDataArrayToDecrypted(result)));
+      })
+      .fail(fail)
+      .send();
 }
 
-void Wallet::trySilentDecrypt(
-		const QByteArray &publicKey,
-		std::vector<Transaction> &&list,
-		const Callback<std::vector<Transaction>> &done) {
-	const auto encrypted = CollectEncryptedTexts(list);
-	if (encrypted.empty() || !_viewersPasswords.contains(publicKey)) {
-		InvokeCallback(done, std::move(list));
-		return;
-	}
-	const auto shared = std::make_shared<std::vector<Transaction>>(
-		std::move(list));
-	const auto password = _viewersPasswords[publicKey];
-	_external->lib().request(TLmsg_Decrypt(
-		prepareInputKey(publicKey, password.bytes),
-		MsgDataArrayFromEncrypted(encrypted)
-	)).done([=](const TLmsg_DataDecryptedArray &result) {
-		InvokeCallback(
-			done,
-			AddDecryptedTexts(
-				std::move(*shared),
-				encrypted,
-				MsgDataArrayToDecrypted(result)));
-	}).fail([=](const TLError &error) {
-		InvokeCallback(done, std::move(*shared));
-	}).send();
+void Wallet::trySilentDecrypt(const QByteArray &publicKey, std::vector<Transaction> &&list,
+                              const Callback<std::vector<Transaction>> &done) {
+  const auto encrypted = CollectEncryptedTexts(list);
+  if (encrypted.empty() || !_viewersPasswords.contains(publicKey)) {
+    InvokeCallback(done, std::move(list));
+    return;
+  }
+  const auto shared = std::make_shared<std::vector<Transaction>>(std::move(list));
+  const auto password = _viewersPasswords[publicKey];
+  _external->lib()
+      .request(TLmsg_Decrypt(prepareInputKey(publicKey, password.bytes), MsgDataArrayFromEncrypted(encrypted)))
+      .done([=](const TLmsg_DataDecryptedArray &result) {
+        InvokeCallback(done, AddDecryptedTexts(std::move(*shared), encrypted, MsgDataArrayToDecrypted(result)));
+      })
+      .fail([=](const TLError &error) { InvokeCallback(done, std::move(*shared)); })
+      .send();
 }
 
-void Wallet::handleInputKeyError(
-		const QByteArray &publicKey,
-		int generation,
-		const TLerror &error,
-		Callback<> done) {
-	const auto parsed = ErrorFromLib(error);
-	if (IsIncorrectPasswordError(parsed)
-		&& ranges::contains(
-			_list->entries,
-			publicKey,
-			&WalletList::Entry::publicKey)) {
-		if (_viewersPasswords.contains(publicKey)
-			&& _viewersPasswords[publicKey].generation == generation) {
-			_viewersPasswords[publicKey].expires = 0;
-			_viewersPasswordsWaiters[publicKey].emplace_back(done);
-			_updates.fire({ DecryptPasswordNeeded{
-				publicKey,
-				generation
-			} });
-		} else {
-			InvokeCallback(done);
-		}
-	} else {
-		notifyPasswordGood(publicKey, generation);
-		InvokeCallback(done, parsed);
-	}
+void Wallet::handleInputKeyError(const QByteArray &publicKey, int generation, const TLerror &error, Callback<> done) {
+  const auto parsed = ErrorFromLib(error);
+  if (IsIncorrectPasswordError(parsed) && ranges::contains(_list->entries, publicKey, &WalletList::Entry::publicKey)) {
+    if (_viewersPasswords.contains(publicKey) && _viewersPasswords[publicKey].generation == generation) {
+      _viewersPasswords[publicKey].expires = 0;
+      _viewersPasswordsWaiters[publicKey].emplace_back(done);
+      _updates.fire({DecryptPasswordNeeded{publicKey, generation}});
+    } else {
+      InvokeCallback(done);
+    }
+  } else {
+    notifyPasswordGood(publicKey, generation);
+    InvokeCallback(done, parsed);
+  }
 }
 
-void Wallet::notifyPasswordGood(
-		const QByteArray &publicKey,
-		int generation) {
-	if (_viewersPasswords.contains(publicKey)
-		&& !_viewersPasswords[publicKey].expires) {
-		const auto expires = crl::now() + kViewersPasswordExpires;
-		_viewersPasswords[publicKey].expires = expires;
-		if (!_viewersPasswordsExpireTimer.isActive()) {
-			_viewersPasswordsExpireTimer.callOnce(
-				kViewersPasswordExpires);
-		}
-	}
-	_updates.fire({ DecryptPasswordGood{ generation } });
+void Wallet::notifyPasswordGood(const QByteArray &publicKey, int generation) {
+  if (_viewersPasswords.contains(publicKey) && !_viewersPasswords[publicKey].expires) {
+    const auto expires = crl::now() + kViewersPasswordExpires;
+    _viewersPasswords[publicKey].expires = expires;
+    if (!_viewersPasswordsExpireTimer.isActive()) {
+      _viewersPasswordsExpireTimer.callOnce(kViewersPasswordExpires);
+    }
+  }
+  _updates.fire({DecryptPasswordGood{generation}});
 }
 
-std::unique_ptr<AccountViewer> Wallet::createAccountViewer(
-		const QByteArray &publicKey,
-		const QString &address) {
-	return _accountViewers->createAccountViewer(publicKey, address);
+std::unique_ptr<AccountViewer> Wallet::createAccountViewer(const QByteArray &publicKey, const QString &address) {
+  return _accountViewers->createAccountViewer(publicKey, address);
 }
 
-void Wallet::updateViewersPassword(
-		const QByteArray &publicKey,
-		const QByteArray &password) {
-	if (password.isEmpty()) {
-		_viewersPasswords.remove(publicKey);
-		_viewersPasswordsWaiters.remove(publicKey);
-		return;
-	}
-	auto &data = _viewersPasswords[publicKey];
-	data.bytes = password;
-	++data.generation;
-	if (const auto list = _viewersPasswordsWaiters.take(publicKey)) {
-		for (const auto &callback : *list) {
-			InvokeCallback(callback);
-		}
-	}
+void Wallet::updateViewersPassword(const QByteArray &publicKey, const QByteArray &password) {
+  if (password.isEmpty()) {
+    _viewersPasswords.remove(publicKey);
+    _viewersPasswordsWaiters.remove(publicKey);
+    return;
+  }
+  auto &data = _viewersPasswords[publicKey];
+  data.bytes = password;
+  ++data.generation;
+  if (const auto list = _viewersPasswordsWaiters.take(publicKey)) {
+    for (const auto &callback : *list) {
+      InvokeCallback(callback);
+    }
+  }
 }
 
 void Wallet::checkPasswordsExpiration() {
-	const auto now = crl::now();
-	auto next = crl::time(0);
-	for (auto i = _viewersPasswords.begin(); i != _viewersPasswords.end();) {
-		const auto expires = i->second.expires;
-		if (!expires) {
-			++i;
-		} else if (expires <= now) {
-			_viewersPasswordsWaiters.remove(i->first);
-			i = _viewersPasswords.erase(i);
-		} else {
-			if (!next || next > expires) {
-				next = expires;
-			}
-			++i;
-		}
-	}
-	if (next) {
-		_viewersPasswordsExpireTimer.callOnce(next - now);
-	}
+  const auto now = crl::now();
+  auto next = crl::time(0);
+  for (auto i = _viewersPasswords.begin(); i != _viewersPasswords.end();) {
+    const auto expires = i->second.expires;
+    if (!expires) {
+      ++i;
+    } else if (expires <= now) {
+      _viewersPasswordsWaiters.remove(i->first);
+      i = _viewersPasswords.erase(i);
+    } else {
+      if (!next || next > expires) {
+        next = expires;
+      }
+      ++i;
+    }
+  }
+  if (next) {
+    _viewersPasswordsExpireTimer.callOnce(next - now);
+  }
 }
 
 void Wallet::loadWebResource(const QString &url, Callback<QByteArray> done) {
-	if (!_webLoader) {
-		_webLoader = std::make_unique<WebLoader>([=] {
-			_webLoader = nullptr;
-		});
-	}
-	_webLoader->load(url, std::move(done));
+  if (!_webLoader) {
+    _webLoader = std::make_unique<WebLoader>([=] { _webLoader = nullptr; });
+  }
+  _webLoader->load(url, std::move(done));
 }
 
 Fn<void(Update)> Wallet::generateUpdatesCallback() {
-	return [=](Update update) {
-		if (const auto sync = std::get_if<SyncState>(&update.data)) {
-			if (*sync == _lastSyncStateUpdate) {
-				return;
-			}
-			_lastSyncStateUpdate = *sync;
-		} else if (const auto upgrade = std::get_if<ConfigUpgrade>(
-				&update.data)) {
-			if (*upgrade == ConfigUpgrade::TestnetToMainnet) {
-				_switchedToMain = true;
-			}
-		}
-		_updates.fire(std::move(update));
-	};
+  return [=](Update update) {
+    if (const auto sync = std::get_if<SyncState>(&update.data)) {
+      if (*sync == _lastSyncStateUpdate) {
+        return;
+      }
+      _lastSyncStateUpdate = *sync;
+    } else if (const auto upgrade = std::get_if<ConfigUpgrade>(&update.data)) {
+      if (*upgrade == ConfigUpgrade::TestnetToMainnet) {
+        _switchedToMain = true;
+      }
+    }
+    _updates.fire(std::move(update));
+  };
 }
 
 void Wallet::checkLocalTime(BlockchainTime time) {
-	if (_localTimeSyncer) {
-		_localTimeSyncer->updateBlockchainTime(time);
-		return;
-	} else if (LocalTimeSyncer::IsLocalTimeBad(time)) {
-		_localTimeSyncer = std::make_unique<LocalTimeSyncer>(
-			time,
-			&_external->lib(),
-			[=] { _localTimeSyncer = nullptr; });
-	}
+  if (_localTimeSyncer) {
+    _localTimeSyncer->updateBlockchainTime(time);
+    return;
+  } else if (LocalTimeSyncer::IsLocalTimeBad(time)) {
+    _localTimeSyncer = std::make_unique<LocalTimeSyncer>(time, &_external->lib(), [=] { _localTimeSyncer = nullptr; });
+  }
 }
 
 auto Wallet::makeSendCallback(Callback<> done) -> std::function<void(int64)> {
-	return [this, done = std::move(done)](int64 id) {
-		_external->lib().request(TLquery_Send(
-			tl_int53(id)
-		)).done([=] {
-			InvokeCallback(done);
-		}).fail([=](const TLError &error) {
-			InvokeCallback(done, ErrorFromLib(error));
-		}).send();
-	};
+  return [this, done = std::move(done)](int64 id) {
+    _external->lib()
+        .request(TLquery_Send(tl_int53(id)))
+        .done([=] { InvokeCallback(done); })
+        .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+        .send();
+  };
 }
 
 auto Wallet::makeEstimateFeesCallback(Callback<TransactionCheckResult> done) -> std::function<void(int64)> {
-	return [this, done = std::move(done)](int64 id) {
-		_external->lib().request(TLquery_EstimateFees(
-			tl_int53(id),
-			tl_boolTrue()
-		)).done([=](const TLquery_Fees &result) {
-			_external->lib().request(TLquery_Forget(
-				tl_int53(id)
-			)).send();
-			InvokeCallback(done, Parse(result));
-		}).fail([=](const TLError &error) {
-			InvokeCallback(done, ErrorFromLib(error));
-		}).send();
-	};
+  return [this, done = std::move(done)](int64 id) {
+    _external->lib()
+        .request(TLquery_EstimateFees(tl_int53(id), tl_boolTrue()))
+        .done([=](const TLquery_Fees &result) {
+          _external->lib().request(TLquery_Forget(tl_int53(id))).send();
+          InvokeCallback(done, Parse(result));
+        })
+        .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+        .send();
+  };
 }
 
-} // namespace Ton
+}  // namespace Ton

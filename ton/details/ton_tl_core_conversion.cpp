@@ -9,43 +9,43 @@
 namespace Ton::details {
 
 TLstring tl_from(std::string &&value) {
-	return tl_string(value);
+  return tl_string(value);
 }
 
 std::string tl_to(const TLstring &value) {
-	return std::string(value.v.data(), value.v.size());
+  return std::string(value.v.data(), value.v.size());
 }
 
 TLsecureString tl_from(td::SecureString &&value) {
-	return TLsecureString{ QByteArray(value.data(), value.size()) };
+  return TLsecureString{QByteArray(value.data(), value.size())};
 }
 
 td::SecureString tl_to(const TLsecureString &value) {
-	return td::SecureString{ value.v.data(), size_t(value.v.size()) };
+  return td::SecureString{value.v.data(), size_t(value.v.size())};
 }
 
 TLint32 tl_from(std::int32_t value) {
-	return tl_int32(value);
+  return tl_int32(value);
 }
 
 std::int32_t tl_to(const TLint32 &value) {
-	return value.v;
+  return value.v;
 }
 
 TLint64 tl_from(std::int64_t value) {
-	return tl_int64(value);
+  return tl_int64(value);
 }
 
 std::int64_t tl_to(const TLint64 &value) {
-	return value.v;
+  return value.v;
 }
 
 TLbool tl_from(bool value) {
-	return value ? tl_boolTrue() : tl_boolFalse();
+  return value ? tl_boolTrue() : tl_boolFalse();
 }
 
 bool tl_to(const TLbool &value) {
-	return (value.type() == id_boolTrue);
+  return (value.type() == id_boolTrue);
 }
 
-} // namespace Ton::details
+}  // namespace Ton::details

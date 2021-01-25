@@ -21,76 +21,75 @@ template <typename T>
 using TLvector = tl::vector_type<T>;
 
 inline TLint32 tl_int32(int32 value) {
-	return tl::make_int(value);
+  return tl::make_int(value);
 }
 inline TLint53 tl_int53(int64 value) {
-	return tl::make_int64(value);
+  return tl::make_int64(value);
 }
 inline TLint64 tl_int64(int64 value) {
-	return tl::make_int64(value);
+  return tl::make_int64(value);
 }
 inline TLdouble tl_double(float64 value) {
-	return tl::make_double(value);
+  return tl::make_double(value);
 }
 inline TLstring tl_string(const std::string &v) {
-	return tl::make_string(v);
+  return tl::make_string(v);
 }
 inline TLstring tl_string(const QString &v) {
-	return tl::make_string(v);
+  return tl::make_string(v);
 }
 inline TLbytes tl_string(const QByteArray &v) {
-	return tl::make_string(v);
+  return tl::make_string(v);
 }
 inline TLstring tl_string(const char *v) {
-	return tl::make_string(v);
+  return tl::make_string(v);
 }
 inline TLstring tl_string() {
-	return tl::make_string();
+  return tl::make_string();
 }
 inline TLbytes tl_bytes(const QByteArray &v) {
-	return tl::make_bytes(v);
+  return tl::make_bytes(v);
 }
 inline TLbytes tl_bytes(QByteArray &&v) {
-	return tl::make_bytes(std::move(v));
+  return tl::make_bytes(std::move(v));
 }
 inline TLbytes tl_bytes() {
-	return tl::make_bytes();
+  return tl::make_bytes();
 }
 inline TLbytes tl_bytes(bytes::const_span buffer) {
-	return tl::make_bytes(buffer);
+  return tl::make_bytes(buffer);
 }
 inline TLbytes tl_bytes(const bytes::vector &buffer) {
-	return tl::make_bytes(buffer);
+  return tl::make_bytes(buffer);
 }
 template <typename T>
 inline TLvector<T> tl_vector(uint32 count) {
-	return tl::make_vector<T>(count);
+  return tl::make_vector<T>(count);
 }
 template <typename T>
 inline TLvector<T> tl_vector(uint32 count, const T &value) {
-	return tl::make_vector<T>(count, value);
+  return tl::make_vector<T>(count, value);
 }
 template <typename T>
 inline TLvector<T> tl_vector(const QVector<T> &v) {
-	return tl::make_vector<T>(v);
+  return tl::make_vector<T>(v);
 }
 template <typename T>
 inline TLvector<T> tl_vector(QVector<T> &&v) {
-	return tl::make_vector<T>(std::move(v));
+  return tl::make_vector<T>(std::move(v));
 }
 template <typename T>
 inline TLvector<T> tl_vector() {
-	return tl::make_vector<T>();
+  return tl::make_vector<T>();
 }
 
 class TLsecureString {
-public:
-	QByteArray v;
-
+ public:
+  QByteArray v;
 };
 using TLsecureBytes = TLsecureString;
 
-} // namespace Ton::details
+}  // namespace Ton::details
 
 namespace tl {
 
@@ -102,51 +101,41 @@ struct Reader;
 
 template <>
 struct Writer<QByteArray> final {
-	static void PutBytes(QByteArray &to, const void *bytes, uint32 count) {
-		constexpr auto kPrime = sizeof(uint32);
-		const auto primes = (count / kPrime) + (count % kPrime ? 1 : 0);
-		const auto size = to.size();
-		to.resize(size + (primes * kPrime));
-		memcpy(to.data() + size, bytes, count);
-	}
-	static void Put(QByteArray &to, uint32 value) {
-		PutBytes(to, &value, sizeof(value));
-	}
+  static void PutBytes(QByteArray &to, const void *bytes, uint32 count) {
+    constexpr auto kPrime = sizeof(uint32);
+    const auto primes = (count / kPrime) + (count % kPrime ? 1 : 0);
+    const auto size = to.size();
+    to.resize(size + (primes * kPrime));
+    memcpy(to.data() + size, bytes, count);
+  }
+  static void Put(QByteArray &to, uint32 value) {
+    PutBytes(to, &value, sizeof(value));
+  }
 };
 
 template <>
 struct Reader<char> final {
-	[[nodiscard]] static bool HasBytes(
-			uint32 count,
-			const char *from,
-			const char *end) {
-		constexpr auto kPrime = sizeof(uint32);
-		const auto primes = (count / kPrime) + (count % kPrime ? 1 : 0);
-		return (end - from) >= primes * kPrime;
-	}
-	static void GetBytes(
-			void *bytes,
-			uint32 count,
-			const char *&from,
-			const char *end) {
-		Expects(HasBytes(count, from, end));
+  [[nodiscard]] static bool HasBytes(uint32 count, const char *from, const char *end) {
+    constexpr auto kPrime = sizeof(uint32);
+    const auto primes = (count / kPrime) + (count % kPrime ? 1 : 0);
+    return (end - from) >= primes * kPrime;
+  }
+  static void GetBytes(void *bytes, uint32 count, const char *&from, const char *end) {
+    Expects(HasBytes(count, from, end));
 
-		constexpr auto kPrime = sizeof(uint32);
-		const auto primes = (count / kPrime) + (count % kPrime ? 1 : 0);
-		memcpy(bytes, from, count);
-		from += primes * kPrime;
-	}
-	[[nodiscard]] static bool Has(
-			uint32 primes,
-			const char *from,
-			const char *end) {
-		return HasBytes(primes * sizeof(uint32), from, end);
-	}
-	[[nodiscard]] static uint32 Get(const char *&from, const char *end) {
-		auto result = uint32();
-		GetBytes(&result, sizeof(result), from, end);
-		return result;
-	}
+    constexpr auto kPrime = sizeof(uint32);
+    const auto primes = (count / kPrime) + (count % kPrime ? 1 : 0);
+    memcpy(bytes, from, count);
+    from += primes * kPrime;
+  }
+  [[nodiscard]] static bool Has(uint32 primes, const char *from, const char *end) {
+    return HasBytes(primes * sizeof(uint32), from, end);
+  }
+  [[nodiscard]] static uint32 Get(const char *&from, const char *end) {
+    auto result = uint32();
+    GetBytes(&result, sizeof(result), from, end);
+    return result;
+  }
 };
 
-} // namespace tl
+}  // namespace tl

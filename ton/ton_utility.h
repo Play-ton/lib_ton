@@ -17,17 +17,13 @@
 namespace Ton {
 
 struct UtilityKey {
-	QByteArray publicKey;
-	std::vector<QByteArray> words;
+  QByteArray publicKey;
+  std::vector<QByteArray> words;
 };
 
 void Start(Callback<> done);
-void CreateKey(
-	const QByteArray &seed,
-	Callback<UtilityKey> done);
-void CheckKey(
-	const std::vector<QByteArray> &words,
-	Callback<QByteArray> done);
+void CreateKey(const QByteArray &seed, Callback<UtilityKey> done);
+void CheckKey(const std::vector<QByteArray> &words, Callback<QByteArray> done);
 void Finish();
 
-} // namespace Ton
+}  // namespace Ton

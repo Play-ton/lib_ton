@@ -13,17 +13,16 @@
 namespace Ton::details {
 
 class WebLoader final {
-public:
-	WebLoader(Fn<void()> finished);
-	~WebLoader();
+ public:
+  WebLoader(Fn<void()> finished);
+  ~WebLoader();
 
-	void load(const QString &url, Callback<QByteArray> done);
+  void load(const QString &url, Callback<QByteArray> done);
 
-private:
-	const Fn<void()> _finished;
-	QNetworkAccessManager _manager;
-	base::flat_map<QString, std::vector<Callback<QByteArray>>> _requests;
-
+ private:
+  const Fn<void()> _finished;
+  QNetworkAccessManager _manager;
+  base::flat_map<QString, std::vector<Callback<QByteArray>>> _requests;
 };
 
-} // namespace Ton::details
+}  // namespace Ton::details

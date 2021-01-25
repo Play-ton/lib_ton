@@ -16,24 +16,18 @@ namespace Ton::details {
 [[nodiscard]] AccountState Parse(const TLFullAccountState &data);
 [[nodiscard]] Transaction Parse(const TLraw_Transaction &data);
 [[nodiscard]] TransactionsSlice Parse(const TLraw_Transactions &data);
-[[nodiscard]] PendingTransaction Parse(
-	const TLquery_Info &data,
-	const QString &sender,
-	const TransactionToSend &transaction);
+[[nodiscard]] PendingTransaction Parse(const TLquery_Info &data, const QString &sender,
+                                       const TransactionToSend &transaction);
 [[nodiscard]] TransactionCheckResult Parse(const TLquery_Fees &data);
 [[nodiscard]] std::vector<QString> Parse(const TLExportedKey &data);
 [[nodiscard]] Update Parse(const TLUpdate &data);
 
-[[nodiscard]] TLmsg_DataEncryptedArray MsgDataArrayFromEncrypted(
-	const QVector<EncryptedText> &data);
-[[nodiscard]] QVector<DecryptedText> MsgDataArrayToDecrypted(
-	const TLmsg_DataDecryptedArray &data);
+[[nodiscard]] TLmsg_DataEncryptedArray MsgDataArrayFromEncrypted(const QVector<EncryptedText> &data);
+[[nodiscard]] QVector<DecryptedText> MsgDataArrayToDecrypted(const TLmsg_DataDecryptedArray &data);
 
-[[nodiscard]] QVector<EncryptedText> CollectEncryptedTexts(
-	const std::vector<Transaction> &data);
-[[nodiscard]] std::vector<Transaction> AddDecryptedTexts(
-	std::vector<Transaction> parsed,
-	const QVector<EncryptedText> &encrypted,
-	const QVector<DecryptedText> &decrypted);
+[[nodiscard]] QVector<EncryptedText> CollectEncryptedTexts(const std::vector<Transaction> &data);
+[[nodiscard]] std::vector<Transaction> AddDecryptedTexts(std::vector<Transaction> parsed,
+                                                         const QVector<EncryptedText> &encrypted,
+                                                         const QVector<DecryptedText> &decrypted);
 
-} // namespace Ton::details
+}  // namespace Ton::details

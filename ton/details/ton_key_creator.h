@@ -12,59 +12,44 @@
 
 namespace Storage::Cache {
 class Database;
-} // namespace Storage::Cache
+}  // namespace Storage::Cache
 
 namespace Ton::details {
 
 class RequestSender;
 
 class KeyCreator final : public base::has_weak_ptr {
-public:
-	KeyCreator(
-		not_null<RequestSender*> lib,
-		not_null<Storage::Cache::Database*> db,
-		Fn<void(Result<std::vector<QString>>)> done);
-	KeyCreator(
-		not_null<RequestSender*> lib,
-		not_null<Storage::Cache::Database*> db,
-		const std::vector<QString> &words,
-		Fn<void(Result<>)> done);
+ public:
+  KeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db,
+             Fn<void(Result<std::vector<QString>>)> done);
+  KeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, const std::vector<QString> &words,
+             Fn<void(Result<>)> done);
 
-	[[nodiscard]] QByteArray key() const;
-	void queryWalletAddress(
-		const QByteArray &restrictedInitPublicKey,
-		Callback<QString> done);
-	void save(
-		const QByteArray &password,
-		const WalletList &existing,
-		const QString &address,
-		bool useTestNetwork,
-		Callback<WalletList::Entry> done);
+  [[nodiscard]] QByteArray key() const;
+  void queryWalletAddress(const QByteArray &restrictedInitPublicKey, Callback<QString> done);
+  void save(const QByteArray &password, const WalletList &existing, const QString &address, bool useTestNetwork,
+            Callback<WalletList::Entry> done);
 
-private:
-	enum class State {
-		Creating,
-		Created,
-		ChangingPassword,
-		Saving,
-	};
+ private:
+  enum class State {
+    Creating,
+    Created,
+    ChangingPassword,
+    Saving,
+  };
 
-	void exportWords(Fn<void(Result<std::vector<QString>>)> done);
-	void changePassword(const QByteArray &password, Callback<> done);
-	void saveToDatabase(
-		WalletList existing,
-		bool useTestNetwork,
-		Callback<WalletList::Entry> done);
+  void exportWords(Fn<void(Result<std::vector<QString>>)> done);
+  void changePassword(const QByteArray &password, Callback<> done);
+  void saveToDatabase(WalletList existing, bool useTestNetwork, Callback<WalletList::Entry> done);
 
-	const not_null<RequestSender*> _lib;
-	const not_null<Storage::Cache::Database*> _db;
+  const not_null<RequestSender *> _lib;
+  const not_null<Storage::Cache::Database *> _db;
 
-	State _state = State::Creating;
-	QByteArray _key;
-	QByteArray _secret;
-	QString _address;
-	QByteArray _password;
-
+  State _state = State::Creating;
+  QByteArray _key;
+  QByteArray _secret;
+  QString _address;
+  QByteArray _password;
 };
 
-} // namespace Ton::details
+}  // namespace Ton::details
