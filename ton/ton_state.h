@@ -34,14 +34,14 @@ enum class CurrencyKind {
 class Symbol {
  public:
   static auto ton() -> Symbol {
-    return Symbol(CurrencyKind::TON, "TON", 9);
+    return Symbol{};
   }
 
   static auto tip3(const QString &name, size_t decimals) -> Symbol {
     return Symbol(CurrencyKind::TIP3, name, decimals);
   }
 
-  Symbol(CurrencyKind kind, QString name, size_t decimals) : kind_{kind}, name_{std::move(name)}, decimals_{decimals} {
+  Symbol() noexcept : kind_{CurrencyKind::TON}, name_{"TON"}, decimals_{9} {
   }
 
   auto kind() const -> CurrencyKind {
@@ -65,6 +65,10 @@ class Symbol {
   }
 
  private:
+  Symbol(CurrencyKind kind, QString name, size_t decimals) noexcept
+      : kind_{kind}, name_{std::move(name)}, decimals_{decimals} {
+  }
+
   CurrencyKind kind_;
   QString name_;
   size_t decimals_;

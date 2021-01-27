@@ -1247,6 +1247,10 @@ void Wallet::requestTransactions(const QByteArray &publicKey, const QString &add
 
 void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStates,
                                 const Callback<CurrencyMap<TokenStateValue>> &done) const {
+  if (previousStates.empty()) {
+    return InvokeCallback(done, CurrencyMap<TokenStateValue>{});
+  }
+
   struct StateContext {
     explicit StateContext(const CurrencyMap<TokenStateValue> &tokens,
                           const Callback<CurrencyMap<TokenStateValue>> &done)

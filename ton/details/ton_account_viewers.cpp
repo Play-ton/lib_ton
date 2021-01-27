@@ -208,8 +208,6 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
     _owner->requestTransactions(viewers->publicKey, address, lastTransactionId, received);
   }}};
 
-  std::shared_lock lock{ctx->mutex};
-
   _owner->requestState(address, [=](Result<AccountState> result) {
     const auto viewers = findRefreshingViewers(address);
     if (!viewers || reportError(*viewers, result)) {
@@ -225,11 +223,12 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
 
   _owner->requestTokenStates(viewers.state.current().tokenStates,
                              [=](Result<CurrencyMap<TokenStateValue>> tokenStates) {
-                               if (!tokenStates.has_value()) {
+                               if (tokenStates.has_value()) {
+                                 ctx->setTokenStates(std::move(tokenStates.value()));
+                               } else {
                                  std::cout << tokenStates.error().details.toStdString() << std::endl;
-                                 tokenStates.emplace(CurrencyMap<TokenStateValue>{});
+                                 ctx->setTokenStates(CurrencyMap<TokenStateValue>{});
                                }
-                               ctx->setTokenStates(std::move(tokenStates.value()));
                              });
 
   const QString testDepool = "0:c67d35b249ee156cd3364e320d71f0af60463f0533ec01982452305589596ce0";
