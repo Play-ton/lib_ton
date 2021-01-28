@@ -1024,21 +1024,23 @@ void Wallet::sendTokens(const QByteArray &publicKey, const QByteArray &password,
 
   const auto send = makeSendCallback(std::move(done));
 
+  const auto realAmount = TokenTransactionToSend::realAmount;
+
   _external->lib()
       .request(TLCreateQuery(
           prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.walletContractAddress)),
-                                                   tl_string(), tl_int64(TokenTransactionToSend::realAmount),
-                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                                   tl_int32(kDefaultMessageFlags))),
-                       tl_from(false)),
+          tl_actionMsg(
+              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.walletContractAddress)), tl_string(),
+                                          tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                                          tl_int32(kDefaultMessageFlags))),
+              tl_from(false)),
           tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
           ))
       .done([=](const TLquery_Info &result) {
         result.match([&](const TLDquery_info &data) {
           const auto weak = base::make_weak(this);
           auto pending = Parse(result, sender,
-                               TransactionToSend{.amount = TokenTransactionToSend::realAmount,
+                               TransactionToSend{.amount = realAmount,
                                                  .recipient = transaction.walletContractAddress,
                                                  .timeout = transaction.timeout,
                                                  .allowSendToUninited = false});
@@ -1072,14 +1074,16 @@ void Wallet::withdraw(const QByteArray &publicKey, const QByteArray &password,
 
   const auto send = makeSendCallback(std::move(done));
 
+  const auto realAmount = WithdrawalTransactionToSend::depoolFee;
+
   _external->lib()
       .request(TLCreateQuery(
           prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
-                                                   tl_int64(transaction.depoolFee),
-                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                                   tl_int32(kDefaultMessageFlags))),
-                       tl_boolFalse()),
+          tl_actionMsg(
+              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
+                                          tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                                          tl_int32(kDefaultMessageFlags))),
+              tl_boolFalse()),
           tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
           ))
       .done([=](const TLquery_Info &result) {
@@ -1087,7 +1091,7 @@ void Wallet::withdraw(const QByteArray &publicKey, const QByteArray &password,
           const auto weak = base::make_weak(this);
           auto pending = Parse(result, sender,
                                TransactionToSend{
-                                   .amount = transaction.depoolFee,
+                                   .amount = realAmount,
                                    .recipient = transaction.depoolAddress,
                                    .timeout = transaction.timeout,
                                    .allowSendToUninited = false,
@@ -1120,14 +1124,16 @@ void Wallet::cancelWithdrawal(const QByteArray &publicKey, const QByteArray &pas
 
   const auto send = makeSendCallback(std::move(done));
 
+  const auto realAmount = CancelWithdrawalTransactionToSend::depoolFee;
+
   _external->lib()
       .request(TLCreateQuery(
           prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
-                                                   tl_int64(transaction.depoolFee),
-                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                                   tl_int32(kDefaultMessageFlags))),
-                       tl_boolFalse()),
+          tl_actionMsg(
+              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
+                                          tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                                          tl_int32(kDefaultMessageFlags))),
+              tl_boolFalse()),
           tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
           ))
       .done([=](const TLquery_Info &result) {
@@ -1135,7 +1141,7 @@ void Wallet::cancelWithdrawal(const QByteArray &publicKey, const QByteArray &pas
           const auto weak = base::make_weak(this);
           auto pending = Parse(result, sender,
                                TransactionToSend{
-                                   .amount = transaction.depoolFee,
+                                   .amount = realAmount,
                                    .recipient = transaction.depoolAddress,
                                    .timeout = transaction.timeout,
                                    .allowSendToUninited = false,
@@ -1170,7 +1176,7 @@ void Wallet::sendStake(const QByteArray &publicKey, const QByteArray &password,
 
   const auto send = makeSendCallback(std::move(done));
 
-  const auto realAmount = transaction.depoolFee + transaction.stake;
+  const auto realAmount = StakeTransactionToSend::depoolFee + transaction.stake;
 
   _external->lib()
       .request(TLCreateQuery(
@@ -1225,6 +1231,33 @@ void Wallet::openReveal(const QString &rawAddress, const QString &ethereumAddres
   auto url = QUrl(_gateUrl);
   url.setQuery(QString{"TONAddress=%1&revealEthereumAddress=%2"}.arg(rawAddress, ethereumAddress));
   QDesktopServices::openUrl(url);
+}
+
+void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress, Callback<> done) {
+  const auto account = getUsedAddress(publicKey);
+  const auto rawDePoolAddress = ConvertIntoRaw(dePoolAddress);
+
+  static const auto dePoolV1 = QByteArray::fromHex("b4ad6c42427a12a65d9a0bffb0c2730dd9cdf830a086d94636dab7784e13eb38");
+  static const auto dePoolV2 = QByteArray::fromHex("a46c6872712ec49e481a7f3fc1f42469d8bd6ef3fae906aa5b9927e5a3fb3b6b");
+  // TODO: add dePoolV3
+
+  _external->lib()
+      .request(TLGetAccountState(tl_accountAddress(tl_string(rawDePoolAddress))))
+      .done([&, done, account, rawDePoolAddress](const TLFullAccountState &result) {
+        const auto &codeHash = result.c_fullAccountState().vcode_hash().v;
+        if (codeHash != dePoolV1 && codeHash != dePoolV2) {
+          return InvokeCallback(done, Error { Error::Type::TonLib, "Requested account is not a DePool" });
+        }
+
+        _accountViewers->addDePool(account, rawDePoolAddress);
+        InvokeCallback(done);
+      })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
+}
+
+void Wallet::removeDePool(const QByteArray &publicKey, const QString &dePoolAddress) {
+  _accountViewers->removeDePool(getUsedAddress(publicKey), ConvertIntoRaw(dePoolAddress));
 }
 
 void Wallet::requestState(const QString &address, const Callback<AccountState> &done) {
@@ -1288,7 +1321,6 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
 
   std::shared_ptr<StateContext> ctx{new StateContext{previousStates, done}};
 
-  std::shared_lock lock{ctx->mutex};
   for (const auto &[symbol, token] : previousStates) {
     _external->lib()
         .request(TLftabi_RunLocal(tl_accountAddress(tl_string(token.walletContractAddress)), TokenGetBalance(),
@@ -1317,45 +1349,93 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
   }
 }
 
-void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const QString &address,
-                                          const Callback<DePoolParticipantState> &done) const {
+void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const DePoolStatesMap &previousStates,
+                                          const Callback<DePoolStatesMap> &done) const {
+  if (previousStates.empty()) {
+    return InvokeCallback(done, DePoolStatesMap{});
+  }
+
   const auto walletAddress = getUsedAddress(publicKey);
   Assert(!walletAddress.isEmpty());
 
-  _external->lib()
-      .request(
-          TLftabi_RunLocal(tl_accountAddress(tl_string(address)), DePoolParticipantInfoFunction(),
-                           tl_ftabi_functionCallExternal(
-                               {}, tl_vector(QVector<TLftabi_Value>{
-                                       tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
-                                                             tl_accountAddress(tl_string(walletAddress))),  // account
-                                   }))))
-      .done([=](const TLftabi_decodedOutput &result) {
-        const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
-        if (results.size() < 4) {
-          InvokeCallback(done, ErrorFromLib(GenerateInvalidAbiError()));
-          return;
-        }
+  struct StateContext {
+    explicit StateContext(const DePoolStatesMap &dePools, const Callback<DePoolStatesMap> &done) : done{done} {
+      for (const auto &item : dePools) {
+        requestedDePools.emplace(item.first);
+      }
+    }
 
-        std::map<int64, int64> stakes;
-        for (const auto &item : results[4].c_ftabi_valueMap().vvalues().v) {
-          const auto key = item.c_ftabi_valueMapItem().vkey().c_ftabi_valueInt().vvalue().v;
-          const auto value = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueInt().vvalue().v;
-          stakes.emplace(std::make_pair(key, value));
-        }
+    void notifySuccess(const QString &address, DePoolParticipantState &&state) {
+      std::unique_lock lock{mutex};
+      result.insert(std::make_pair(address, state));
+      checkComplete(address);
+    }
 
-        InvokeCallback(done, DePoolParticipantState{
-                                 .total = results[0].c_ftabi_valueInt().vvalue().v,
-                                 .withdrawValue = results[1].c_ftabi_valueInt().vvalue().v,
-                                 .reinvest = results[2].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
-                                 .reward = results[3].c_ftabi_valueInt().vvalue().v,
-                                 .stakes = std::move(stakes),
-                                 .vestings = parseInvestParamsMap(results[5].c_ftabi_valueMap()),
-                                 .locks = parseInvestParamsMap(results[6].c_ftabi_valueMap()),
-                             });
-      })
-      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
-      .send();
+    void notifyError(const QString &address) {
+      std::unique_lock lock{mutex};
+      checkComplete(address);
+    }
+
+    void checkComplete(const QString &address) {
+      requestedDePools.erase(address);
+      if (requestedDePools.empty()) {
+        InvokeCallback(done, std::move(result));
+      }
+    }
+
+    std::unordered_set<QString> requestedDePools{};
+    DePoolStatesMap result;
+    Callback<DePoolStatesMap> done;
+    std::shared_mutex mutex;
+  };
+
+  std::shared_ptr<StateContext> ctx{new StateContext{previousStates, done}};
+
+  for (const auto &item : previousStates) {
+    const auto &address = item.first;
+
+    _external->lib()
+        .request(TLftabi_RunLocal(                  //
+            tl_accountAddress(tl_string(address)),  //
+            DePoolParticipantInfoFunction(),        //
+            tl_ftabi_functionCallExternal(
+                {},  // header values
+                tl_vector(QVector<TLftabi_Value>{
+                    tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
+                                          tl_accountAddress(tl_string(walletAddress))),  // account
+                }))))
+        .done([=, address = address](const TLftabi_decodedOutput &result) {
+          const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
+          if (results.size() < 4) {
+            // ErrorFromLib(GenerateInvalidAbiError())
+            return ctx->notifyError(address);
+          }
+
+          std::map<int64, int64> stakes;
+          for (const auto &item : results[4].c_ftabi_valueMap().vvalues().v) {
+            const auto key = item.c_ftabi_valueMapItem().vkey().c_ftabi_valueInt().vvalue().v;
+            const auto value = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueInt().vvalue().v;
+            stakes.emplace(std::make_pair(key, value));
+          }
+
+          ctx->notifySuccess(  //
+              address,         //
+              DePoolParticipantState{
+                  .total = results[0].c_ftabi_valueInt().vvalue().v,
+                  .withdrawValue = results[1].c_ftabi_valueInt().vvalue().v,
+                  .reinvest = results[2].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
+                  .reward = results[3].c_ftabi_valueInt().vvalue().v,
+                  .stakes = std::move(stakes),
+                  .vestings = parseInvestParamsMap(results[5].c_ftabi_valueMap()),
+                  .locks = parseInvestParamsMap(results[6].c_ftabi_valueMap()),
+              });
+        })
+        .fail([=, address = address](const TLError &error) {
+          // ErrorFromLib(error)
+          ctx->notifySuccess(address, DePoolParticipantState{});
+        })
+        .send();
+  }
 }
 
 void Wallet::decrypt(const QByteArray &publicKey, std::vector<Transaction> &&list,

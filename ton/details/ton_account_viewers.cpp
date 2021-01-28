@@ -136,8 +136,7 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
 
   using StateWithViewer = std::pair<AccountState, AccountViewers::Viewers *>;
   using TokensMap = std::map<Symbol, TokenStateValue>;
-  using DePoolsMap = std::map<QString, DePoolParticipantState>;
-  using ContextData = std::tuple<StateWithViewer, TokensMap, DePoolsMap>;
+  using ContextData = std::tuple<StateWithViewer, TokensMap, DePoolStatesMap>;
 
   struct StateContext {
     using Done = Callback<ContextData>;
@@ -157,9 +156,9 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
       checkComplete();
     }
 
-    void setDePoolParticipantStates(DePoolsMap &&value) {
+    void setDePoolParticipantStates(DePoolStatesMap &&value) {
       std::unique_lock lock{mutex};
-      dePoolParticipantStates = std::forward<DePoolsMap>(value);
+      dePoolParticipantStates = std::forward<DePoolStatesMap>(value);
       checkComplete();
     }
 
@@ -172,7 +171,7 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
 
     std::optional<StateWithViewer> account;
     std::optional<TokensMap> tokenStates;
-    std::optional<DePoolsMap> dePoolParticipantStates;
+    std::optional<DePoolStatesMap> dePoolParticipantStates;
 
     Done done;
     std::shared_mutex mutex;
@@ -221,33 +220,25 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
     ctx->setAccount(std::move(account), viewers);
   });
 
-  _owner->requestTokenStates(viewers.state.current().tokenStates,
-                             [=](Result<CurrencyMap<TokenStateValue>> tokenStates) {
-                               if (tokenStates.has_value()) {
-                                 ctx->setTokenStates(std::move(tokenStates.value()));
-                               } else {
-                                 std::cout << tokenStates.error().details.toStdString() << std::endl;
-                                 ctx->setTokenStates(CurrencyMap<TokenStateValue>{});
-                               }
-                             });
+  _owner->requestTokenStates(  //
+      viewers.state.current().tokenStates, [=](Result<CurrencyMap<TokenStateValue>> tokenStates) {
+        if (tokenStates.has_value()) {
+          ctx->setTokenStates(std::move(tokenStates.value()));
+        } else {
+          std::cout << tokenStates.error().details.toStdString() << std::endl;
+          ctx->setTokenStates(CurrencyMap<TokenStateValue>{});
+        }
+      });
 
-  const QString testDepool = "0:c67d35b249ee156cd3364e320d71f0af60463f0533ec01982452305589596ce0";
-
-  _owner->requestDePoolParticipantInfo(viewers.publicKey, testDepool, [=](Result<DePoolParticipantState> state) {
-    DePoolsMap depools{};
-    if (state.has_value()) {
-      depools.emplace(testDepool, state.value());
-    } else {
-      std::cout << state.error().details.toStdString() << std::endl;
-      depools.emplace(testDepool, DePoolParticipantState{
-                                      .total = 0,
-                                      .withdrawValue = 0,
-                                      .reinvest = true,
-                                      .reward = 0,
-                                  });
-    }
-    ctx->setDePoolParticipantStates(std::move(depools));
-  });
+  _owner->requestDePoolParticipantInfo(  //
+      viewers.publicKey, viewers.state.current().dePoolParticipantStates, [=](Result<DePoolStatesMap> dePoolStates) {
+        if (dePoolStates.has_value()) {
+          ctx->setDePoolParticipantStates(std::move(dePoolStates.value()));
+        } else {
+          std::cout << dePoolStates.error().details.toStdString() << std::endl;
+          ctx->setDePoolParticipantStates(DePoolStatesMap{});
+        }
+      });
 }
 
 void AccountViewers::saveNewStateEncrypted(const QString &address, Viewers &viewers, WalletState &&full,
@@ -377,6 +368,24 @@ void AccountViewers::addPendingTransaction(const PendingTransaction &pending) {
     auto state = i->second.state.current();
     state.pendingTransactions.insert(begin(state.pendingTransactions), pending);
     saveNewState(i->second, std::move(state), RefreshSource::Pending);
+  }
+}
+
+void AccountViewers::addDePool(const QString &account, const QString &dePoolAddress) {
+  const auto i = _map.find(account);
+  if (i != end(_map)) {
+    auto state = i->second.state.current();
+    state.dePoolParticipantStates.insert(std::make_pair(dePoolAddress, DePoolParticipantState{}));
+    saveNewState(i->second, std::move(state), RefreshSource::Remote);
+  }
+}
+
+void AccountViewers::removeDePool(const QString &account, const QString &dePoolAddress) {
+  const auto i = _map.find(account);
+  if (i != end(_map)) {
+    auto state = i->second.state.current();
+    state.dePoolParticipantStates.erase(dePoolAddress);
+    saveNewState(i->second, std::move(state), RefreshSource::Remote);
   }
 }
 

@@ -98,6 +98,9 @@ class Wallet final : public base::has_weak_ptr {
   void openGate(const QString &rawAddress, std::optional<Symbol> token = {});
   void openReveal(const QString &rawAddress, const QString &ethereumAddress);
 
+  void addDePool(const QByteArray &publicKey, const QString &dePoolAddress, Callback<> done);
+  void removeDePool(const QByteArray &publicKey, const QString &dePoolAddress);
+
   static void EnableLogging(bool enabled, const QString &basePath);
   static void LogMessage(const QString &message);
   [[nodiscard]] static bool CheckAddress(const QString &address);
@@ -124,8 +127,8 @@ class Wallet final : public base::has_weak_ptr {
                            const Callback<TransactionsSlice> &done);
   void requestTokenStates(const CurrencyMap<TokenStateValue> &previousStates,
                           const Callback<CurrencyMap<TokenStateValue>> &done) const;
-  void requestDePoolParticipantInfo(const QByteArray &publicKey, const QString &address,
-                                    const Callback<DePoolParticipantState> &done) const;
+  void requestDePoolParticipantInfo(const QByteArray &publicKey, const DePoolStatesMap &previousStates,
+                                    const Callback<DePoolStatesMap> &done) const;
 
  private:
   struct ViewersPassword {

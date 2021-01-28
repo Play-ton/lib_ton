@@ -160,6 +160,8 @@ bool operator==(const DePoolParticipantState &a, const DePoolParticipantState &b
 
 bool operator!=(const DePoolParticipantState &a, const DePoolParticipantState &b);
 
+using DePoolStatesMap = std::map<QString, DePoolParticipantState>;
+
 enum class MessageDataType { PlainText, EncryptedText, DecryptedText, RawBody };
 
 struct TokenTransfer {

@@ -34,6 +34,9 @@ class AccountViewers final : public base::has_weak_ptr {
   [[nodiscard]] std::unique_ptr<AccountViewer> createAccountViewer(const QByteArray &publicKey, const QString &address);
   void addPendingTransaction(const PendingTransaction &pending);
 
+  void addDePool(const QString &account, const QString &dePoolAddress);
+  void removeDePool(const QString &account, const QString &dePoolAddress);
+
   [[nodiscard]] rpl::producer<BlockchainTime> blockchainTime() const;
 
  private:
@@ -57,7 +60,8 @@ class AccountViewers final : public base::has_weak_ptr {
 
   void refreshFromDatabase(const QString &address, Viewers &viewers);
   void refreshAccount(const QString &address, Viewers &viewers);
-  void checkPendingForSameState(const QString &address, Viewers &viewers, const CurrencyMap<TokenStateValue> &tokenStates,
+  void checkPendingForSameState(const QString &address, Viewers &viewers,
+                                const CurrencyMap<TokenStateValue> &tokenStates,
                                 const std::map<QString, DePoolParticipantState> &dePoolStates,
                                 const AccountState &state);
   void checkNextRefresh();
