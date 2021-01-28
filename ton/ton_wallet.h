@@ -98,11 +98,11 @@ class Wallet final : public base::has_weak_ptr {
   void openGate(const QString &rawAddress, std::optional<Symbol> token = {});
   void openReveal(const QString &rawAddress, const QString &ethereumAddress);
 
-  void addDePool(const QByteArray &publicKey, const QString &dePoolAddress, Callback<> done);
+  void addDePool(const QByteArray &publicKey, const QString &dePoolAddress, const Callback<>& done);
   void removeDePool(const QByteArray &publicKey, const QString &dePoolAddress);
 
-  void addToken(const QByteArray &publicKey, const QString &rootContractAddress, Callback<> done);
-  void removeToken(const QByteArray &publicKey, const QString &rootContractAddress, Callback<> done);
+  void addToken(const QByteArray &publicKey, const QString &rootContractAddress, const Callback<>& done);
+  void removeToken(const QByteArray &publicKey, const QString &rootContractAddress);
 
   static void EnableLogging(bool enabled, const QString &basePath);
   static void LogMessage(const QString &message);

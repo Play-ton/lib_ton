@@ -134,6 +134,13 @@ bool operator==(const TokenStateValue &a, const TokenStateValue &b);
 
 bool operator!=(const TokenStateValue &a, const TokenStateValue &b);
 
+struct RootTokenContractDetails {
+  QString name;
+  QString symbol;
+  int64 decimals{};
+  int64 startGasBalance;
+};
+
 struct InvestParams {
   int64 remainingAmount{};
   int64 lastWithdrawalTime{};
