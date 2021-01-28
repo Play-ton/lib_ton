@@ -34,7 +34,7 @@ class AccountViewers final : public base::has_weak_ptr {
   [[nodiscard]] std::unique_ptr<AccountViewer> createAccountViewer(const QByteArray &publicKey, const QString &address);
   void addPendingTransaction(const PendingTransaction &pending);
 
-  void addDePool(const QString &account, const QString &dePoolAddress);
+  void addDePool(const QString &account, const QString &dePoolAddress, DePoolParticipantState &&participantState);
   void removeDePool(const QString &account, const QString &dePoolAddress);
 
   [[nodiscard]] rpl::producer<BlockchainTime> blockchainTime() const;

@@ -374,6 +374,30 @@ std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const
   };
 }
 
+std::optional<DePoolParticipantState> ParseDePoolParticipantState(const TLftabi_decodedOutput &result) {
+  const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
+  if (results.size() < 4) {
+    return std::nullopt;
+  }
+
+  std::map<int64, int64> stakes;
+  for (const auto &item : results[4].c_ftabi_valueMap().vvalues().v) {
+    const auto key = item.c_ftabi_valueMapItem().vkey().c_ftabi_valueInt().vvalue().v;
+    const auto value = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueInt().vvalue().v;
+    stakes.emplace(std::make_pair(key, value));
+  }
+
+  return DePoolParticipantState{
+      .total = results[0].c_ftabi_valueInt().vvalue().v,
+      .withdrawValue = results[1].c_ftabi_valueInt().vvalue().v,
+      .reinvest = results[2].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
+      .reward = results[3].c_ftabi_valueInt().vvalue().v,
+      .stakes = std::move(stakes),
+      .vestings = parseInvestParamsMap(results[5].c_ftabi_valueMap()),
+      .locks = parseInvestParamsMap(results[6].c_ftabi_valueMap()),
+  };
+}
+
 Result<QByteArray> CreateTokenMessage(const QString &recipient, int64 amount) {
   const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
       TokenTransferFunction(),
@@ -615,12 +639,6 @@ void Wallet::updateSettings(Settings settings, Callback<> done) {
   const auto &was = _external->settings();
   const auto detach = (was.net().blockchainName != settings.net().blockchainName);
   const auto change = (was.useTestNetwork != settings.useTestNetwork);
-
-  // TODO:
-
-  //  if (was.net().tokenContractAddress != settings.net().tokenContractAddress) {
-  //    _updates.fire({NewRootTokenContract{settings.net().tokenContractAddress}});
-  //  }
 
   const auto finish = [=](Result<ConfigInfo> result) {
     if (!result) {
@@ -1245,12 +1263,43 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
       .request(TLGetAccountState(tl_accountAddress(tl_string(rawDePoolAddress))))
       .done([&, done, account, rawDePoolAddress](const TLFullAccountState &result) {
         const auto &codeHash = result.c_fullAccountState().vcode_hash().v;
-        if (codeHash != dePoolV1 && codeHash != dePoolV2) {
-          return InvokeCallback(done, Error { Error::Type::TonLib, "Requested account is not a DePool" });
+        if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState ||
+            codeHash != dePoolV1 && codeHash != dePoolV2) {
+          return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a DePool"});
         }
 
-        _accountViewers->addDePool(account, rawDePoolAddress);
-        InvokeCallback(done);
+        const auto &info = result.c_fullAccountState();
+        const auto &accountState = result.c_fullAccountState().vaccount_state().c_raw_accountState();
+
+        _external->lib()
+            .request(TLftabi_RunLocalCachedSplit(
+                tl_accountAddress(tl_string(rawDePoolAddress)),                //
+                info.vlast_transaction_id().c_internal_transactionId().vlt(),  //
+                tl_int32(static_cast<int32>(info.vsync_utime().v)),            //
+                info.vbalance(),                                               //
+                accountState.vdata(),                                          //
+                accountState.vcode(),                                          //
+                DePoolParticipantInfoFunction(),                               //
+                tl_ftabi_functionCallExternal(                                 //
+                    {},                                                        // header values
+                    tl_vector(QVector<TLftabi_Value>{
+                        tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
+                                              tl_accountAddress(tl_string(account))),  // account
+                    }))))
+            .done([=](const TLftabi_decodedOutput &decodedOutput) {
+              auto state = ParseDePoolParticipantState(decodedOutput);
+              if (state.has_value()) {
+                _accountViewers->addDePool(account, rawDePoolAddress, std::move(state.value()));
+                InvokeCallback(done);
+              } else {
+                InvokeCallback(done, Error{Error::Type::TonLib, "Invalid DePool ABI"});
+              }
+            })
+            .fail([=](const TLError &error) {
+              _accountViewers->addDePool(account, rawDePoolAddress, DePoolParticipantState{});
+              InvokeCallback(done);
+            })
+            .send();
       })
       .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
       .send();
@@ -1405,30 +1454,12 @@ void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const DeP
                                           tl_accountAddress(tl_string(walletAddress))),  // account
                 }))))
         .done([=, address = address](const TLftabi_decodedOutput &result) {
-          const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
-          if (results.size() < 4) {
-            // ErrorFromLib(GenerateInvalidAbiError())
-            return ctx->notifyError(address);
+          auto state = ParseDePoolParticipantState(result);
+          if (state.has_value()) {
+            ctx->notifySuccess(address, std::move(state.value()));
+          } else {
+            ctx->notifyError(address);
           }
-
-          std::map<int64, int64> stakes;
-          for (const auto &item : results[4].c_ftabi_valueMap().vvalues().v) {
-            const auto key = item.c_ftabi_valueMapItem().vkey().c_ftabi_valueInt().vvalue().v;
-            const auto value = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueInt().vvalue().v;
-            stakes.emplace(std::make_pair(key, value));
-          }
-
-          ctx->notifySuccess(  //
-              address,         //
-              DePoolParticipantState{
-                  .total = results[0].c_ftabi_valueInt().vvalue().v,
-                  .withdrawValue = results[1].c_ftabi_valueInt().vvalue().v,
-                  .reinvest = results[2].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
-                  .reward = results[3].c_ftabi_valueInt().vvalue().v,
-                  .stakes = std::move(stakes),
-                  .vestings = parseInvestParamsMap(results[5].c_ftabi_valueMap()),
-                  .locks = parseInvestParamsMap(results[6].c_ftabi_valueMap()),
-              });
         })
         .fail([=, address = address](const TLError &error) {
           // ErrorFromLib(error)

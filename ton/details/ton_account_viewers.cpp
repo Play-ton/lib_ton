@@ -371,11 +371,12 @@ void AccountViewers::addPendingTransaction(const PendingTransaction &pending) {
   }
 }
 
-void AccountViewers::addDePool(const QString &account, const QString &dePoolAddress) {
+void AccountViewers::addDePool(const QString &account, const QString &dePoolAddress,
+                               DePoolParticipantState &&participantState) {
   const auto i = _map.find(account);
   if (i != end(_map)) {
     auto state = i->second.state.current();
-    state.dePoolParticipantStates.insert(std::make_pair(dePoolAddress, DePoolParticipantState{}));
+    state.dePoolParticipantStates.emplace(dePoolAddress, std::move(participantState));
     saveNewState(i->second, std::move(state), RefreshSource::Remote);
   }
 }
