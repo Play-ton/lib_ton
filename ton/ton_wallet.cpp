@@ -69,6 +69,75 @@ constexpr auto kDefaultMessageFlags = 3;
   return result;
 }
 
+TLftabi_Function RootTokenGetDetails() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("getDetails"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               {},
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramBytes(),              // name
+                                   tl_ftabi_paramBytes(),              // symbol
+                                   tl_ftabi_paramUint(tl_int32(8)),    // decimals
+                                   tl_ftabi_paramCell(),               // wallet code
+                                   tl_ftabi_paramUint(tl_int32(256)),  // root_public_key
+                                   tl_ftabi_paramAddress(),            // root_owner_address
+                                   tl_ftabi_paramUint(tl_int32(128)),  // total_supply
+                                   tl_ftabi_paramUint(tl_int32(128)),  // start_gas_balance
+                               })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function RootTokenGetWalletAddress() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("getWalletAddress"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(256)),  // wallet_public_key
+                                   tl_ftabi_paramAddress(),            // owner_address
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramAddress()})));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function RootTokenDeployWallet() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("deployWallet"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
+                                   tl_ftabi_paramUint(tl_int32(128)),  // grams
+                                   tl_ftabi_paramUint(tl_int32(256)),  // wallet_public_key
+                                   tl_ftabi_paramAddress(),            // owner_address
+                                   tl_ftabi_paramAddress(),            // gas_back_address
+                               }),
+                               {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
 TLftabi_Function TokenGetBalance() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
@@ -1261,7 +1330,7 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
 
   _external->lib()
       .request(TLGetAccountState(tl_accountAddress(tl_string(rawDePoolAddress))))
-      .done([&, done, account, rawDePoolAddress](const TLFullAccountState &result) {
+      .done([this, done, account, rawDePoolAddress](const TLFullAccountState &result) {
         const auto &codeHash = result.c_fullAccountState().vcode_hash().v;
         if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState ||
             codeHash != dePoolV1 && codeHash != dePoolV2) {
@@ -1307,6 +1376,33 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
 
 void Wallet::removeDePool(const QByteArray &publicKey, const QString &dePoolAddress) {
   _accountViewers->removeDePool(getUsedAddress(publicKey), ConvertIntoRaw(dePoolAddress));
+}
+
+void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAddress, Callback<> done) {
+  const auto account = getUsedAddress(publicKey);
+  const auto rawRootContractAddress = ConvertIntoRaw(rootContractAddress);
+
+  _external->lib()
+      .request(TLGetAccountState(tl_accountAddress(tl_string(rawRootContractAddress))))
+      .done([this, done, account, rawRootContractAddress](const TLFullAccountState &result) {
+        if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState) {
+          return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a root token contract"});
+        }
+
+        const auto &info = result.c_fullAccountState();
+        const auto &accountState = result.c_fullAccountState().vaccount_state().c_raw_accountState();
+
+        // TODO:
+
+        //        _external->lib()
+        //        .request(TLftabi_RunLocalCachedSplit())
+      })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
+}
+
+void Wallet::removeToken(const QByteArray &publicKey, const QString &rootContractAddress, Callback<> done) {
+  _accountViewers->removeToken(getUsedAddress(publicKey), ConvertIntoRaw(rootContractAddress));
 }
 
 void Wallet::requestState(const QString &address, const Callback<AccountState> &done) {

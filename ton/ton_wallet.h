@@ -101,6 +101,9 @@ class Wallet final : public base::has_weak_ptr {
   void addDePool(const QByteArray &publicKey, const QString &dePoolAddress, Callback<> done);
   void removeDePool(const QByteArray &publicKey, const QString &dePoolAddress);
 
+  void addToken(const QByteArray &publicKey, const QString &rootContractAddress, Callback<> done);
+  void removeToken(const QByteArray &publicKey, const QString &rootContractAddress, Callback<> done);
+
   static void EnableLogging(bool enabled, const QString &basePath);
   static void LogMessage(const QString &message);
   [[nodiscard]] static bool CheckAddress(const QString &address);

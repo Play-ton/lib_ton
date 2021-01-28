@@ -390,4 +390,32 @@ void AccountViewers::removeDePool(const QString &account, const QString &dePoolA
   }
 }
 
+void AccountViewers::addToken(const QString &account, TokenState &&tokenState) {
+  const auto i = _map.find(account);
+  if (i != end(_map)) {
+    auto state = i->second.state.current();
+    state.tokenStates.emplace(  //
+        tokenState.token,       //
+        TokenStateValue{
+            .rootContractAddress = tokenState.rootContractAddress,
+            .walletContractAddress = tokenState.walletContractAddress,
+            .balance = tokenState.balance,
+        });
+    saveNewState(i->second, std::move(state), RefreshSource::Remote);
+  }
+}
+
+void AccountViewers::removeToken(const QString &account, const QString &rootContractAddress) {
+  const auto i = _map.find(account);
+  if (i != end(_map)) {
+    auto state = i->second.state.current();
+
+    const auto it = ranges::find_if(
+        state.tokenStates, [&](const auto &item) { return item.second.rootContractAddress == rootContractAddress; });
+    state.tokenStates.erase(it);
+
+    saveNewState(i->second, std::move(state), RefreshSource::Remote);
+  }
+}
+
 }  // namespace Ton::details
