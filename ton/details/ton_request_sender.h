@@ -63,14 +63,14 @@ class RequestSender final : public base::has_weak_ptr {
       setDoneOnMainHandler(std::move(callback));
       return *this;
     }
-    [[nodiscard]] SpecificRequestBuilder &done(FnMut<void(const typename Request::ResponseType &result)> callback) {
+    [[nodiscard]] SpecificRequestBuilder &done(FnMut<void(typename Request::ResponseType &&result)> callback) {
       setDoneHandler([callback = std::move(callback), guard = on_main_guard()](LibResponse result) mutable {
         using FPointer = std::decay_t<decltype(tl_to(_request))>;
         using Function = typename FPointer::element_type;
         using RPointer = typename Function::ReturnType;
         using ReturnType = typename RPointer::element_type;
         crl::on_main(guard, [callback = std::move(callback), result = tl_from(tonlib_api::move_object_as<ReturnType>(
-                                                                 std::move(result)))]() mutable { callback(result); });
+                                                                 std::move(result)))]() mutable { callback(std::move(result)); });
       });
       return *this;
     }

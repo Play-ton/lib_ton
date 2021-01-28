@@ -79,7 +79,7 @@ TLftabi_Function RootTokenGetDetails() {
                                    tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
                                }),
                                {},
-                               tl_vector(QVector<TLftabi_Param>{
+                               tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
                                    tl_ftabi_paramBytes(),              // name
                                    tl_ftabi_paramBytes(),              // symbol
                                    tl_ftabi_paramUint(tl_int32(8)),    // decimals
@@ -88,7 +88,7 @@ TLftabi_Function RootTokenGetDetails() {
                                    tl_ftabi_paramAddress(),            // root_owner_address
                                    tl_ftabi_paramUint(tl_int32(128)),  // total_supply
                                    tl_ftabi_paramUint(tl_int32(128)),  // start_gas_balance
-                               })));
+                               }))})));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -468,17 +468,21 @@ std::optional<DePoolParticipantState> ParseDePoolParticipantState(const TLftabi_
 }
 
 std::optional<RootTokenContractDetails> ParseRootTokenContractDetails(const TLftabi_decodedOutput &result) {
-  const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
-  std::cout << "Results: " << results.size() << std::endl;
-  if (results.size() < 8 || results[2].type() != id_ftabi_valueInt || results[7].type() != id_ftabi_valueInt) {
+  const auto &tokens = result.c_ftabi_decodedOutput().vvalues().v;
+  if (tokens.empty() || tokens[0].type() != id_ftabi_valueTuple) {
+    return std::nullopt;
+  }
+
+  const auto &tuple = tokens[0].c_ftabi_valueTuple().vvalues().v;
+  if (tuple.size() < 8 || tuple[2].type() != id_ftabi_valueInt || tuple[7].type() != id_ftabi_valueInt) {
     return std::nullopt;
   }
 
   return RootTokenContractDetails{
-      .name = results[0].c_ftabi_valueBytes().vvalue().v,
-      .symbol = results[1].c_ftabi_valueBytes().vvalue().v,
-      .decimals = results[2].c_ftabi_valueInt().vvalue().v,
-      .startGasBalance = results[7].c_ftabi_valueInt().vvalue().v,
+      .name = tuple[0].c_ftabi_valueBytes().vvalue().v,
+      .symbol = tuple[1].c_ftabi_valueBytes().vvalue().v,
+      .decimals = tuple[2].c_ftabi_valueInt().vvalue().v,
+      .startGasBalance = tuple[7].c_ftabi_valueInt().vvalue().v,
   };
 }
 
@@ -1397,9 +1401,10 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
   const auto account = getUsedAddress(publicKey);
   const auto rawRootContractAddress = ConvertIntoRaw(rootContractAddress);
 
-  const auto getWalletAddress = [this, done, account, rawRootContractAddress](const TLDfullAccountState &info,
+  const auto getWalletAddress = [this, done, account, rawRootContractAddress](TLFullAccountState &&result,
                                                                               const RootTokenContractDetails &details) {
-    const auto &accountState = info.vaccount_state().c_raw_accountState();
+    const auto &info = result.c_fullAccountState();
+    const auto &accountState = result.c_fullAccountState().vaccount_state().c_raw_accountState();
 
     _external->lib()
         .request(TLftabi_RunLocalCachedSplit(                              //
@@ -1439,10 +1444,7 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
 
   _external->lib()
       .request(TLGetAccountState(tl_accountAddress(tl_string(rawRootContractAddress))))
-      .done([this, done, account, rawRootContractAddress, getWalletAddress](const TLFullAccountState &result) {
-        std::cout << "Got result for: " << rawRootContractAddress.toStdString() << ": "
-                  << result.c_fullAccountState().vbalance().v << std::endl;
-
+      .done([this, done, account, rawRootContractAddress, getWalletAddress](TLFullAccountState &&result) {
         if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState) {
           return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a root token contract"});
         }
@@ -1460,10 +1462,10 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
                 accountState.vcode(),                                                           //
                 RootTokenGetDetails(),                                                          //
                 tl_ftabi_functionCallExternal({}, {})))
-            .done([=, &info](const TLftabi_decodedOutput &decodedDetailsOutput) {
+            .done([=, result = std::move(result)](const TLftabi_decodedOutput &decodedDetailsOutput) mutable {
               auto details = ParseRootTokenContractDetails(decodedDetailsOutput);
               if (details.has_value()) {
-                getWalletAddress(info, details.value());
+                getWalletAddress(std::move(result), details.value());
               } else {
                 InvokeCallback(done, Error{Error::Type::TonLib, "Invalid RootTokenContract.getDetails ABI"});
               }
