@@ -38,7 +38,7 @@ class AccountViewers final : public base::has_weak_ptr {
   void removeDePool(const QString &account, const QString &dePoolAddress);
 
   void addToken(const QString &account, TokenState &&tokenState);
-  void removeToken(const QString &account, const QString &rootContractAddress);
+  void removeToken(const QString &account, const QString &walletContractAddress);
 
   [[nodiscard]] rpl::producer<BlockchainTime> blockchainTime() const;
 

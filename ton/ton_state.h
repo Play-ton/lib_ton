@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include <QHash>
+#include <utility>
 
 namespace Ton {
 
@@ -125,8 +126,11 @@ struct TokenStateValue {
   QString walletContractAddress;
   int64 balance = kUnknownBalance;
 
-  auto withSymbol(Symbol symbol) const -> TokenState {
-    return TokenState{.token = symbol, .rootContractAddress = rootContractAddress, .balance = balance};
+  [[nodiscard]] auto withSymbol(Symbol symbol) const -> TokenState {
+    return TokenState{.token = std::move(symbol),
+                      .rootContractAddress = rootContractAddress,
+                      .walletContractAddress = walletContractAddress,
+                      .balance = balance};
   }
 };
 
@@ -264,6 +268,13 @@ struct TokenTransactionToSend {
   QString recipient;
   int timeout = 0;
   bool swapBack = false;
+};
+
+struct DeployTokenWalletTransactionToSend {
+  constexpr static int64 realAmount = 100'000'000; // 0.1 TON
+  QString rootContractAddress;
+  QString walletContractAddress;
+  int timeout = 0;
 };
 
 struct StakeTransactionToSend {

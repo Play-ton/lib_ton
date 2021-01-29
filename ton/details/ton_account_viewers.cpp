@@ -405,14 +405,17 @@ void AccountViewers::addToken(const QString &account, TokenState &&tokenState) {
   }
 }
 
-void AccountViewers::removeToken(const QString &account, const QString &rootContractAddress) {
+void AccountViewers::removeToken(const QString &account, const QString &walletContractAddress) {
   const auto i = _map.find(account);
   if (i != end(_map)) {
     auto state = i->second.state.current();
 
-    const auto it = ranges::find_if(
-        state.tokenStates, [&](const auto &item) { return item.second.rootContractAddress == rootContractAddress; });
-    state.tokenStates.erase(it);
+    const auto it = ranges::find_if(state.tokenStates, [&](const auto &item) {
+      return item.second.walletContractAddress == walletContractAddress;
+    });
+    if (it != state.tokenStates.end()) {
+      state.tokenStates.erase(it);
+    }
 
     saveNewState(i->second, std::move(state), RefreshSource::Remote);
   }

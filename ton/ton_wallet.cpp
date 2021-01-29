@@ -573,6 +573,23 @@ Result<QByteArray> CreateCancelWithdrawalMessage() {
   return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
+Result<QByteArray> CreateTokenWalletDeployMessage() {
+  const auto encodedBody = RequestSender::Execute(
+      TLftabi_CreateMessageBody(
+          RootTokenDeployWallet(),
+          tl_ftabi_functionCallInternal(
+              {},
+              tl_vector(QVector<TLftabi_Value>{
+
+              })))
+      );
+  if (!encodedBody.has_value()) {
+    return encodedBody.error();
+  }
+
+  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+}
+
 }  // namespace
 
 namespace details {
@@ -1069,6 +1086,14 @@ void Wallet::checkCancelWithdraw(const QByteArray &publicKey, const CancelWithdr
       .send();
 }
 
+void Wallet::checkDeployTokenWallet(const QByteArray &publicKey, const DeployTokenWalletTransactionToSend &transaction,
+                            Callback<TransactionCheckResult> done) {
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
+
+  const auto check = makeEstimateFeesCallback(done);
+}
+
 void Wallet::sendGrams(const QByteArray &publicKey, const QByteArray &password, const TransactionToSend &transaction,
                        Callback<PendingTransaction> ready, Callback<> done) {
   Expects(transaction.amount >= 0);
@@ -1423,10 +1448,11 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
         .done([=](const TLftabi_decodedOutput &decodedOutput) {
           const auto &tokens = decodedOutput.c_ftabi_decodedOutput().vvalues().v;
           const auto walletAddress = tokens[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v;
+          const auto rawWalletAddress = ConvertIntoRaw(walletAddress);
 
           _accountViewers->addToken(account, TokenState{.token = Symbol::tip3(details.symbol, details.decimals),
                                                         .rootContractAddress = rawRootContractAddress,
-                                                        .walletContractAddress = walletAddress,
+                                                        .walletContractAddress = rawWalletAddress,
                                                         .balance = 0});
           InvokeCallback(done);
         })
@@ -1520,9 +1546,10 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
 
     void notifySuccess(TokenState &&tokenState) {
       std::unique_lock lock{mutex};
-      result.insert(std::make_pair(
-          tokenState.token,
-          TokenStateValue{.rootContractAddress = tokenState.rootContractAddress, .balance = tokenState.balance}));
+      result.insert(
+          std::make_pair(tokenState.token, TokenStateValue{.rootContractAddress = tokenState.rootContractAddress,
+                                                           .walletContractAddress = tokenState.walletContractAddress,
+                                                           .balance = tokenState.balance}));
       checkComplete(tokenState.token);
     }
 
@@ -1565,9 +1592,12 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
                                           .balance = balance});
           }
         })
-        .fail([=, symbol = symbol](const TLError &error) {
-          std::cout << error.c_error().vmessage().v.toStdString() << std::endl;
-          ctx->notifyError(symbol);
+        .fail([=, symbol = symbol, token = token](const TLError &error) {
+          //ctx->notifyError(symbol);
+          ctx->notifySuccess(TokenState{.token = symbol,
+                                        .rootContractAddress = token.rootContractAddress,
+                                        .walletContractAddress = token.walletContractAddress,
+                                        .balance = 0});
           //InvokeCallback(done, ErrorFromLib(error));
         })
         .send();

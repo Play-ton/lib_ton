@@ -79,6 +79,9 @@ class Wallet final : public base::has_weak_ptr {
   void checkCancelWithdraw(const QByteArray &publicKey, const CancelWithdrawalTransactionToSend &transaction,
                            Callback<TransactionCheckResult> done);
 
+  void checkDeployTokenWallet(const QByteArray &publicKey, const DeployTokenWalletTransactionToSend &transaction,
+                              Callback<TransactionCheckResult> done);
+
   void sendGrams(const QByteArray &publicKey, const QByteArray &password, const TransactionToSend &transaction,
                  Callback<PendingTransaction> ready, Callback<> done);
 
@@ -98,10 +101,10 @@ class Wallet final : public base::has_weak_ptr {
   void openGate(const QString &rawAddress, std::optional<Symbol> token = {});
   void openReveal(const QString &rawAddress, const QString &ethereumAddress);
 
-  void addDePool(const QByteArray &publicKey, const QString &dePoolAddress, const Callback<>& done);
+  void addDePool(const QByteArray &publicKey, const QString &dePoolAddress, const Callback<> &done);
   void removeDePool(const QByteArray &publicKey, const QString &dePoolAddress);
 
-  void addToken(const QByteArray &publicKey, const QString &rootContractAddress, const Callback<>& done);
+  void addToken(const QByteArray &publicKey, const QString &rootContractAddress, const Callback<> &done);
   void removeToken(const QByteArray &publicKey, const QString &rootContractAddress);
 
   static void EnableLogging(bool enabled, const QString &basePath);
