@@ -98,6 +98,10 @@ class Wallet final : public base::has_weak_ptr {
                         const CancelWithdrawalTransactionToSend &transaction, Callback<PendingTransaction> ready,
                         Callback<> done);
 
+  void deployTokenWallet(const QByteArray &publicKey, const QByteArray &password,
+                         const DeployTokenWalletTransactionToSend &transaction, Callback<PendingTransaction> ready,
+                         Callback<> done);
+
   void openGate(const QString &rawAddress, std::optional<Symbol> token = {});
   void openReveal(const QString &rawAddress, const QString &ethereumAddress);
 
