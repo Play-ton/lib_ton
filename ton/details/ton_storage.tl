@@ -24,6 +24,7 @@ storage.tokenState
     walletContractAddress:bytes
     name:bytes
     decimals:int32
+    lastTransactions:storage.TransactionsSlice
     balance:int64 = storage.TokenState;
 storage.dePoolState
     address:string

@@ -204,7 +204,7 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
                                         .dePoolParticipantStates = std::move(dePoolParticipantStates)},
                             RefreshSource::Remote);
     };
-    _owner->requestTransactions(viewers->publicKey, address, lastTransactionId, received);
+    _owner->requestTransactions(address, lastTransactionId, received);
   }}};
 
   _owner->requestState(address, [=](Result<AccountState> result) {
@@ -399,6 +399,7 @@ void AccountViewers::addToken(const QString &account, TokenState &&tokenState) {
         TokenStateValue{
             .rootContractAddress = tokenState.rootContractAddress,
             .walletContractAddress = tokenState.walletContractAddress,
+            .lastTransactions = tokenState.lastTransactions,
             .balance = tokenState.balance,
         });
     saveNewState(i->second, std::move(state), RefreshSource::Remote);

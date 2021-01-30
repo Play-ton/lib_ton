@@ -163,9 +163,31 @@ TLftabi_Function TokenTransferFunction() {
                                    tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
                                }),
                                tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramAddress(),            // recipient
+                                   tl_ftabi_paramAddress(),            // to
                                    tl_ftabi_paramUint(tl_int32(128)),  // tokens
-                                   tl_ftabi_paramUint(tl_int32(126))   // grams
+                                   tl_ftabi_paramUint(tl_int32(128))   // grams
+                               }),
+                               {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function TokenInternalTransferFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("internalTransfer"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
+                                   tl_ftabi_paramUint(tl_int32(256)),  // sender_public_key
+                                   tl_ftabi_paramAddress(),            // sender_address
+                                   tl_ftabi_paramAddress(),            // send_gas_to
                                }),
                                {}));
     Expects(createdFunction.has_value());
@@ -368,8 +390,26 @@ std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
     return std::nullopt;
   }
 
-  return TokenTransfer{.dest = args[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
-                       .value = args[1].c_ftabi_valueInt().vvalue().v};
+  return TokenTransfer{.address = args[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
+                       .value = args[1].c_ftabi_valueInt().vvalue().v,
+                       .incoming = false};
+}
+
+std::optional<TokenTransfer> ParseInternalTokenTransfer(const QByteArray &body) {
+  const auto decodedTransferInput =
+      RequestSender::Execute(TLftabi_DecodeInput(TokenInternalTransferFunction(), tl_bytes(body), tl_boolTrue()));
+  if (!decodedTransferInput.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto args = decodedTransferInput.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 4 || args[0].type() != id_ftabi_valueInt || args[2].type() != id_ftabi_valueAddress) {
+    return std::nullopt;
+  }
+
+  return TokenTransfer{.address = args[2].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
+                       .value = args[0].c_ftabi_valueInt().vvalue().v,
+                       .incoming = true};
 }
 
 std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
@@ -401,7 +441,7 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
   }
   */
 
-  return TokenSwapBack{.dest = "0xTODO", .value = args[0].c_ftabi_valueInt().vvalue().v};
+  return TokenSwapBack{.address = "0xTODO", .value = args[0].c_ftabi_valueInt().vvalue().v};
 }
 
 std::optional<DePoolOrdinaryStakeTransaction> ParseOrdinaryStakeTransfer(const QByteArray &body) {
@@ -648,6 +688,8 @@ std::optional<Ton::TokenTransaction> Wallet::ParseTokenTransaction(const Ton::Me
 
   if (auto transfer = ParseTokenTransfer(message.data); transfer.has_value()) {
     return *transfer;
+  } else if (auto internalTransfer = ParseInternalTokenTransfer(message.data); internalTransfer.has_value()) {
+    return *internalTransfer;
   } else if (auto swapBack = ParseTokenSwapBack(message.data); swapBack.has_value()) {
     return *swapBack;
   } else {
@@ -986,8 +1028,8 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
   _external->lib()
       .request(TLCreateQuery(
           tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.walletContractAddress)),
-                                                   tl_string(), tl_int64(transaction.realAmount),
+          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.recipient)), tl_string(),
+                                                   tl_int64(TokenTransactionToSend::realAmount),
                                                    tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
                                                    tl_int32(kDefaultMessageFlags))),
                        tl_from(false)),
@@ -1533,8 +1575,6 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
         .send();
   };
 
-  constexpr int64 ONE_TON = 1'000'000'000;
-
   _external->lib()
       .request(TLGetAccountState(tl_accountAddress(tl_string(rawRootContractAddress))))
       .done([this, done, account, rawRootContractAddress, getWalletAddress](TLFullAccountState &&result) {
@@ -1550,7 +1590,7 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
                 tl_accountAddress(tl_string(rawRootContractAddress)),                           //
                 tl_int64(info.vlast_transaction_id().c_internal_transactionId().vlt().v + 10),  //
                 tl_int32(static_cast<int32>(info.vsync_utime().v)),                             //
-                tl_int64(100 * ONE_TON),                                                        //
+                info.vbalance(),                                                                //
                 accountState.vdata(),                                                           //
                 accountState.vcode(),                                                           //
                 RootTokenGetDetails(),                                                          //
@@ -1586,7 +1626,7 @@ void Wallet::requestState(const QString &address, const Callback<AccountState> &
       .send();
 }
 
-void Wallet::requestTransactions(const QByteArray &publicKey, const QString &address, const TransactionId &lastId,
+void Wallet::requestTransactions(const QString &address, const TransactionId &lastId,
                                  const Callback<TransactionsSlice> &done) {
   _external->lib()
       .request(TLraw_GetTransactions(tl_inputKeyFake(), tl_accountAddress(tl_string(address)),
@@ -1613,10 +1653,12 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
 
     void notifySuccess(TokenState &&tokenState) {
       std::unique_lock lock{mutex};
-      result.insert(
-          std::make_pair(tokenState.token, TokenStateValue{.rootContractAddress = tokenState.rootContractAddress,
-                                                           .walletContractAddress = tokenState.walletContractAddress,
-                                                           .balance = tokenState.balance}));
+      result.insert(std::make_pair(  //
+          tokenState.token,          //
+          TokenStateValue{.rootContractAddress = tokenState.rootContractAddress,
+                          .walletContractAddress = tokenState.walletContractAddress,
+                          .lastTransactions = tokenState.lastTransactions,
+                          .balance = tokenState.balance}));
       checkComplete(tokenState.token);
     }
 
@@ -1642,30 +1684,74 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
 
   for (const auto &[symbol, token] : previousStates) {
     _external->lib()
-        .request(TLftabi_RunLocal(tl_accountAddress(tl_string(token.walletContractAddress)), TokenGetBalance(),
-                                  tl_ftabi_functionCallExternal({}, {})))
-        .done([=, symbol = symbol, token = token](const TLftabi_decodedOutput &result) {
-          const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
-          if (results.empty() || results[0].type() != id_ftabi_valueInt) {
-            //InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
-            std::cout << "failed to parse results";
-            ctx->notifyError(symbol);
-          } else {
-            const auto balance = results[0].c_ftabi_valueInt().vvalue().v;
-
-            ctx->notifySuccess(TokenState{.token = symbol,
-                                          .rootContractAddress = token.rootContractAddress,
-                                          .walletContractAddress = token.walletContractAddress,
-                                          .balance = balance});
+        .request(TLGetAccountState(tl_accountAddress(tl_string(token.walletContractAddress))))
+        .done([=, symbol = symbol, token = token](TLFullAccountState &&result) mutable {
+          if (result.c_fullAccountState().vaccount_state().type() == id_uninited_accountState) {
+            return ctx->notifySuccess(TokenState{.token = symbol,
+                                                 .rootContractAddress = token.rootContractAddress,
+                                                 .walletContractAddress = token.walletContractAddress,
+                                                 .balance = 0});
+          } else if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState) {
+            return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a token wallet contract"});
           }
+
+          const auto lastId = Parse(result.c_fullAccountState().vlast_transaction_id());
+
+          auto getBalance = [=, result = std::move(result)](TransactionsSlice &&lastTransactions) {
+            const auto &info = result.c_fullAccountState();
+            const auto &accountState = result.c_fullAccountState().vaccount_state().c_raw_accountState();
+
+            _external->lib()
+                .request(TLftabi_RunLocalCachedSplit(                                               //
+                    tl_accountAddress(tl_string(token.walletContractAddress)),                      //
+                    tl_int64(info.vlast_transaction_id().c_internal_transactionId().vlt().v + 10),  //
+                    tl_int32(static_cast<int32>(info.vsync_utime().v)),                             //
+                    info.vbalance(),                                                                //
+                    accountState.vdata(),                                                           //
+                    accountState.vcode(),                                                           //
+                    TokenGetBalance(),                                                              //
+                    tl_ftabi_functionCallExternal({}, {})))
+                .done([=, result = std::move(result)](const TLftabi_decodedOutput &balanceOutput) mutable {
+                  const auto &results = balanceOutput.c_ftabi_decodedOutput().vvalues().v;
+                  if (results.empty() || results[0].type() != id_ftabi_valueInt) {
+                    //InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
+                    return ctx->notifyError(symbol);
+                  }
+
+                  const auto balance = results[0].c_ftabi_valueInt().vvalue().v;
+                  ctx->notifySuccess(  //
+                      TokenState{.token = symbol,
+                                 .rootContractAddress = token.rootContractAddress,
+                                 .walletContractAddress = token.walletContractAddress,
+                                 .lastTransactions = std::forward<TransactionsSlice>(lastTransactions),
+                                 .balance = balance});
+                })
+                .fail([=](const TLError &error) {
+                  std::cout << "error in RootTokenContract.getDetails: " << error.c_error().vmessage().v.toStdString()
+                            << std::endl;
+                  ctx->notifyError(symbol);
+                })
+                .send();
+          };
+
+          if (lastId.lt == token.lastTransactions.previousId.lt) {
+            return getBalance(std::move(token.lastTransactions));
+          }
+          _external->lib()
+              .request(TLraw_GetTransactions(tl_inputKeyFake(),
+                                             tl_accountAddress(tl_string(token.walletContractAddress)),
+                                             tl_internal_transactionId(tl_int64(lastId.lt), tl_bytes(lastId.hash))))
+              .done(
+                  [getBalance = std::move(getBalance)](const TLraw_Transactions &result) { getBalance(Parse(result)); })
+              .fail([=](const TLError &) {
+                // InvokeCallback(done, ErrorFromLib(error));
+                ctx->notifyError(symbol);
+              })
+              .send();
         })
-        .fail([=, symbol = symbol, token = token](const TLError &error) {
-          //ctx->notifyError(symbol);
-          ctx->notifySuccess(TokenState{.token = symbol,
-                                        .rootContractAddress = token.rootContractAddress,
-                                        .walletContractAddress = token.walletContractAddress,
-                                        .balance = 0});
-          //InvokeCallback(done, ErrorFromLib(error));
+        .fail([=, symbol = symbol](const TLError &) {
+          // InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get token wallet state"});
+          ctx->notifyError(symbol);
         })
         .send();
   }

@@ -110,34 +110,6 @@ bool operator==(const AccountState &a, const AccountState &b);
 
 bool operator!=(const AccountState &a, const AccountState &b);
 
-struct TokenState {
-  Symbol token;
-  QString rootContractAddress;
-  QString walletContractAddress;
-  int64 balance = kUnknownBalance;
-};
-
-bool operator==(const TokenState &a, const TokenState &b);
-
-bool operator!=(const TokenState &a, const TokenState &b);
-
-struct TokenStateValue {
-  QString rootContractAddress;
-  QString walletContractAddress;
-  int64 balance = kUnknownBalance;
-
-  [[nodiscard]] auto withSymbol(Symbol symbol) const -> TokenState {
-    return TokenState{.token = std::move(symbol),
-                      .rootContractAddress = rootContractAddress,
-                      .walletContractAddress = walletContractAddress,
-                      .balance = balance};
-  }
-};
-
-bool operator==(const TokenStateValue &a, const TokenStateValue &b);
-
-bool operator!=(const TokenStateValue &a, const TokenStateValue &b);
-
 struct RootTokenContractDetails {
   QString name;
   QString symbol;
@@ -176,13 +148,14 @@ using DePoolStatesMap = std::map<QString, DePoolParticipantState>;
 enum class MessageDataType { PlainText, EncryptedText, DecryptedText, RawBody };
 
 struct TokenTransfer {
-  QString dest;
-  int64 value = 0;
+  QString address;
+  int64 value{};
+  bool incoming{};
 };
 
 struct TokenSwapBack {
-  QString dest;
-  int64 value = 0;
+  QString address;
+  int64 value{};
 };
 
 using TokenTransaction = std::variant<TokenTransfer, TokenSwapBack>;
@@ -252,6 +225,37 @@ bool operator==(const TransactionsSlice &a, const TransactionsSlice &b);
 
 bool operator!=(const TransactionsSlice &a, const TransactionsSlice &b);
 
+struct TokenState {
+  Symbol token;
+  QString rootContractAddress;
+  QString walletContractAddress;
+  TransactionsSlice lastTransactions;
+  int64 balance = kUnknownBalance;
+};
+
+bool operator==(const TokenState &a, const TokenState &b);
+
+bool operator!=(const TokenState &a, const TokenState &b);
+
+struct TokenStateValue {
+  QString rootContractAddress;
+  QString walletContractAddress;
+  TransactionsSlice lastTransactions;
+  int64 balance = kUnknownBalance;
+
+  [[nodiscard]] auto withSymbol(Symbol symbol) const -> TokenState {
+    return TokenState{.token = std::move(symbol),
+                      .rootContractAddress = rootContractAddress,
+                      .walletContractAddress = walletContractAddress,
+                      .lastTransactions = lastTransactions,
+                      .balance = balance};
+  }
+};
+
+bool operator==(const TokenStateValue &a, const TokenStateValue &b);
+
+bool operator!=(const TokenStateValue &a, const TokenStateValue &b);
+
 struct TransactionToSend {
   int64 amount = 0;
   QString recipient;
@@ -262,7 +266,7 @@ struct TransactionToSend {
 };
 
 struct TokenTransactionToSend {
-  constexpr static int64 realAmount = 10'000'000;  // 0.01 TON
+  constexpr static int64 realAmount = 500'000'000;  // 0.5 TON
   QString walletContractAddress;
   int64 amount = 0;
   QString recipient;

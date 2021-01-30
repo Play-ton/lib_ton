@@ -19,7 +19,7 @@ bool operator!=(const Symbol &a, const Symbol &b) {
 }
 
 bool operator<(const Symbol &a, const Symbol &b) {
-  return a.isTon() ||
+  return a.isTon() && b.isToken() ||
          a.isToken() && b.isToken() && (a.name() < b.name() || a.name() == b.name() && a.decimals() < b.decimals());
 }
 
@@ -36,8 +36,8 @@ bool operator!=(const TransactionId &a, const TransactionId &b) {
 }
 
 bool operator==(const TokenState &a, const TokenState &b) {
-  return (a.token == b.token) && (a.balance == b.balance) && (a.rootContractAddress == b.rootContractAddress) &&
-         (a.walletContractAddress == b.walletContractAddress);
+  return (a.token == b.token) && (a.balance == b.balance) && (a.lastTransactions == b.lastTransactions) &&
+         (a.rootContractAddress == b.rootContractAddress) && (a.walletContractAddress == b.walletContractAddress);
 }
 
 bool operator!=(const TokenState &a, const TokenState &b) {
@@ -45,8 +45,8 @@ bool operator!=(const TokenState &a, const TokenState &b) {
 }
 
 bool operator==(const TokenStateValue &a, const TokenStateValue &b) {
-  return (a.balance == b.balance) && (a.rootContractAddress == b.rootContractAddress) &&
-         (a.walletContractAddress == b.walletContractAddress);
+  return (a.balance == b.balance) && (a.lastTransactions == b.lastTransactions) &&
+         (a.rootContractAddress == b.rootContractAddress) && (a.walletContractAddress == b.walletContractAddress);
 }
 
 bool operator!=(const TokenStateValue &a, const TokenStateValue &b) {

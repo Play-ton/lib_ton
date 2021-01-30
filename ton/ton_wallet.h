@@ -133,7 +133,7 @@ class Wallet final : public base::has_weak_ptr {
 
   // Internal API.
   void requestState(const QString &address, const Callback<AccountState> &done);
-  void requestTransactions(const QByteArray &publicKey, const QString &address, const TransactionId &lastId,
+  void requestTransactions(const QString &address, const TransactionId &lastId,
                            const Callback<TransactionsSlice> &done);
   void requestTokenStates(const CurrencyMap<TokenStateValue> &previousStates,
                           const Callback<CurrencyMap<TokenStateValue>> &done) const;

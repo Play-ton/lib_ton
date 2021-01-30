@@ -31,7 +31,7 @@ rpl::producer<WalletViewerState> AccountViewer::state() const {
   return rpl::duplicate(_state);
 }
 
-rpl::producer<Result<LoadedSlice>> AccountViewer::loaded() const {
+rpl::producer<Result<std::pair<Symbol, LoadedSlice>>> AccountViewer::loaded() const {
   return _loadedResults.events();
 }
 
@@ -72,11 +72,29 @@ void AccountViewer::preloadSlice(const TransactionId &lastId) {
         return;
       }
       _preloadIds.remove(lastId);
-      _loadedResults.fire(LoadedSlice{lastId, TransactionsSlice{std::move(*result), previousId}});
+      _loadedResults.fire(
+          std::make_pair(Ton::Symbol::ton(), LoadedSlice{lastId, TransactionsSlice{std::move(*result), previousId}}));
     };
     _wallet->trySilentDecrypt(_publicKey, std::move(result->list), done);
   };
-  _wallet->requestTransactions(_publicKey, _address, lastId, crl::guard(this, done));
+  _wallet->requestTransactions(_address, lastId, crl::guard(this, done));
+}
+
+void AccountViewer::preloadTokenSlice(const Symbol &symbol, const QString &tokenWalletAddress,
+                                      const TransactionId &lastId) {
+  if (_preloadIds.contains(lastId)) {
+    return;
+  }
+  _preloadIds.emplace(lastId);
+  const auto done = [this, symbol = symbol, lastId = lastId](Result<TransactionsSlice> result) {
+    if (!result) {
+      _loadedResults.fire(std::move(result.error()));
+      return;
+    }
+    _preloadIds.remove(lastId);
+    _loadedResults.fire(std::make_pair(symbol, LoadedSlice{lastId, std::move(result.value())}));
+  };
+  _wallet->requestTransactions(tokenWalletAddress, lastId, crl::guard(this, done));
 }
 
 }  // namespace Ton
