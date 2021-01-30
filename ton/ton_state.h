@@ -271,7 +271,10 @@ struct TokenTransactionToSend {
 };
 
 struct DeployTokenWalletTransactionToSend {
-  constexpr static int64 realAmount = 100'000'000; // 0.1 TON
+  constexpr static int64 realAmount = 500'000'000;      // 0.5 TON
+  constexpr static int64 initialBalance = 100'000'000;  // 0.1 TON
+  static_assert(realAmount > initialBalance);
+
   QString rootContractAddress;
   QString walletContractAddress;
   int timeout = 0;

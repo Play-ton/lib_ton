@@ -119,13 +119,12 @@ TLftabi_Function RootTokenDeployWallet() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
     const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("deployWallet"),
+        TLftabi_CreateFunction(tl_string("deployEmptyWallet"),
                                tl_vector(QVector<TLftabi_namedParam>{
                                    tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
                                    tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
                                }),
                                tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
                                    tl_ftabi_paramUint(tl_int32(128)),  // grams
                                    tl_ftabi_paramUint(tl_int32(256)),  // wallet_public_key
                                    tl_ftabi_paramAddress(),            // owner_address
@@ -573,11 +572,16 @@ Result<QByteArray> CreateCancelWithdrawalMessage() {
   return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
-Result<QByteArray> CreateTokenWalletDeployMessage() {
+Result<QByteArray> CreateTokenWalletDeployMessage(int64 grams, const QString &owner) {
   const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-      RootTokenDeployWallet(), tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-
-                                                                 }))));
+      RootTokenDeployWallet(),
+      tl_ftabi_functionCallInternal(
+          {}, tl_vector(QVector<TLftabi_Value>{
+                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(grams)),
+                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0)),
+                  tl_ftabi_valueAddress(tl_ftabi_paramAddress(), tl_accountAddress(tl_string(owner))),
+                  tl_ftabi_valueAddress(tl_ftabi_paramAddress(), tl_accountAddress(tl_string(owner))),
+              }))));
   if (!encodedBody.has_value()) {
     return encodedBody.error();
   }
@@ -1088,7 +1092,7 @@ void Wallet::checkDeployTokenWallet(const QByteArray &publicKey, const DeployTok
 
   const auto check = makeEstimateFeesCallback(done);
 
-  const auto body = CreateTokenWalletDeployMessage();
+  const auto body = CreateTokenWalletDeployMessage(transaction.initialBalance, sender);
   if (!body.has_value()) {
     return InvokeCallback(done, body.error());
   }
@@ -1313,7 +1317,7 @@ void Wallet::deployTokenWallet(const QByteArray &publicKey, const QByteArray &pa
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateTokenWalletDeployMessage();
+  const auto body = CreateTokenWalletDeployMessage(transaction.initialBalance, sender);
   if (!body.has_value()) {
     return InvokeCallback(done, body.error());
   }
@@ -1326,7 +1330,7 @@ void Wallet::deployTokenWallet(const QByteArray &publicKey, const QByteArray &pa
       .request(TLCreateQuery(
           prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
           tl_actionMsg(
-              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.walletContractAddress)), tl_string(),
+              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.rootContractAddress)), tl_string(),
                                           tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
                                           tl_int32(kDefaultMessageFlags))),
               tl_boolFalse()),
@@ -1338,7 +1342,7 @@ void Wallet::deployTokenWallet(const QByteArray &publicKey, const QByteArray &pa
           auto pending = Parse(result, sender,
                                TransactionToSend{
                                    .amount = realAmount,
-                                   .recipient = transaction.walletContractAddress,
+                                   .recipient = transaction.rootContractAddress,
                                    .timeout = transaction.timeout,
                                    .allowSendToUninited = false,
                                });
@@ -1528,8 +1532,6 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
         })
         .send();
   };
-
-  RequestSender::Execute(TLSetLogVerbosityLevel(tl_int32(7)));
 
   constexpr int64 ONE_TON = 1'000'000'000;
 
