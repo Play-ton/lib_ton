@@ -74,7 +74,7 @@ class Wallet final : public base::has_weak_ptr {
                       const Callback<TransactionCheckResult> &done);
 
   void checkSendTokens(const QByteArray &publicKey, const TokenTransactionToSend &transaction,
-                       const Callback<std::pair<TransactionCheckResult, std::optional<DirectRecipient>>> &done);
+                       const Callback<std::pair<TransactionCheckResult, TokenTransferCheckResult>> &done);
 
   void checkSendStake(const QByteArray &publicKey, const StakeTransactionToSend &transaction,
                       const Callback<TransactionCheckResult> &done);

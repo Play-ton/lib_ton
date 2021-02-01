@@ -789,8 +789,7 @@ bool Wallet::IsIncorrectPasswordError(const Error &error) {
 void Wallet::open(const QByteArray &globalPassword, const Settings &defaultSettings, Callback<> done) {
   auto opened = [=](Result<WalletList> result) {
     if (!result) {
-      InvokeCallback(done, result.error());
-      return;
+      return InvokeCallback(done, result.error());
     }
     setWalletList(*result);
     if (_switchedToMain) {
@@ -808,8 +807,7 @@ void Wallet::open(const QByteArray &globalPassword, const Settings &defaultSetti
 void Wallet::start(Callback<> done) {
   _external->start([=](Result<ConfigInfo> result) {
     if (!result) {
-      InvokeCallback(done, result.error());
-      return;
+      return InvokeCallback(done, result.error());
     }
     _configInfo = *result;
     InvokeCallback(done);
@@ -844,8 +842,7 @@ void Wallet::updateSettings(Settings settings, Callback<> done) {
 
   const auto finish = [=](Result<ConfigInfo> result) {
     if (!result) {
-      InvokeCallback(done, result.error());
-      return;
+      return InvokeCallback(done, result.error());
     }
     Expects(!_configInfo || (_configInfo->walletId == result->walletId) || detach || change);
     _configInfo = *result;
@@ -859,14 +856,12 @@ void Wallet::updateSettings(Settings settings, Callback<> done) {
   settings.useTestNetwork = was.useTestNetwork;
   _external->updateSettings(settings, [=](Result<ConfigInfo> result) {
     if (!result) {
-      InvokeCallback(done, result.error());
-      return;
+      return InvokeCallback(done, result.error());
     }
     // Then logout and switch the network.
     deleteAllKeys([=](Result<> result) {
       if (!result) {
-        InvokeCallback(done, result.error());
-        return;
+        return InvokeCallback(done, result.error());
       }
       _external->switchNetwork(finish);
     });
@@ -933,8 +928,7 @@ void Wallet::saveKey(const QByteArray &password, const QString &address, Callbac
 
   auto saved = [=](Result<WalletList::Entry> result) {
     if (!result) {
-      InvokeCallback(done, result.error());
-      return;
+      return InvokeCallback(done, result.error());
     }
     const auto destroyed = base::take(_keyCreator);
     _list->entries.push_back(*result);
@@ -978,8 +972,7 @@ void Wallet::deleteKey(const QByteArray &publicKey, Callback<> done) {
   auto removed = [=](Result<> result) {
     const auto destroyed = base::take(_keyDestroyer);
     if (!result) {
-      InvokeCallback(done, result);
-      return;
+      return InvokeCallback(done, result);
     }
     _list->entries.erase(begin(_list->entries) + index);
     _viewersPasswords.erase(publicKey);
@@ -998,8 +991,7 @@ void Wallet::deleteAllKeys(Callback<> done) {
   auto removed = [=](Result<> result) {
     const auto destroyed = base::take(_keyDestroyer);
     if (!result) {
-      InvokeCallback(done, result);
-      return;
+      return InvokeCallback(done, result);
     }
     _list->entries.clear();
     _viewersPasswords.clear();
@@ -1019,8 +1011,7 @@ void Wallet::changePassword(const QByteArray &oldPassword, const QByteArray &new
   auto changed = [=](Result<std::vector<QByteArray>> result) {
     const auto destroyed = base::take(_passwordChanger);
     if (!result) {
-      InvokeCallback(done, result.error());
-      return;
+      return InvokeCallback(done, result.error());
     }
     Assert(result->size() == _list->entries.size());
     for (auto i = 0, count = int(result->size()); i != count; ++i) {
@@ -1049,7 +1040,7 @@ void Wallet::checkSendGrams(const QByteArray &publicKey, const TransactionToSend
 }
 
 void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransactionToSend &transaction,
-                             const Callback<std::pair<TransactionCheckResult, std::optional<DirectRecipient>>> &done) {
+                             const Callback<std::pair<TransactionCheckResult, TokenTransferCheckResult>> &done) {
   Expects(transaction.amount >= 0);
 
   const auto sender = getUsedAddress(publicKey);
@@ -1058,14 +1049,13 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
   if (transaction.tokenTransferType == TokenTransferType::SwapBack) {
     auto body = CreateSwapBackMessage(transaction.recipient, transaction.callbackAddress, transaction.amount);
     if (!body.has_value()) {
-      InvokeCallback(done, body.error());
-      return;
+      return InvokeCallback(done, body.error());
     }
     return checkTransactionFees(  //
         sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
         TokenTransactionToSend::realAmount, transaction.timeout, false, [=](Result<TransactionCheckResult> &&result) {
           if (result.has_value()) {
-            done(std::make_pair(std::move(result.value()), std::nullopt));
+            done(std::make_pair(std::move(result.value()), TokenTransferUnchanged{}));
           } else {
             done(result.error());
           }
@@ -1079,20 +1069,19 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
           const auto isUninit = result.c_fullAccountState().vaccount_state().type() == id_uninited_accountState;
 
           if (isUninit && transaction.tokenTransferType == TokenTransferType::Direct) {
-            done(Error{Error::Type::IO, "recipient token wallet not found"});
+            done(std::make_pair(TransactionCheckResult{}, DirectAccountNotFound{}));
           } else if (isUninit) {
             auto body = CreateTokenTransferToOwnerMessage(transaction.recipient, transaction.amount,
                                                           TokenTransactionToSend::initialBalance);
             if (!body.has_value()) {
-              InvokeCallback(done, body.error());
-              return;
+              return InvokeCallback(done, body.error());
             }
             checkTransactionFees(  //
                 sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
                 TokenTransactionToSend::realAmount, transaction.timeout, false,
                 [=](Result<TransactionCheckResult> result) {
                   if (result.has_value()) {
-                    done(std::make_pair(std::move(result.value()), std::nullopt));
+                    done(std::make_pair(std::move(result.value()), TokenTransferUnchanged{}));
                   } else {
                     done(result.error());
                   }
@@ -1100,18 +1089,17 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
           } else {
             auto body = CreateTokenMessage(recipientTokenWallet, transaction.amount);
             if (!body.has_value()) {
-              InvokeCallback(done, body.error());
-              return;
+              return InvokeCallback(done, body.error());
             }
-            auto newRecipient = transaction.tokenTransferType == TokenTransferType::ToOwner
-                                    ? std::optional<DirectRecipient>{DirectRecipient{recipientTokenWallet}}
-                                    : std::nullopt;
+            auto transferCheckResult = transaction.tokenTransferType == TokenTransferType::ToOwner
+                                           ? TokenTransferCheckResult{DirectRecipient{recipientTokenWallet}}
+                                           : TokenTransferCheckResult{TokenTransferUnchanged{}};
             checkTransactionFees(  //
                 sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
                 TokenTransactionToSend::realAmount, transaction.timeout, false,
                 [=](Result<TransactionCheckResult> result) {
                   if (result.has_value()) {
-                    done(std::make_pair(std::move(result.value()), std::move(newRecipient)));
+                    done(std::make_pair(std::move(result.value()), std::move(transferCheckResult)));
                   } else {
                     done(result.error());
                   }
@@ -1247,8 +1235,7 @@ void Wallet::sendTokens(const QByteArray &publicKey, const QByteArray &password,
     }
   }
   if (!body.has_value()) {
-    InvokeCallback(done, body.error());
-    return;
+    return InvokeCallback(done, body.error());
   }
 
   const auto realAmount = TokenTransactionToSend::realAmount;
@@ -1320,8 +1307,7 @@ void Wallet::sendStake(const QByteArray &publicKey, const QByteArray &password,
 
   const auto body = CreateStakeMessage(transaction.stake);
   if (!body.has_value()) {
-    InvokeCallback(done, body.error());
-    return;
+    return InvokeCallback(done, body.error());
   }
 
   const auto realAmount = StakeTransactionToSend::depoolFee + transaction.stake;
@@ -1711,8 +1697,7 @@ void Wallet::decrypt(const QByteArray &publicKey, std::vector<Transaction> &&lis
                      const Callback<std::vector<Transaction>> &done) {
   const auto encrypted = CollectEncryptedTexts(list);
   if (encrypted.empty()) {
-    InvokeCallback(done, std::move(list));
-    return;
+    return InvokeCallback(done, std::move(list));
   }
   const auto shared = std::make_shared<std::vector<Transaction>>(std::move(list));
   const auto password = _viewersPasswords[publicKey];
@@ -1744,8 +1729,7 @@ void Wallet::trySilentDecrypt(const QByteArray &publicKey, std::vector<Transacti
                               const Callback<std::vector<Transaction>> &done) {
   const auto encrypted = CollectEncryptedTexts(list);
   if (encrypted.empty() || !_viewersPasswords.contains(publicKey)) {
-    InvokeCallback(done, std::move(list));
-    return;
+    return InvokeCallback(done, std::move(list));
   }
   const auto shared = std::make_shared<std::vector<Transaction>>(std::move(list));
   const auto password = _viewersPasswords[publicKey];

@@ -330,9 +330,13 @@ struct TransactionCheckResult {
   std::vector<TransactionFees> destinationFees;
 };
 
+struct TokenTransferUnchanged {};
+struct DirectAccountNotFound {};
 struct DirectRecipient {
   QString address;
 };
+
+using TokenTransferCheckResult = std::variant<TokenTransferUnchanged, DirectAccountNotFound, DirectRecipient>;
 
 struct PendingTransaction {
   Transaction fake;
