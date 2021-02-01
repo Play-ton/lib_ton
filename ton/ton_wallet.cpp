@@ -174,6 +174,29 @@ TLftabi_Function TokenTransferFunction() {
   return *function;
 }
 
+TLftabi_Function TokenTransferToOwnerFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("transferToRecipient"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(256)),  // recipient_public_key
+                                   tl_ftabi_paramAddress(),            // recipient_address
+                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
+                                   tl_ftabi_paramUint(tl_int32(128)),  // deploy_grams
+                                   tl_ftabi_paramUint(tl_int32(128)),  // transfer_grams
+                               }),
+                               {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
 TLftabi_Function TokenInternalTransferFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
@@ -425,12 +448,17 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
     return std::nullopt;
   }
 
-  // TODO:
+  const auto decodedSwapBackPayload = RequestSender::Execute(TLftabi_UnpackFromCell(
+      args[3].c_ftabi_valueCell().vvalue(), tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramBytes()})));
+  if (!decodedSwapBackPayload.has_value()) {
+    return std::nullopt;
+  }
 
-  /*
+  const auto &payload = decodedSwapBackPayload.value().c_ftabi_decodedOutput().vvalues().v;
+
   constexpr auto ethereumAddressByteCount = 20;
 
-  auto address = args[2].c_ftabi_valueBigInt().vvalue().v;
+  auto address = payload[0].c_ftabi_valueBytes().vvalue().v;
   auto addressSize = address.size();
   if (addressSize < ethereumAddressByteCount) {
     return std::nullopt;
@@ -439,9 +467,8 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
     std::memmove(address.data(), address.data() + addressDelta, ethereumAddressByteCount);
     address.resize(ethereumAddressByteCount);
   }
-  */
 
-  return TokenSwapBack{.address = "0xTODO", .value = args[0].c_ftabi_valueInt().vvalue().v};
+  return TokenSwapBack{.address = "0x" + address.toHex(), .value = args[0].c_ftabi_valueInt().vvalue().v};
 }
 
 std::optional<DePoolOrdinaryStakeTransaction> ParseOrdinaryStakeTransfer(const QByteArray &body) {
@@ -542,14 +569,42 @@ Result<QByteArray> CreateTokenMessage(const QString &recipient, int64 amount) {
   return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
-Result<QByteArray> CreateSwapBackMessage(const QString &etheriumAddress, int64 amount) {
+Result<QByteArray> CreateTokenTransferToOwnerMessage(const QString &recipient, int64 amount, int64 deployGrams) {
+  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
+      TokenTransferToOwnerFunction(),
+      tl_ftabi_functionCallInternal(
+          {}, tl_vector(QVector<TLftabi_Value>{
+                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0)),  // recipient_public_key
+                  tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
+                                        tl_accountAddress(tl_string(recipient))),               // recipient_address
+                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(amount)),       // tokens
+                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(deployGrams)),  // deploy_grams
+                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(0)),            // transfer_grams
+              }))));
+  if (!encodedBody.has_value()) {
+    return encodedBody.error();
+  }
+
+  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+}
+
+Result<QByteArray> CreateSwapBackMessage(const QString &etheriumAddress, const QString &callback_address,
+                                         int64 amount) {
+  constexpr auto invalid_ethereum_address = "invalid ethereum address";
   if (!etheriumAddress.startsWith("0x")) {
-    return Error{Error::Type::IO, "invalid etherium address"};
+    return Error{Error::Type::IO, invalid_ethereum_address};
   }
   const auto target = etheriumAddress.mid(2, -1);
   const auto targetBytes = QByteArray::fromHex(target.toUtf8());
+  if (targetBytes.size()) {
+    return Error{Error::Type::IO, invalid_ethereum_address};
+  }
 
-  // TODO:
+  auto callback_payload = RequestSender::Execute(TLftabi_PackIntoCell(
+      tl_vector(QVector<TLftabi_Value>{tl_ftabi_valueBytes(tl_ftabi_paramBytes(), tl_bytes(targetBytes))})));
+  if (!callback_payload.has_value()) {
+    return callback_payload.error();
+  }
 
   const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
       TokenSwapBackFunction(),
@@ -557,8 +612,9 @@ Result<QByteArray> CreateSwapBackMessage(const QString &etheriumAddress, int64 a
           {}, tl_vector(QVector<TLftabi_Value>{
                   tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(amount)),  // tokens
                   tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(0)),       // grams
-                  tl_ftabi_valueBigInt(tl_ftabi_paramUint(tl_int32(256)),
-                                       tl_string(targetBytes))  // ethereumAddress
+                  tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
+                                        tl_accountAddress(tl_string(callback_address))),  // callback_address
+                  tl_ftabi_valueCell(tl_ftabi_paramCell(), callback_payload.value()),     // callback_payload
               }))));
   if (!encodedBody.has_value()) {
     return encodedBody.error();
@@ -980,280 +1036,230 @@ void Wallet::changePassword(const QByteArray &oldPassword, const QByteArray &new
 }
 
 void Wallet::checkSendGrams(const QByteArray &publicKey, const TransactionToSend &transaction,
-                            Callback<TransactionCheckResult> done) {
+                            const Callback<TransactionCheckResult> &done) {
   Expects(transaction.amount >= 0);
 
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto check = makeEstimateFeesCallback(done);
-
-  _external->lib()
-      .request(TLCreateQuery(
-          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.recipient)), tl_string(),
-                                                   tl_int64(transaction.amount),
-                                                   (transaction.sendUnencryptedText
-                                                        ? tl_msg_dataText
-                                                        : tl_msg_dataDecryptedText)(tl_string(transaction.comment)),
-                                                   tl_int32(kDefaultMessageFlags))),
-                       tl_from(transaction.allowSendToUninited)),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
-      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
-      .send();
+  checkTransactionFees(
+      sender, transaction.recipient,
+      (transaction.sendUnencryptedText ? tl_msg_dataText : tl_msg_dataDecryptedText)(tl_string(transaction.comment)),
+      transaction.amount, transaction.timeout, transaction.allowSendToUninited, done);
 }
 
 void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransactionToSend &transaction,
-                             Callback<TransactionCheckResult> done) {
+                             const Callback<std::pair<TransactionCheckResult, std::optional<DirectRecipient>>> &done) {
   Expects(transaction.amount >= 0);
 
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  Result<QByteArray> body{};
-  if (!transaction.swapBack) {
-    body = CreateTokenMessage(transaction.recipient, transaction.amount);
+  if (transaction.tokenTransferType == TokenTransferType::SwapBack) {
+    auto body = CreateSwapBackMessage(transaction.recipient, transaction.callbackAddress, transaction.amount);
+    if (!body.has_value()) {
+      InvokeCallback(done, body.error());
+      return;
+    }
+    return checkTransactionFees(  //
+        sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+        TokenTransactionToSend::realAmount, transaction.timeout, false, [=](Result<TransactionCheckResult> &&result) {
+          if (result.has_value()) {
+            done(std::make_pair(std::move(result.value()), std::nullopt));
+          } else {
+            done(result.error());
+          }
+        });
+  }
+
+  const auto checkWalletAddress = [=](const QString &recipientTokenWallet) {
+    _external->lib()
+        .request(TLGetAccountState(tl_accountAddress(tl_string(recipientTokenWallet))))
+        .done([=](const TLFullAccountState &result) {
+          const auto isUninit = result.c_fullAccountState().vaccount_state().type() == id_uninited_accountState;
+
+          if (isUninit && transaction.tokenTransferType == TokenTransferType::Direct) {
+            done(Error{Error::Type::IO, "recipient token wallet not found"});
+          } else if (isUninit) {
+            auto body = CreateTokenTransferToOwnerMessage(transaction.recipient, transaction.amount,
+                                                          TokenTransactionToSend::initialBalance);
+            if (!body.has_value()) {
+              InvokeCallback(done, body.error());
+              return;
+            }
+            checkTransactionFees(  //
+                sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                TokenTransactionToSend::realAmount, transaction.timeout, false,
+                [=](Result<TransactionCheckResult> result) {
+                  if (result.has_value()) {
+                    done(std::make_pair(std::move(result.value()), std::nullopt));
+                  } else {
+                    done(result.error());
+                  }
+                });
+          } else {
+            auto body = CreateTokenMessage(recipientTokenWallet, transaction.amount);
+            if (!body.has_value()) {
+              InvokeCallback(done, body.error());
+              return;
+            }
+            auto newRecipient = transaction.tokenTransferType == TokenTransferType::ToOwner
+                                    ? std::optional<DirectRecipient>{DirectRecipient{recipientTokenWallet}}
+                                    : std::nullopt;
+            checkTransactionFees(  //
+                sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                TokenTransactionToSend::realAmount, transaction.timeout, false,
+                [=](Result<TransactionCheckResult> result) {
+                  if (result.has_value()) {
+                    done(std::make_pair(std::move(result.value()), std::move(newRecipient)));
+                  } else {
+                    done(result.error());
+                  }
+                });
+          }
+        })
+        .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+        .send();
+  };
+
+  if (transaction.tokenTransferType == Ton::TokenTransferType::ToOwner) {
+    _external->lib()
+        .request(TLftabi_RunLocal(                                          //
+            tl_accountAddress(tl_string(transaction.rootContractAddress)),  //
+            RootTokenGetWalletAddress(),                                    //
+            tl_ftabi_functionCallExternal(
+                {}, tl_vector(QVector<TLftabi_Value>{
+                        tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0)),  //
+                        tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
+                                              tl_accountAddress(tl_string(transaction.recipient))),  //
+                    }))))
+        .done([=](const TLftabi_decodedOutput &decodedOutput) {
+          const auto &tokens = decodedOutput.c_ftabi_decodedOutput().vvalues().v;
+          const auto walletAddress = tokens[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v;
+          checkWalletAddress(walletAddress);
+        })
+        .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+        .send();
+  } else if (transaction.tokenTransferType == Ton::TokenTransferType::Direct) {
+    checkWalletAddress(transaction.recipient);
   } else {
-    body = CreateSwapBackMessage(transaction.recipient, transaction.amount);
+    Unexpected("Unreachable");
   }
-  if (!body.has_value()) {
-    InvokeCallback(done, body.error());
-    return;
-  }
-
-  const auto check = makeEstimateFeesCallback(done);
-
-  _external->lib()
-      .request(TLCreateQuery(
-          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.recipient)), tl_string(),
-                                                   tl_int64(TokenTransactionToSend::realAmount),
-                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                                   tl_int32(kDefaultMessageFlags))),
-                       tl_from(false)),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
-      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
-      .send();
 }
 
 void Wallet::checkSendStake(const QByteArray &publicKey, const StakeTransactionToSend &transaction,
-                            Callback<TransactionCheckResult> done) {
+                            const Callback<TransactionCheckResult> &done) {
   Expects(transaction.stake >= 0);
 
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
-
-  const auto check = makeEstimateFeesCallback(done);
-
-  const auto realAmount = StakeTransactionToSend::depoolFee + transaction.stake;
 
   const auto body = CreateStakeMessage(transaction.stake);
   if (!body.has_value()) {
     return InvokeCallback(done, body.error());
   }
 
-  _external->lib()
-      .request(TLCreateQuery(
-          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(
-              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
-                                          tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                          tl_int32(kDefaultMessageFlags))),
-              tl_boolFalse()),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
-      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
-      .send();
+  const auto realAmount = StakeTransactionToSend::depoolFee + transaction.stake;
+  checkTransactionFees(sender, transaction.depoolAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                       realAmount, transaction.timeout, false, done);
 }
 
 void Wallet::checkWithdraw(const QByteArray &publicKey, const WithdrawalTransactionToSend &transaction,
-                           Callback<TransactionCheckResult> done) {
+                           const Callback<TransactionCheckResult> &done) {
   Expects(transaction.all || transaction.amount >= 0);
 
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
-
-  const auto check = makeEstimateFeesCallback(done);
 
   const auto body = CreateWithdrawalMessage(transaction.amount, transaction.all);
   if (!body.has_value()) {
     return InvokeCallback(done, body.error());
   }
 
-  _external->lib()
-      .request(TLCreateQuery(
-          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
-                                                   tl_int64(transaction.depoolFee),
-                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                                   tl_int32(kDefaultMessageFlags))),
-                       tl_boolFalse()),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
-      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
-      .send();
+  checkTransactionFees(sender, transaction.depoolAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                       WithdrawalTransactionToSend::depoolFee, transaction.timeout, false, done);
 }
 
 void Wallet::checkCancelWithdraw(const QByteArray &publicKey, const CancelWithdrawalTransactionToSend &transaction,
-                                 Callback<TransactionCheckResult> done) {
+                                 const Callback<TransactionCheckResult> &done) {
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
-
-  const auto check = makeEstimateFeesCallback(done);
 
   const auto body = CreateCancelWithdrawalMessage();
   if (!body.has_value()) {
     return InvokeCallback(done, body.error());
   }
 
-  _external->lib()
-      .request(TLCreateQuery(
-          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
-                                                   tl_int64(CancelWithdrawalTransactionToSend::depoolFee),
-                                                   tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                                   tl_int32(kDefaultMessageFlags))),
-                       tl_boolFalse()),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
-      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
-      .send();
+  checkTransactionFees(sender, transaction.depoolAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                       CancelWithdrawalTransactionToSend::depoolFee, transaction.timeout, false, done);
 }
 
 void Wallet::checkDeployTokenWallet(const QByteArray &publicKey, const DeployTokenWalletTransactionToSend &transaction,
-                                    Callback<TransactionCheckResult> done) {
+                                    const Callback<TransactionCheckResult> &done) {
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto check = makeEstimateFeesCallback(done);
-
-  const auto body = CreateTokenWalletDeployMessage(transaction.initialBalance, sender);
+  const auto body = CreateTokenWalletDeployMessage(DeployTokenWalletTransactionToSend::initialBalance, sender);
   if (!body.has_value()) {
     return InvokeCallback(done, body.error());
   }
 
-  _external->lib()
-      .request(TLCreateQuery(
-          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(
-              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.rootContractAddress)), tl_string(),
-                                          tl_int64(DeployTokenWalletTransactionToSend::realAmount),
-                                          tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                          tl_int32(kDefaultMessageFlags))),
-              tl_boolFalse()),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
-      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
-      .send();
+  checkTransactionFees(sender, transaction.rootContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                       DeployTokenWalletTransactionToSend::realAmount, transaction.timeout, false, done);
 }
 
 void Wallet::sendGrams(const QByteArray &publicKey, const QByteArray &password, const TransactionToSend &transaction,
-                       Callback<PendingTransaction> ready, Callback<> done) {
+                       const Callback<PendingTransaction> &ready, const Callback<> &done) {
   Expects(transaction.amount >= 0);
 
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto send = makeSendCallback(std::move(done));
-
-  _external->lib()
-      .request(TLCreateQuery(
-          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.recipient)), tl_string(),
-                                                   tl_int64(transaction.amount),
-                                                   (transaction.sendUnencryptedText
-                                                        ? tl_msg_dataText
-                                                        : tl_msg_dataDecryptedText)(tl_string(transaction.comment)),
-                                                   tl_int32(kDefaultMessageFlags))),
-                       tl_from(transaction.allowSendToUninited)),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) {
-        result.match([&](const TLDquery_info &data) {
-          const auto weak = base::make_weak(this);
-          auto pending = Parse(result, sender, transaction);
-          _accountViewers->addPendingTransaction(pending);
-          if (!weak) {
-            return;
-          }
-          InvokeCallback(ready, std::move(pending));
-          if (!weak) {
-            return;
-          }
-          send(data.vid().v);
-        });
-      })
-      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
-      .send();
+  sendMessage(
+      publicKey, password, sender, transaction.recipient,
+      (transaction.sendUnencryptedText ? tl_msg_dataText : tl_msg_dataDecryptedText)(tl_string(transaction.comment)),
+      transaction.amount, transaction.timeout, transaction.allowSendToUninited, transaction.comment,
+      transaction.sendUnencryptedText, ready, done);
 }
 
 void Wallet::sendTokens(const QByteArray &publicKey, const QByteArray &password,
-                        const TokenTransactionToSend &transaction, Callback<PendingTransaction> ready,
-                        Callback<> done) {
+                        const TokenTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                        const Callback<> &done) {
   Expects(transaction.amount >= 0);
 
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
   Result<QByteArray> body{};
-  if (!transaction.swapBack) {
-    body = CreateTokenMessage(transaction.recipient, transaction.amount);
-  } else {
-    body = CreateSwapBackMessage(transaction.recipient, transaction.amount);
+  switch (transaction.tokenTransferType) {
+    case TokenTransferType::Direct: {
+      body = CreateTokenMessage(transaction.recipient, transaction.amount);
+      break;
+    }
+    case TokenTransferType::ToOwner: {
+      body = CreateTokenTransferToOwnerMessage(transaction.recipient, transaction.amount,
+                                               TokenTransactionToSend::initialBalance);
+      break;
+    }
+    case TokenTransferType::SwapBack: {
+      body = CreateSwapBackMessage(transaction.recipient, transaction.callbackAddress, transaction.amount);
+      break;
+    }
   }
   if (!body.has_value()) {
     InvokeCallback(done, body.error());
     return;
   }
 
-  const auto send = makeSendCallback(std::move(done));
-
   const auto realAmount = TokenTransactionToSend::realAmount;
 
-  _external->lib()
-      .request(TLCreateQuery(
-          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(
-              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.walletContractAddress)), tl_string(),
-                                          tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                          tl_int32(kDefaultMessageFlags))),
-              tl_from(false)),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) {
-        result.match([&](const TLDquery_info &data) {
-          const auto weak = base::make_weak(this);
-          auto pending = Parse(result, sender,
-                               TransactionToSend{.amount = realAmount,
-                                                 .recipient = transaction.walletContractAddress,
-                                                 .timeout = transaction.timeout,
-                                                 .allowSendToUninited = false});
-          _accountViewers->addPendingTransaction(pending);
-          if (!weak) {
-            return;
-          }
-          InvokeCallback(ready, std::move(pending));
-          if (!weak) {
-            return;
-          }
-          send(data.vid().v);
-        });
-      })
-      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
-      .send();
+  sendMessage(publicKey, password, sender, transaction.walletContractAddress,
+              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready, done);
 }
 
 void Wallet::withdraw(const QByteArray &publicKey, const QByteArray &password,
-                      const WithdrawalTransactionToSend &transaction, Callback<PendingTransaction> ready,
-                      Callback<> done) {
+                      const WithdrawalTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                      const Callback<> &done) {
   Expects(transaction.all || transaction.amount >= 0);
 
   const auto sender = getUsedAddress(publicKey);
@@ -1264,48 +1270,15 @@ void Wallet::withdraw(const QByteArray &publicKey, const QByteArray &password,
     return InvokeCallback(done, body.error());
   }
 
-  const auto send = makeSendCallback(std::move(done));
-
   const auto realAmount = WithdrawalTransactionToSend::depoolFee;
 
-  _external->lib()
-      .request(TLCreateQuery(
-          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(
-              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
-                                          tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                          tl_int32(kDefaultMessageFlags))),
-              tl_boolFalse()),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) {
-        result.match([&](const TLDquery_info &data) {
-          const auto weak = base::make_weak(this);
-          auto pending = Parse(result, sender,
-                               TransactionToSend{
-                                   .amount = realAmount,
-                                   .recipient = transaction.depoolAddress,
-                                   .timeout = transaction.timeout,
-                                   .allowSendToUninited = false,
-                               });
-          _accountViewers->addPendingTransaction(pending);
-          if (!weak) {
-            return;
-          }
-          InvokeCallback(ready, std::move(pending));
-          if (!weak) {
-            return;
-          }
-          send(data.vid().v);
-        });
-      })
-      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
-      .send();
+  sendMessage(publicKey, password, sender, transaction.depoolAddress,
+              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready, done);
 }
 
 void Wallet::cancelWithdrawal(const QByteArray &publicKey, const QByteArray &password,
-                              const CancelWithdrawalTransactionToSend &transaction, Callback<PendingTransaction> ready,
-                              Callback<> done) {
+                              const CancelWithdrawalTransactionToSend &transaction,
+                              const Callback<PendingTransaction> &ready, const Callback<> &done) {
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
@@ -1314,97 +1287,32 @@ void Wallet::cancelWithdrawal(const QByteArray &publicKey, const QByteArray &pas
     return InvokeCallback(done, body.error());
   }
 
-  const auto send = makeSendCallback(std::move(done));
-
   const auto realAmount = CancelWithdrawalTransactionToSend::depoolFee;
 
-  _external->lib()
-      .request(TLCreateQuery(
-          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(
-              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
-                                          tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                          tl_int32(kDefaultMessageFlags))),
-              tl_boolFalse()),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) {
-        result.match([&](const TLDquery_info &data) {
-          const auto weak = base::make_weak(this);
-          auto pending = Parse(result, sender,
-                               TransactionToSend{
-                                   .amount = realAmount,
-                                   .recipient = transaction.depoolAddress,
-                                   .timeout = transaction.timeout,
-                                   .allowSendToUninited = false,
-                               });
-          _accountViewers->addPendingTransaction(pending);
-          if (!weak) {
-            return;
-          }
-          InvokeCallback(ready, std::move(pending));
-          if (!weak) {
-            return;
-          }
-          send(data.vid().v);
-        });
-      })
-      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
-      .send();
+  sendMessage(publicKey, password, sender, transaction.depoolAddress,
+              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready, done);
 }
 
 void Wallet::deployTokenWallet(const QByteArray &publicKey, const QByteArray &password,
                                const DeployTokenWalletTransactionToSend &transaction,
-                               Callback<PendingTransaction> ready, Callback<> done) {
+                               const Callback<PendingTransaction> &ready, const Callback<> &done) {
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateTokenWalletDeployMessage(transaction.initialBalance, sender);
+  const auto body = CreateTokenWalletDeployMessage(DeployTokenWalletTransactionToSend::initialBalance, sender);
   if (!body.has_value()) {
     return InvokeCallback(done, body.error());
   }
 
-  const auto send = makeSendCallback(std::move(done));
-
   const auto realAmount = DeployTokenWalletTransactionToSend::realAmount;
 
-  _external->lib()
-      .request(TLCreateQuery(
-          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(
-              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.rootContractAddress)), tl_string(),
-                                          tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                          tl_int32(kDefaultMessageFlags))),
-              tl_boolFalse()),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) {
-        result.match([&](const TLDquery_info &data) {
-          const auto weak = base::make_weak(this);
-          auto pending = Parse(result, sender,
-                               TransactionToSend{
-                                   .amount = realAmount,
-                                   .recipient = transaction.rootContractAddress,
-                                   .timeout = transaction.timeout,
-                                   .allowSendToUninited = false,
-                               });
-          _accountViewers->addPendingTransaction(pending);
-          if (!weak) {
-            return;
-          }
-          InvokeCallback(ready, std::move(pending));
-          if (!weak) {
-            return;
-          }
-          send(data.vid().v);
-        });
-      })
-      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
-      .send();
+  sendMessage(publicKey, password, sender, transaction.rootContractAddress,
+              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready, done);
 }
 
 void Wallet::sendStake(const QByteArray &publicKey, const QByteArray &password,
-                       const StakeTransactionToSend &transaction, Callback<PendingTransaction> ready, Callback<> done) {
+                       const StakeTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                       const Callback<> &done) {
   Expects(transaction.stake >= 0);
 
   const auto sender = getUsedAddress(publicKey);
@@ -1416,46 +1324,13 @@ void Wallet::sendStake(const QByteArray &publicKey, const QByteArray &password,
     return;
   }
 
-  const auto send = makeSendCallback(std::move(done));
-
   const auto realAmount = StakeTransactionToSend::depoolFee + transaction.stake;
 
-  _external->lib()
-      .request(TLCreateQuery(
-          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(transaction.timeout),
-          tl_actionMsg(
-              tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(transaction.depoolAddress)), tl_string(),
-                                          tl_int64(realAmount), tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                                          tl_int32(kDefaultMessageFlags))),
-              tl_boolFalse()),
-          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
-          ))
-      .done([=](const TLquery_Info &result) {
-        result.match([&](const TLDquery_info &data) {
-          const auto weak = base::make_weak(this);
-          auto pending = Parse(result, sender,
-                               TransactionToSend{
-                                   .amount = realAmount,
-                                   .recipient = transaction.depoolAddress,
-                                   .timeout = transaction.timeout,
-                                   .allowSendToUninited = false,
-                               });
-          _accountViewers->addPendingTransaction(pending);
-          if (!weak) {
-            return;
-          }
-          InvokeCallback(ready, std::move(pending));
-          if (!weak) {
-            return;
-          }
-          send(data.vid().v);
-        });
-      })
-      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
-      .send();
+  sendMessage(publicKey, password, sender, transaction.depoolAddress,
+              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready, done);
 }
 
-void Wallet::openGate(const QString &rawAddress, std::optional<Symbol> token) {
+void Wallet::openGate(const QString &rawAddress, const std::optional<Symbol> &token) {
   auto url = QUrl(_gateUrl);
   auto params = "TONAddress=" + rawAddress;
 
@@ -1984,8 +1859,8 @@ void Wallet::checkLocalTime(BlockchainTime time) {
   }
 }
 
-auto Wallet::makeSendCallback(Callback<> done) -> std::function<void(int64)> {
-  return [this, done = std::move(done)](int64 id) {
+auto Wallet::makeSendCallback(const Callback<> &done) -> std::function<void(int64)> {
+  return [this, done = done](int64 id) {
     _external->lib()
         .request(TLquery_Send(tl_int53(id)))
         .done([=] { InvokeCallback(done); })
@@ -2005,6 +1880,69 @@ auto Wallet::makeEstimateFeesCallback(Callback<TransactionCheckResult> done) -> 
         .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
         .send();
   };
+}
+
+void Wallet::checkTransactionFees(const QString &sender, const QString &recipient, const TLmsg_Data &body,
+                                  int64 realAmount, int timeout, bool allowSendToUninited,
+                                  Callback<TransactionCheckResult> done) {
+  const auto check = makeEstimateFeesCallback(done);
+
+  _external->lib()
+      .request(TLCreateQuery(
+          tl_inputKeyFake(), tl_accountAddress(tl_string(sender)), tl_int32(timeout),
+          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(recipient)), tl_string(),
+                                                   tl_int64(realAmount), body, tl_int32(kDefaultMessageFlags))),
+                       tl_from(allowSendToUninited)),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=](const TLquery_Info &result) { result.match([&](const TLDquery_info &data) { check(data.vid().v); }); })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
+}
+
+void Wallet::sendMessage(const QByteArray &publicKey, const QByteArray &password, const QString &sender,
+                         const QString &recipient, const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount,
+                         int timeout, bool allowSendToUninited, const Callback<PendingTransaction> &ready,
+                         const Callback<> &done) {
+  sendMessage(publicKey, password, sender, recipient, body, realAmount, timeout, allowSendToUninited, QString{}, false,
+              ready, done);
+}
+
+void Wallet::sendMessage(const QByteArray &publicKey, const QByteArray &password, const QString &sender,
+                         const QString &recipient, const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount,
+                         int timeout, bool allowSendToUninited, const QString &comment, bool sendUnencryptedText,
+                         const Callback<PendingTransaction> &ready, const Callback<> &done) {
+  const auto send = makeSendCallback(done);
+
+  _external->lib()
+      .request(TLCreateQuery(
+          prepareInputKey(publicKey, password), tl_accountAddress(tl_string(sender)), tl_int32(timeout),
+          tl_actionMsg(tl_vector(1, tl_msg_message(tl_accountAddress(tl_string(recipient)), tl_string(),
+                                                   tl_int64(realAmount), body, tl_int32(kDefaultMessageFlags))),
+                       tl_from(allowSendToUninited)),
+          tl_raw_initialAccountState(tl_bytes(), tl_bytes())  // doesn't matter
+          ))
+      .done([=, ready = ready](const TLquery_Info &result) {
+        result.match([&](const TLDquery_info &data) {
+          const auto weak = base::make_weak(this);
+          auto pending = Parse(result, sender,
+                               TransactionToSend{.amount = realAmount,
+                                                 .recipient = recipient,
+                                                 .timeout = timeout,
+                                                 .allowSendToUninited = allowSendToUninited});
+          _accountViewers->addPendingTransaction(pending);
+          if (!weak) {
+            return;
+          }
+          InvokeCallback(ready, std::move(pending));
+          if (!weak) {
+            return;
+          }
+          send(data.vid().v);
+        });
+      })
+      .fail([=, ready = ready](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
+      .send();
 }
 
 }  // namespace Ton

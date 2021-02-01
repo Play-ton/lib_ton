@@ -13,6 +13,11 @@
 
 #include <unordered_set>
 
+namespace tl {
+template <typename>
+class boxed;
+}  // namespace tl
+
 namespace Storage::Cache {
 class Database;
 }  // namespace Storage::Cache
@@ -30,6 +35,7 @@ class LocalTimeSyncer;
 struct BlockchainTime;
 class TLerror;
 class TLinputKey;
+class TLmsg_data;
 struct UnpackedAddress;
 }  // namespace details
 
@@ -65,44 +71,44 @@ class Wallet final : public base::has_weak_ptr {
   void changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, Callback<> done);
 
   void checkSendGrams(const QByteArray &publicKey, const TransactionToSend &transaction,
-                      Callback<TransactionCheckResult> done);
+                      const Callback<TransactionCheckResult> &done);
 
   void checkSendTokens(const QByteArray &publicKey, const TokenTransactionToSend &transaction,
-                       Callback<TransactionCheckResult> done);
+                       const Callback<std::pair<TransactionCheckResult, std::optional<DirectRecipient>>> &done);
 
   void checkSendStake(const QByteArray &publicKey, const StakeTransactionToSend &transaction,
-                      Callback<TransactionCheckResult> done);
+                      const Callback<TransactionCheckResult> &done);
 
   void checkWithdraw(const QByteArray &publicKey, const WithdrawalTransactionToSend &transaction,
-                     Callback<TransactionCheckResult> done);
+                     const Callback<TransactionCheckResult> &done);
 
   void checkCancelWithdraw(const QByteArray &publicKey, const CancelWithdrawalTransactionToSend &transaction,
-                           Callback<TransactionCheckResult> done);
+                           const Callback<TransactionCheckResult> &done);
 
   void checkDeployTokenWallet(const QByteArray &publicKey, const DeployTokenWalletTransactionToSend &transaction,
-                              Callback<TransactionCheckResult> done);
+                              const Callback<TransactionCheckResult> &done);
 
   void sendGrams(const QByteArray &publicKey, const QByteArray &password, const TransactionToSend &transaction,
-                 Callback<PendingTransaction> ready, Callback<> done);
+                 const Callback<PendingTransaction> &ready, const Callback<> &done);
 
   void sendTokens(const QByteArray &publicKey, const QByteArray &password, const TokenTransactionToSend &transaction,
-                  Callback<PendingTransaction> ready, Callback<> done);
+                  const Callback<PendingTransaction> &ready, const Callback<> &done);
 
   void sendStake(const QByteArray &publicKey, const QByteArray &password, const StakeTransactionToSend &transaction,
-                 Callback<PendingTransaction> ready, Callback<> done);
+                 const Callback<PendingTransaction> &ready, const Callback<> &done);
 
   void withdraw(const QByteArray &publicKey, const QByteArray &password, const WithdrawalTransactionToSend &transaction,
-                Callback<PendingTransaction> ready, Callback<> done);
+                const Callback<PendingTransaction> &ready, const Callback<> &done);
 
   void cancelWithdrawal(const QByteArray &publicKey, const QByteArray &password,
-                        const CancelWithdrawalTransactionToSend &transaction, Callback<PendingTransaction> ready,
-                        Callback<> done);
+                        const CancelWithdrawalTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                        const Callback<> &done);
 
   void deployTokenWallet(const QByteArray &publicKey, const QByteArray &password,
-                         const DeployTokenWalletTransactionToSend &transaction, Callback<PendingTransaction> ready,
-                         Callback<> done);
+                         const DeployTokenWalletTransactionToSend &transaction,
+                         const Callback<PendingTransaction> &ready, const Callback<> &done);
 
-  void openGate(const QString &rawAddress, std::optional<Symbol> token = {});
+  void openGate(const QString &rawAddress, const std::optional<Symbol> &token = {});
   void openReveal(const QString &rawAddress, const QString &ethereumAddress);
 
   void addDePool(const QByteArray &publicKey, const QString &dePoolAddress, const Callback<> &done);
@@ -157,8 +163,19 @@ class Wallet final : public base::has_weak_ptr {
 
   void handleInputKeyError(const QByteArray &publicKey, int generation, const details::TLerror &error, Callback<> done);
 
-  auto makeSendCallback(Callback<> done) -> std::function<void(int64)>;
+  auto makeSendCallback(const Callback<> &done) -> std::function<void(int64)>;
   auto makeEstimateFeesCallback(Callback<TransactionCheckResult> done) -> std::function<void(int64)>;
+  void checkTransactionFees(const QString &sender, const QString &recipient,
+                            const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount, int timeout,
+                            bool allowSendToUninited, Callback<TransactionCheckResult> done);
+  void sendMessage(const QByteArray &publicKey, const QByteArray &password, const QString &sender,
+                   const QString &recipient, const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount,
+                   int timeout, bool allowSendToUninited, const Callback<PendingTransaction> &ready,
+                   const Callback<> &done);
+  void sendMessage(const QByteArray &publicKey, const QByteArray &password, const QString &sender,
+                   const QString &recipient, const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount,
+                   int timeout, bool allowSendToUninited, const QString &comment, bool sendUnencryptedText,
+                   const Callback<PendingTransaction> &ready, const Callback<> &done);
 
   std::optional<ConfigInfo> _configInfo;
   rpl::event_stream<Update> _updates;

@@ -265,13 +265,24 @@ struct TransactionToSend {
   bool sendUnencryptedText = false;
 };
 
+enum class TokenTransferType {
+  Direct,
+  ToOwner,
+  SwapBack,
+};
+
 struct TokenTransactionToSend {
-  constexpr static int64 realAmount = 500'000'000;  // 0.5 TON
+  constexpr static int64 realAmount = 500'000'000;      // 0.5 TON
+  constexpr static int64 initialBalance = 100'000'000;  // 0.1 TON
+  static_assert(realAmount > initialBalance);
+
+  QString rootContractAddress;
   QString walletContractAddress;
   int64 amount = 0;
   QString recipient;
+  QString callbackAddress;
   int timeout = 0;
-  bool swapBack = false;
+  TokenTransferType tokenTransferType = TokenTransferType::Direct;
 };
 
 struct DeployTokenWalletTransactionToSend {
@@ -317,6 +328,10 @@ struct TransactionFees {
 struct TransactionCheckResult {
   TransactionFees sourceFees;
   std::vector<TransactionFees> destinationFees;
+};
+
+struct DirectRecipient {
+  QString address;
 };
 
 struct PendingTransaction {
