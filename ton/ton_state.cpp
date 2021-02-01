@@ -111,10 +111,30 @@ bool operator!=(const PendingTransaction &a, const PendingTransaction &b) {
   return !(a == b);
 }
 
+bool operator==(const AssetListItem &a, const AssetListItem &b) {
+  if (a.index() != b.index()) {
+    return false;
+  }
+  return v::match(
+      a, [](const AssetListItemWallet &) { return true; },
+      [&](const AssetListItemToken &itemA) {
+        const auto *itemB = std::get_if<AssetListItemToken>(&b);
+        return itemA.symbol == itemB->symbol;
+      },
+      [&](const AssetListItemDePool &itemA) {
+        const auto *itemB = std::get_if<AssetListItemDePool>(&b);
+        return itemA.address == itemB->address;
+      });
+}
+
+bool operator!=(const AssetListItem &a, const AssetListItem &b) {
+  return !(a == b);
+}
+
 bool operator==(const WalletState &a, const WalletState &b) {
   return (a.address == b.address) && (a.account == b.account) && (a.lastTransactions == b.lastTransactions) &&
          (a.pendingTransactions == b.pendingTransactions) && (a.tokenStates == b.tokenStates) &&
-         (a.dePoolParticipantStates == b.dePoolParticipantStates);
+         (a.dePoolParticipantStates == b.dePoolParticipantStates) && (a.assetsList == b.assetsList);
 }
 
 bool operator!=(const WalletState &a, const WalletState &b) {

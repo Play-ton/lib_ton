@@ -32,15 +32,19 @@ storage.dePoolState
     withdrawValue:int64
     reinvest:storage.Bool
     reward:int64 = storage.DePoolState;
+storage.assetsListMain = storage.AssetsListItem;
+storage.assetsListToken name:bytes decimals:int32 = storage.AssetsListItem;
+storage.assetsListDePool address:string = storage.AssetsListItem;
 storage.walletState
     address:string
     account:storage.AccountState
     lastTransactions:storage.TransactionsSlice
     pendingTransactions:vector<storage.PendingTransaction>
     tokenStates:vector<storage.TokenState>
-    dePoolStates:vector<storage.DePoolState> = storage.WalletState;
-storage.network blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool = storage.Network;
+    dePoolStates:vector<storage.DePoolState>
+    assetsList:vector<storage.AssetsListItem> = storage.WalletState;
 
+storage.network blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool = storage.Network;
 storage.settings blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool useNetworkCallbacks:storage.Bool = storage.Settings; // old
 storage.settings2 blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool useNetworkCallbacks:storage.Bool version:int32 = storage.Settings; // old
 storage.settings3 main:storage.Network test:storage.Network useTestNetwork:storage.Bool useNetworkCallbacks:storage.Bool version:int32 = storage.Settings;

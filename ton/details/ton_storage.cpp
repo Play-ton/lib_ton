@@ -71,6 +71,8 @@ TLstorage_TokenState Serialize(const TokenState &data);
 TokenState Deserialize(const TLstorage_TokenState &data);
 TLstorage_DePoolState Serialize(const NamedDePoolState &data);
 NamedDePoolState Deserialize(const TLstorage_DePoolState &data);
+TLstorage_AssetsListItem Serialize(const AssetListItem &data);
+AssetListItem Deserialize(const TLstorage_AssetsListItem &data);
 TLstorage_WalletState Serialize(const WalletState &data);
 WalletState Deserialize(const TLstorage_WalletState &data);
 TLstorage_Settings Serialize(const Settings &data);
@@ -301,6 +303,25 @@ NamedDePoolState Deserialize(const TLstorage_DePoolState &data) {
   });
 }
 
+TLstorage_AssetsListItem Serialize(const AssetListItem &data) {
+  return v::match(
+      data, [](const AssetListItemWallet &) { return make_storage_assetsListMain(); },
+      [](const AssetListItemToken &item) {
+        return make_storage_assetsListToken(tl_string(item.symbol.name()), tl_int32(item.symbol.decimals()));
+      },
+      [](const AssetListItemDePool &item) { return make_storage_assetsListDePool(tl_string(item.address)); });
+}
+
+AssetListItem Deserialize(const TLstorage_AssetsListItem &data) {
+  return data.match([](const TLDstorage_assetsListMain &) -> AssetListItem { return AssetListItemWallet{}; },
+                    [](const TLDstorage_assetsListToken &data) -> AssetListItem {
+                      return AssetListItemToken{.symbol = Symbol::tip3(tl::utf8(data.vname().v), data.vdecimals().v)};
+                    },
+                    [](const TLDstorage_assetsListDePool &data) -> AssetListItem {
+                      return AssetListItemDePool{.address = tl::utf8(data.vaddress().v)};
+                    });
+}
+
 TLstorage_WalletState Serialize(const WalletState &data) {
   std::vector<TokenState> tokenStates;
   tokenStates.reserve(data.tokenStates.size());
@@ -315,7 +336,8 @@ TLstorage_WalletState Serialize(const WalletState &data) {
   }
 
   return make_storage_walletState(tl_string(data.address), Serialize(data.account), Serialize(data.lastTransactions),
-                                  Serialize(data.pendingTransactions), Serialize(tokenStates), Serialize(depoolStates));
+                                  Serialize(data.pendingTransactions), Serialize(tokenStates), Serialize(depoolStates),
+                                  Serialize(data.assetsList));
 }
 
 WalletState Deserialize(const TLstorage_WalletState &data) {
@@ -335,14 +357,18 @@ WalletState Deserialize(const TLstorage_WalletState &data) {
       depoolStates.emplace(item.address, item.state);
     }
 
-    return WalletState{
-        .address = tl::utf16(data.vaddress()),
-        .account = Deserialize(data.vaccount()),
-        .lastTransactions = Deserialize(data.vlastTransactions()),
-        .pendingTransactions = Deserialize(data.vpendingTransactions()),
-        .tokenStates = std::move(tokenStates),
-        .dePoolParticipantStates = std::move(depoolStates),
-    };
+    auto assetsList = Deserialize(data.vassetsList());
+    if (assetsList.empty()) {
+      assetsList.emplace_back(AssetListItemWallet{});
+    }
+
+    return WalletState{.address = tl::utf16(data.vaddress()),
+                       .account = Deserialize(data.vaccount()),
+                       .lastTransactions = Deserialize(data.vlastTransactions()),
+                       .pendingTransactions = Deserialize(data.vpendingTransactions()),
+                       .tokenStates = std::move(tokenStates),
+                       .dePoolParticipantStates = std::move(depoolStates),
+                       .assetsList = std::move(assetsList)};
   });
 }
 

@@ -1618,6 +1618,10 @@ void Wallet::removeToken(const QByteArray &publicKey, const QString &rootContrac
   _accountViewers->removeToken(getUsedAddress(publicKey), ConvertIntoRaw(rootContractAddress));
 }
 
+void Wallet::reorderAssets(const QByteArray &publicKey, int oldPosition, int newPosition) {
+  _accountViewers->reorderAssets(getUsedAddress(publicKey), oldPosition, newPosition);
+}
+
 void Wallet::requestState(const QString &address, const Callback<AccountState> &done) {
   _external->lib()
       .request(TLGetAccountState(tl_accountAddress(tl_string(address))))

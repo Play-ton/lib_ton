@@ -327,6 +327,19 @@ struct PendingTransaction {
 bool operator==(const PendingTransaction &a, const PendingTransaction &b);
 bool operator!=(const PendingTransaction &a, const PendingTransaction &b);
 
+struct AssetListItemWallet {};
+struct AssetListItemToken {
+  Symbol symbol;
+};
+struct AssetListItemDePool {
+  QString address;
+};
+
+using AssetListItem = std::variant<AssetListItemWallet, AssetListItemToken, AssetListItemDePool>;
+
+bool operator==(const AssetListItem &a, const AssetListItem &b);
+bool operator!=(const AssetListItem &a, const AssetListItem &b);
+
 struct WalletState {
   QString address;
   AccountState account;
@@ -334,6 +347,7 @@ struct WalletState {
   std::vector<PendingTransaction> pendingTransactions;
   std::map<Symbol, TokenStateValue> tokenStates;
   std::map<QString, DePoolParticipantState> dePoolParticipantStates;
+  std::vector<AssetListItem> assetsList;
 };
 
 bool operator==(const WalletState &a, const WalletState &b);
@@ -376,14 +390,8 @@ struct DecryptPasswordGood {
   int generation = 0;
 };
 
-struct NewRootTokenContract {
-  QString newTokenContractAddress = {};
-};
-
 struct Update {
-  std::variant<SyncState, LiteServerQuery, ConfigUpgrade, DecryptPasswordNeeded, DecryptPasswordGood,
-               NewRootTokenContract>
-      data;
+  std::variant<SyncState, LiteServerQuery, ConfigUpgrade, DecryptPasswordNeeded, DecryptPasswordGood> data;
 };
 
 }  // namespace Ton
