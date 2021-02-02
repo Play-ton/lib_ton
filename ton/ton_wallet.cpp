@@ -43,6 +43,8 @@ constexpr auto kLegacySmcRevision = 1;
 constexpr auto kDefaultWorkchainId = 0;
 constexpr auto kDefaultMessageFlags = 3;
 
+constexpr auto kEthereumAddressByteCount = 20;
+
 [[nodiscard]] TLError GenerateFakeIncorrectPasswordError() {
   return tl_error(tl_int32(0), tl_string("KEY_DECRYPT"));
 }
@@ -456,16 +458,14 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
 
   const auto &payload = decodedSwapBackPayload.value().c_ftabi_decodedOutput().vvalues().v;
 
-  constexpr auto ethereumAddressByteCount = 20;
-
   auto address = payload[0].c_ftabi_valueBytes().vvalue().v;
   auto addressSize = address.size();
-  if (addressSize < ethereumAddressByteCount) {
+  if (addressSize < kEthereumAddressByteCount) {
     return std::nullopt;
-  } else if (addressSize > ethereumAddressByteCount) {
-    auto addressDelta = addressSize - ethereumAddressByteCount;
-    std::memmove(address.data(), address.data() + addressDelta, ethereumAddressByteCount);
-    address.resize(ethereumAddressByteCount);
+  } else if (addressSize > kEthereumAddressByteCount) {
+    auto addressDelta = addressSize - kEthereumAddressByteCount;
+    std::memmove(address.data(), address.data() + addressDelta, kEthereumAddressByteCount);
+    address.resize(kEthereumAddressByteCount);
   }
 
   return TokenSwapBack{.address = "0x" + address.toHex(), .value = args[0].c_ftabi_valueInt().vvalue().v};
@@ -592,12 +592,12 @@ Result<QByteArray> CreateSwapBackMessage(const QString &etheriumAddress, const Q
                                          int64 amount) {
   constexpr auto invalid_ethereum_address = "invalid ethereum address";
   if (!etheriumAddress.startsWith("0x")) {
-    return Error{Error::Type::IO, invalid_ethereum_address};
+    return Error{Error::Type::Web, invalid_ethereum_address};
   }
   const auto target = etheriumAddress.mid(2, -1);
   const auto targetBytes = QByteArray::fromHex(target.toUtf8());
-  if (targetBytes.size()) {
-    return Error{Error::Type::IO, invalid_ethereum_address};
+  if (targetBytes.size() != kEthereumAddressByteCount) {
+    return Error{Error::Type::Web, invalid_ethereum_address};
   }
 
   auto callback_payload = RequestSender::Execute(TLftabi_PackIntoCell(
@@ -892,19 +892,19 @@ std::vector<QByteArray> Wallet::publicKeys() const {
   return _list->entries | ranges::views::transform(&WalletList::Entry::publicKey) | ranges::to_vector;
 }
 
-void Wallet::createKey(Callback<std::vector<QString>> done) {
+void Wallet::createKey(const Callback<std::vector<QString>> &done) {
   Expects(_keyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
 
-  auto created = [=](Result<std::vector<QString>> result) {
+  auto created = [=](const Result<std::vector<QString>> &result) {
     const auto destroyed = result ? std::unique_ptr<KeyCreator>() : base::take(_keyCreator);
     InvokeCallback(done, result);
   };
   _keyCreator = std::make_unique<KeyCreator>(&_external->lib(), &_external->db(), std::move(created));
 }
 
-void Wallet::importKey(const std::vector<QString> &words, Callback<> done) {
+void Wallet::importKey(const std::vector<QString> &words, const Callback<> &done) {
   Expects(_keyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
@@ -916,14 +916,14 @@ void Wallet::importKey(const std::vector<QString> &words, Callback<> done) {
   _keyCreator = std::make_unique<KeyCreator>(&_external->lib(), &_external->db(), words, std::move(created));
 }
 
-void Wallet::queryWalletAddress(Callback<QString> done) {
+void Wallet::queryWalletAddress(const Callback<QString> &done) {
   Expects(_keyCreator != nullptr);
   Expects(_configInfo.has_value());
 
   _keyCreator->queryWalletAddress(_configInfo->restrictedInitPublicKey, std::move(done));
 }
 
-void Wallet::saveKey(const QByteArray &password, const QString &address, Callback<QByteArray> done) {
+void Wallet::saveKey(const QByteArray &password, const QString &address, const Callback<QByteArray> &done) {
   Expects(_keyCreator != nullptr);
 
   auto saved = [=](Result<WalletList::Entry> result) {
@@ -939,7 +939,8 @@ void Wallet::saveKey(const QByteArray &password, const QString &address, Callbac
                     settings().useTestNetwork, std::move(saved));
 }
 
-void Wallet::exportKey(const QByteArray &publicKey, const QByteArray &password, Callback<std::vector<QString>> done) {
+void Wallet::exportKey(const QByteArray &publicKey, const QByteArray &password,
+                       const Callback<std::vector<QString>> &done) {
   _external->lib()
       .request(TLExportKey(prepareInputKey(publicKey, password)))
       .done([=](const TLExportedKey &result) { InvokeCallback(done, Parse(result)); })
@@ -960,7 +961,7 @@ void Wallet::setWalletList(const WalletList &list) {
   *_list = list;
 }
 
-void Wallet::deleteKey(const QByteArray &publicKey, Callback<> done) {
+void Wallet::deleteKey(const QByteArray &publicKey, const Callback<> &done) {
   Expects(_keyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
@@ -983,7 +984,7 @@ void Wallet::deleteKey(const QByteArray &publicKey, Callback<> done) {
                                                  settings().useTestNetwork, std::move(removed));
 }
 
-void Wallet::deleteAllKeys(Callback<> done) {
+void Wallet::deleteAllKeys(const Callback<> &done) {
   Expects(_keyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
@@ -1002,7 +1003,7 @@ void Wallet::deleteAllKeys(Callback<> done) {
                                                  std::move(removed));
 }
 
-void Wallet::changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, Callback<> done) {
+void Wallet::changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, const Callback<> &done) {
   Expects(_keyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);

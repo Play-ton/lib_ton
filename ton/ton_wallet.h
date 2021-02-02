@@ -61,14 +61,14 @@ class Wallet final : public base::has_weak_ptr {
 
   [[nodiscard]] std::vector<QByteArray> publicKeys() const;
 
-  void createKey(Callback<std::vector<QString>> done);
-  void importKey(const std::vector<QString> &words, Callback<> done);
-  void queryWalletAddress(Callback<QString> done);
-  void saveKey(const QByteArray &password, const QString &address, Callback<QByteArray> done);
-  void exportKey(const QByteArray &publicKey, const QByteArray &password, Callback<std::vector<QString>> done);
-  void deleteKey(const QByteArray &publicKey, Callback<> done);
-  void deleteAllKeys(Callback<> done);
-  void changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, Callback<> done);
+  void createKey(const Callback<std::vector<QString>>& done);
+  void importKey(const std::vector<QString> &words, const Callback<>& done);
+  void queryWalletAddress(const Callback<QString>& done);
+  void saveKey(const QByteArray &password, const QString &address, const Callback<QByteArray>& done);
+  void exportKey(const QByteArray &publicKey, const QByteArray &password, const Callback<std::vector<QString>>& done);
+  void deleteKey(const QByteArray &publicKey, const Callback<>& done);
+  void deleteAllKeys(const Callback<>& done);
+  void changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, const Callback<>& done);
 
   void checkSendGrams(const QByteArray &publicKey, const TransactionToSend &transaction,
                       const Callback<TransactionCheckResult> &done);
