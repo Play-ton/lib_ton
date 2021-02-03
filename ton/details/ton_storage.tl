@@ -33,7 +33,7 @@ storage.dePoolState
     reinvest:storage.Bool
     reward:int64 = storage.DePoolState;
 storage.assetsListMain = storage.AssetsListItem;
-storage.assetsListToken name:bytes decimals:int32 = storage.AssetsListItem;
+storage.assetsListToken name:bytes decimals:int32 rootContractAddress:bytes = storage.AssetsListItem;
 storage.assetsListDePool address:string = storage.AssetsListItem;
 storage.walletState
     address:string

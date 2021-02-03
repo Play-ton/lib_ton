@@ -271,15 +271,15 @@ PendingTransaction Deserialize(const TLstorage_PendingTransaction &data) {
 
 TLstorage_TokenState Serialize(const TokenState &data) {
   Assert(data.token.isToken());
-  return make_storage_tokenState(tl_string(data.rootContractAddress), tl_string(data.walletContractAddress),
+  return make_storage_tokenState(tl_string(data.token.rootContractAddress()), tl_string(data.walletContractAddress),
                                  tl_string(data.token.name()), tl_int32(static_cast<int32_t>(data.token.decimals())),
                                  Serialize(data.lastTransactions), tl_int64(data.balance));
 }
 
 TokenState Deserialize(const TLstorage_TokenState &data) {
   return data.match([&](const TLDstorage_tokenState &data) {
-    return TokenState{.token = Symbol::tip3(tl::utf8(data.vname().v), static_cast<size_t>(data.vdecimals().v)),
-                      .rootContractAddress = data.vrootContractAddress().v,
+    return TokenState{.token = Symbol::tip3(tl::utf8(data.vname().v), static_cast<size_t>(data.vdecimals().v),
+                                            data.vrootContractAddress().v),
                       .walletContractAddress = data.vwalletContractAddress().v,
                       .lastTransactions = Deserialize(data.vlastTransactions()),
                       .balance = data.vbalance().v};
@@ -307,7 +307,8 @@ TLstorage_AssetsListItem Serialize(const AssetListItem &data) {
   return v::match(
       data, [](const AssetListItemWallet &) { return make_storage_assetsListMain(); },
       [](const AssetListItemToken &item) {
-        return make_storage_assetsListToken(tl_string(item.symbol.name()), tl_int32(item.symbol.decimals()));
+        return make_storage_assetsListToken(tl_string(item.symbol.name()), tl_int32(item.symbol.decimals()),
+                                            tl_string(item.symbol.rootContractAddress()));
       },
       [](const AssetListItemDePool &item) { return make_storage_assetsListDePool(tl_string(item.address)); });
 }
@@ -315,7 +316,8 @@ TLstorage_AssetsListItem Serialize(const AssetListItem &data) {
 AssetListItem Deserialize(const TLstorage_AssetsListItem &data) {
   return data.match([](const TLDstorage_assetsListMain &) -> AssetListItem { return AssetListItemWallet{}; },
                     [](const TLDstorage_assetsListToken &data) -> AssetListItem {
-                      return AssetListItemToken{.symbol = Symbol::tip3(tl::utf8(data.vname().v), data.vdecimals().v)};
+                      return AssetListItemToken{.symbol = Symbol::tip3(tl::utf8(data.vname().v), data.vdecimals().v,
+                                                                       tl::utf8(data.vrootContractAddress().v))};
                     },
                     [](const TLDstorage_assetsListDePool &data) -> AssetListItem {
                       return AssetListItemDePool{.address = tl::utf8(data.vaddress().v)};
@@ -345,8 +347,7 @@ WalletState Deserialize(const TLstorage_WalletState &data) {
     auto storedTokenStates = Deserialize(data.vtokenStates());
     CurrencyMap<TokenStateValue> tokenStates;
     for (auto &item : storedTokenStates) {
-      tokenStates.insert({item.token, TokenStateValue{.rootContractAddress = item.rootContractAddress,
-                                                      .walletContractAddress = item.walletContractAddress,
+      tokenStates.insert({item.token, TokenStateValue{.walletContractAddress = item.walletContractAddress,
                                                       .lastTransactions = item.lastTransactions,
                                                       .balance = item.balance}});
     }
@@ -490,7 +491,7 @@ void LoadWalletList(not_null<Storage::Cache::Database *> db, bool useTestNetwork
 }
 
 void SaveWalletState(not_null<Storage::Cache::Database *> db, const WalletState &state, Callback<> done) {
-  if (state == WalletState{state.address}) {
+  if (state == WalletState{.address = state.address, .assetsList = {Ton::AssetListItemWallet{}}}) {
     InvokeCallback(done);
     return;
   }
@@ -511,7 +512,8 @@ void LoadWalletState(not_null<Storage::Cache::Database *> db, const QString &add
 
   db->get(WalletStateKey(address), [=](QByteArray value) {
     crl::on_main([=, result = Unpack<WalletState>(value)]() mutable {
-      done((result.address == address) ? std::move(result) : WalletState{address});
+      done((result.address == address) ? std::move(result)
+                                       : WalletState{.address = address, .assetsList = {Ton::AssetListItemWallet{}}});
     });
   });
 }

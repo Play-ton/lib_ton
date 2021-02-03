@@ -1423,10 +1423,10 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
           const auto walletAddress = tokens[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v;
           const auto rawWalletAddress = ConvertIntoRaw(walletAddress);
 
-          _accountViewers->addToken(account, TokenState{.token = Symbol::tip3(details.symbol, details.decimals),
-                                                        .rootContractAddress = rawRootContractAddress,
-                                                        .walletContractAddress = rawWalletAddress,
-                                                        .balance = 0});
+          _accountViewers->addToken(
+              account, TokenState{.token = Symbol::tip3(details.symbol, details.decimals, rawRootContractAddress),
+                                  .walletContractAddress = rawWalletAddress,
+                                  .balance = 0});
           InvokeCallback(done);
         })
         .fail([=](const TLError &error) {
@@ -1476,8 +1476,8 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
       .send();
 }
 
-void Wallet::removeToken(const QByteArray &publicKey, const QString &rootContractAddress) {
-  _accountViewers->removeToken(getUsedAddress(publicKey), ConvertIntoRaw(rootContractAddress));
+void Wallet::removeToken(const QByteArray &publicKey, const Symbol &token) {
+  _accountViewers->removeToken(getUsedAddress(publicKey), token);
 }
 
 void Wallet::reorderAssets(const QByteArray &publicKey, int oldPosition, int newPosition) {
@@ -1521,8 +1521,7 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
       std::unique_lock lock{mutex};
       result.insert(std::make_pair(  //
           tokenState.token,          //
-          TokenStateValue{.rootContractAddress = tokenState.rootContractAddress,
-                          .walletContractAddress = tokenState.walletContractAddress,
+          TokenStateValue{.walletContractAddress = tokenState.walletContractAddress,
                           .lastTransactions = tokenState.lastTransactions,
                           .balance = tokenState.balance}));
       checkComplete(tokenState.token);
@@ -1553,10 +1552,8 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
         .request(TLGetAccountState(tl_accountAddress(tl_string(token.walletContractAddress))))
         .done([=, symbol = symbol, token = token](TLFullAccountState &&result) mutable {
           if (result.c_fullAccountState().vaccount_state().type() == id_uninited_accountState) {
-            return ctx->notifySuccess(TokenState{.token = symbol,
-                                                 .rootContractAddress = token.rootContractAddress,
-                                                 .walletContractAddress = token.walletContractAddress,
-                                                 .balance = 0});
+            return ctx->notifySuccess(
+                TokenState{.token = symbol, .walletContractAddress = token.walletContractAddress, .balance = 0});
           } else if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState) {
             return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a token wallet contract"});
           }
@@ -1581,13 +1578,13 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
                   const auto &results = balanceOutput.c_ftabi_decodedOutput().vvalues().v;
                   if (results.empty() || results[0].type() != id_ftabi_valueInt) {
                     //InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
+                    std::cout << "failed to parse results: " << results.size() << std::endl;
                     return ctx->notifyError(symbol);
                   }
 
                   const auto balance = results[0].c_ftabi_valueInt().vvalue().v;
                   ctx->notifySuccess(  //
                       TokenState{.token = symbol,
-                                 .rootContractAddress = token.rootContractAddress,
                                  .walletContractAddress = token.walletContractAddress,
                                  .lastTransactions = std::forward<TransactionsSlice>(lastTransactions),
                                  .balance = balance});
@@ -1609,14 +1606,16 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
                                              tl_internal_transactionId(tl_int64(lastId.lt), tl_bytes(lastId.hash))))
               .done(
                   [getBalance = std::move(getBalance)](const TLraw_Transactions &result) { getBalance(Parse(result)); })
-              .fail([=](const TLError &) {
+              .fail([=](const TLError &error) {
                 // InvokeCallback(done, ErrorFromLib(error));
+                std::cout << "Get last transactions: " << error.c_error().vmessage().v.toStdString() << std::endl;
                 ctx->notifyError(symbol);
               })
               .send();
         })
-        .fail([=, symbol = symbol](const TLError &) {
+        .fail([=, symbol = symbol](const TLError &error) {
           // InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get token wallet state"});
+          std::cout << "Failed to get account state: " << error.c_error().vmessage().v.toStdString() << std::endl;
           ctx->notifyError(symbol);
         })
         .send();

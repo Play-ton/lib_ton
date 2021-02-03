@@ -204,37 +204,29 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
 
     const auto lastTransactionId = account.lastTransactionId;
 
-    const auto received = [this, address, account = std::move(account), tokenStates = std::move(tokenStates),
-                           dePoolParticipantStates = std::move(dePoolParticipantStates),
-                           currentState = std::move(currentState)](Result<TransactionsSlice> result) mutable {
+    const auto received = [=, currentState = std::move(currentState)](Result<TransactionsSlice> result) mutable {
       const auto viewers = findRefreshingViewers(address);
       if (viewers == nullptr || reportError(*viewers, result)) {
         return;
       }
-
+      currentState.lastTransactions = std::move(*result);
       currentState.assetsList.erase(  //
           ranges::remove_if(currentState.assetsList,
                             [&](const AssetListItem &item) {
                               return v::match(
                                   item,
                                   [&](const AssetListItemToken &token) {
-                                    return tokenStates.find(token.symbol) == end(tokenStates);
+                                    return currentState.tokenStates.find(token.symbol) == end(currentState.tokenStates);
                                   },
                                   [&](const AssetListItemDePool &dePool) {
-                                    return dePoolParticipantStates.find(dePool.address) == end(dePoolParticipantStates);
+                                    return currentState.dePoolParticipantStates.find(dePool.address) ==
+                                           end(currentState.dePoolParticipantStates);
                                   },
                                   [](const auto &) { return false; });
                             }),
           end(currentState.assetsList));
 
-      saveNewStateEncrypted(address, *viewers,
-                            WalletState{.address = address,
-                                        .account = account,
-                                        .lastTransactions = std::move(*result),
-                                        .tokenStates = std::move(tokenStates),
-                                        .dePoolParticipantStates = std::move(dePoolParticipantStates),
-                                        .assetsList = std::move(currentState.assetsList)},
-                            RefreshSource::Remote);
+      saveNewStateEncrypted(address, *viewers, std::move(currentState), RefreshSource::Remote);
     };
     _owner->requestTransactions(address, lastTransactionId, received);
   }}};
@@ -455,7 +447,6 @@ void AccountViewers::addToken(const QString &account, TokenState &&tokenState) {
     state.tokenStates.emplace(  //
         tokenState.token,       //
         TokenStateValue{
-            .rootContractAddress = tokenState.rootContractAddress,
             .walletContractAddress = tokenState.walletContractAddress,
             .lastTransactions = tokenState.lastTransactions,
             .balance = tokenState.balance,
@@ -474,15 +465,14 @@ void AccountViewers::addToken(const QString &account, TokenState &&tokenState) {
   }
 }
 
-void AccountViewers::removeToken(const QString &account, const QString &walletContractAddress) {
+void AccountViewers::removeToken(const QString &account, const Ton::Symbol &token) {
   const auto i = _map.find(account);
+
   if (i != end(_map)) {
     auto state = i->second.state.current();
 
-    const auto it = ranges::find_if(state.tokenStates, [&](const std::pair<Symbol, TokenStateValue> &item) {
-      return item.second.walletContractAddress == walletContractAddress;
-    });
-    if (it != state.tokenStates.end()) {
+    const auto it = state.tokenStates.find(token);
+    if (it != end(state.tokenStates)) {
       const auto assetIt = ranges::find_if(state.assetsList, [&](const AssetListItem &item) {
         return v::match(
             item, [&](const AssetListItemToken &token) { return it->first == token.symbol; },

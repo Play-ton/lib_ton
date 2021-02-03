@@ -10,17 +10,24 @@
 
 namespace Ton {
 
+const QString kZeroAddress = "0:0000000000000000000000000000000000000000000000000000000000000000";
+
 bool operator==(const Symbol &a, const Symbol &b) {
-  return a.kind() == b.kind() && (a.isTon() || a.name() == b.name() && a.decimals() == b.decimals());
+  return a.kind() == b.kind() && (a.isTon() || a.name() == b.name() && a.decimals() == b.decimals() &&
+                                                   a.rootContractAddress() == b.rootContractAddress());
 }
 
 bool operator!=(const Symbol &a, const Symbol &b) {
   return !(a == b);
 }
 
-bool operator<(const Symbol &a, const Symbol &b) {
-  return a.isTon() && b.isToken() ||
-         a.isToken() && b.isToken() && (a.name() < b.name() || a.name() == b.name() && a.decimals() < b.decimals());
+auto Symbol::toString() const -> QString {
+  return QString{"%1,%2,%3"}.arg(_name, QString::number(_decimals), _rootContractAddress);
+}
+
+auto Symbol::operator<(const Symbol &other) const -> bool {
+  return std::tie(_name, _decimals, _rootContractAddress) <
+         std::tie(other._name, other._decimals, other._rootContractAddress);
 }
 
 bool operator<(const TransactionId &a, const TransactionId &b) {
@@ -37,7 +44,7 @@ bool operator!=(const TransactionId &a, const TransactionId &b) {
 
 bool operator==(const TokenState &a, const TokenState &b) {
   return (a.token == b.token) && (a.balance == b.balance) && (a.lastTransactions == b.lastTransactions) &&
-         (a.rootContractAddress == b.rootContractAddress) && (a.walletContractAddress == b.walletContractAddress);
+         (a.walletContractAddress == b.walletContractAddress);
 }
 
 bool operator!=(const TokenState &a, const TokenState &b) {
@@ -46,7 +53,7 @@ bool operator!=(const TokenState &a, const TokenState &b) {
 
 bool operator==(const TokenStateValue &a, const TokenStateValue &b) {
   return (a.balance == b.balance) && (a.lastTransactions == b.lastTransactions) &&
-         (a.rootContractAddress == b.rootContractAddress) && (a.walletContractAddress == b.walletContractAddress);
+         (a.walletContractAddress == b.walletContractAddress);
 }
 
 bool operator!=(const TokenStateValue &a, const TokenStateValue &b) {

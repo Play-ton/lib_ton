@@ -17,6 +17,8 @@ namespace Ton {
 
 inline constexpr auto kUnknownBalance = int64(-666);
 
+extern const QString kZeroAddress;
+
 struct ConfigInfo {
   int64 walletId = 0;
   QByteArray restrictedInitPublicKey;
@@ -38,46 +40,54 @@ class Symbol {
     return Symbol{};
   }
 
-  static auto tip3(const QString &name, size_t decimals) -> Symbol {
-    return Symbol(CurrencyKind::TIP3, name, decimals);
+  static auto tip3(const QString &name, size_t decimals, const QString &rootContractAddress) -> Symbol {
+    return Symbol(CurrencyKind::TIP3, name, decimals, rootContractAddress);
   }
 
-  Symbol() noexcept : kind_{CurrencyKind::TON}, name_{"TON"}, decimals_{9} {
+  Symbol() noexcept : _kind{CurrencyKind::TON}, _name{"TON"}, _decimals{9} {
   }
 
   auto kind() const -> CurrencyKind {
-    return kind_;
+    return _kind;
   }
 
   auto name() const -> const QString & {
-    return name_;
+    return _name;
   }
 
   auto decimals() const -> const size_t {
-    return decimals_;
+    return _decimals;
+  }
+
+  auto rootContractAddress() const -> const QString & {
+    return _rootContractAddress;
   }
 
   auto isTon() const -> bool {
-    return kind_ == CurrencyKind::TON;
+    return _kind == CurrencyKind::TON;
   }
 
   auto isToken() const -> bool {
-    return kind_ == CurrencyKind::TIP3;
+    return _kind == CurrencyKind::TIP3;
   }
+
+  auto toString() const -> QString;
+
+  auto operator<(const Symbol &other) const -> bool;
 
  private:
-  Symbol(CurrencyKind kind, QString name, size_t decimals) noexcept
-      : kind_{kind}, name_{std::move(name)}, decimals_{decimals} {
+  Symbol(CurrencyKind kind, QString name, size_t decimals, QString rootContractAddress) noexcept
+      : _kind{kind}, _name{std::move(name)}, _decimals{decimals}, _rootContractAddress{rootContractAddress} {
   }
 
-  CurrencyKind kind_;
-  QString name_;
-  size_t decimals_;
+  CurrencyKind _kind;
+  QString _name;
+  size_t _decimals;
+  QString _rootContractAddress;
 };
 
 bool operator==(const Symbol &a, const Symbol &b);
 bool operator!=(const Symbol &a, const Symbol &b);
-bool operator<(const Symbol &a, const Symbol &b);
 
 template <typename T>
 using CurrencyMap = std::map<Symbol, T>;
@@ -227,7 +237,6 @@ bool operator!=(const TransactionsSlice &a, const TransactionsSlice &b);
 
 struct TokenState {
   Symbol token;
-  QString rootContractAddress;
   QString walletContractAddress;
   TransactionsSlice lastTransactions;
   int64 balance = kUnknownBalance;
@@ -238,14 +247,12 @@ bool operator==(const TokenState &a, const TokenState &b);
 bool operator!=(const TokenState &a, const TokenState &b);
 
 struct TokenStateValue {
-  QString rootContractAddress;
   QString walletContractAddress;
   TransactionsSlice lastTransactions;
   int64 balance = kUnknownBalance;
 
   [[nodiscard]] auto withSymbol(Symbol symbol) const -> TokenState {
     return TokenState{.token = std::move(symbol),
-                      .rootContractAddress = rootContractAddress,
                       .walletContractAddress = walletContractAddress,
                       .lastTransactions = lastTransactions,
                       .balance = balance};
@@ -416,6 +423,16 @@ struct Update {
 }  // namespace Ton
 
 namespace std {
+namespace details {
+
+template <typename T, typename... Rest>
+void hash_combine(uint &seed, const T &v, Rest... rest) {
+  seed ^= qHash(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+  (hash_combine(seed, rest), ...);
+}
+
+}  // namespace details
+
 template <>
 struct hash<QString> {
   std::size_t operator()(const QString &s) const noexcept {
@@ -425,11 +442,13 @@ struct hash<QString> {
 
 template <>
 struct hash<Ton::Symbol> {
-  std::size_t operator()(Ton::Symbol const &s) const noexcept {
+  size_t operator()(Ton::Symbol const &s) const noexcept {
     if (s.kind() == Ton::CurrencyKind::TON) {
       return 0;
     } else {
-      return static_cast<std::size_t>(qHash(s.name())) + s.decimals();
+      size_t hash{};
+      details::hash_combine(hash, s.name(), s.decimals(), s.rootContractAddress());
+      return static_cast<std::size_t>(hash);
     }
   }
 };

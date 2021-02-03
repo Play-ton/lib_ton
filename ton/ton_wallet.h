@@ -55,20 +55,20 @@ class Wallet final : public base::has_weak_ptr {
   void sync();
 
   [[nodiscard]] const Settings &settings() const;
-  void updateSettings(Settings settings, const Callback<>& done);
+  void updateSettings(Settings settings, const Callback<> &done);
 
   [[nodiscard]] rpl::producer<Update> updates() const;
 
   [[nodiscard]] std::vector<QByteArray> publicKeys() const;
 
-  void createKey(const Callback<std::vector<QString>>& done);
-  void importKey(const std::vector<QString> &words, const Callback<>& done);
-  void queryWalletAddress(const Callback<QString>& done);
-  void saveKey(const QByteArray &password, const QString &address, const Callback<QByteArray>& done);
-  void exportKey(const QByteArray &publicKey, const QByteArray &password, const Callback<std::vector<QString>>& done);
-  void deleteKey(const QByteArray &publicKey, const Callback<>& done);
-  void deleteAllKeys(const Callback<>& done);
-  void changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, const Callback<>& done);
+  void createKey(const Callback<std::vector<QString>> &done);
+  void importKey(const std::vector<QString> &words, const Callback<> &done);
+  void queryWalletAddress(const Callback<QString> &done);
+  void saveKey(const QByteArray &password, const QString &address, const Callback<QByteArray> &done);
+  void exportKey(const QByteArray &publicKey, const QByteArray &password, const Callback<std::vector<QString>> &done);
+  void deleteKey(const QByteArray &publicKey, const Callback<> &done);
+  void deleteAllKeys(const Callback<> &done);
+  void changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, const Callback<> &done);
 
   void checkSendGrams(const QByteArray &publicKey, const TransactionToSend &transaction,
                       const Callback<TransactionCheckResult> &done);
@@ -115,7 +115,7 @@ class Wallet final : public base::has_weak_ptr {
   void removeDePool(const QByteArray &publicKey, const QString &dePoolAddress);
 
   void addToken(const QByteArray &publicKey, const QString &rootContractAddress, const Callback<> &done);
-  void removeToken(const QByteArray &publicKey, const QString &rootContractAddress);
+  void removeToken(const QByteArray &publicKey, const Symbol &token);
   void reorderAssets(const QByteArray &publicKey, int oldPosition, int newPosition);
 
   static void EnableLogging(bool enabled, const QString &basePath);
