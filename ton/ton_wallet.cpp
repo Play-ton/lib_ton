@@ -143,7 +143,7 @@ TLftabi_Function TokenGetBalance() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
     const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("getBalance"),
+        TLftabi_CreateFunction(tl_string("balance"),
                                tl_vector(QVector<TLftabi_namedParam>{
                                    tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
                                    tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
@@ -835,7 +835,7 @@ const Settings &Wallet::settings() const {
   return _external->settings();
 }
 
-void Wallet::updateSettings(Settings settings, Callback<> done) {
+void Wallet::updateSettings(Settings settings, const Callback<> &done) {
   const auto &was = _external->settings();
   const auto detach = (was.net().blockchainName != settings.net().blockchainName);
   const auto change = (was.useTestNetwork != settings.useTestNetwork);

@@ -36,7 +36,7 @@ class External final : public base::has_weak_ptr {
 
   [[nodiscard]] const Settings &settings() const;
   void updateSettings(const Settings &settings, Callback<ConfigInfo> done);
-  void switchNetwork(Callback<ConfigInfo> done);
+  void switchNetwork(const Callback<ConfigInfo>& done);
 
   [[nodiscard]] RequestSender &lib();
   [[nodiscard]] Storage::Cache::Database &db();

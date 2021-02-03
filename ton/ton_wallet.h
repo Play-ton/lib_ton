@@ -55,7 +55,7 @@ class Wallet final : public base::has_weak_ptr {
   void sync();
 
   [[nodiscard]] const Settings &settings() const;
-  void updateSettings(Settings settings, Callback<> done);
+  void updateSettings(Settings settings, const Callback<>& done);
 
   [[nodiscard]] rpl::producer<Update> updates() const;
 

@@ -186,7 +186,7 @@ void External::updateSettings(const Settings &settings, Callback<ConfigInfo> don
       .send();
 }
 
-void External::switchNetwork(Callback<ConfigInfo> done) {
+void External::switchNetwork(const Callback<ConfigInfo> &done) {
   _settings.useTestNetwork = !_settings.useTestNetwork;
 
   updateSettings(_settings, [=](Result<ConfigInfo> result) {

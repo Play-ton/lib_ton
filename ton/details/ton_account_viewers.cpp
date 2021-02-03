@@ -116,29 +116,29 @@ void AccountViewers::checkPendingForSameState(const QString &address, Viewers &v
     // Some pending transactions were discarded by the sync time.
 
     currentState.assetsList.erase(  //
-        ranges::remove_if(currentState.assetsList,
-                          [&](const AssetListItem &item) {
-                            return v::match(
-                                item,
-                                [&](const AssetListItemToken &token) {
-                                  return tokenStates.find(token.symbol) == end(tokenStates);
-                                },
-                                [&](const AssetListItemDePool &dePool) {
-                                  return dePoolStates.find(dePool.address) == end(dePoolStates);
-                                },
-                                [](const auto &) { return false; });
-                          }),
+        ranges::remove_if(          //
+            currentState.assetsList,
+            [&](const AssetListItem &item) {
+              return v::match(
+                  item,
+                  [&](const AssetListItemToken &token) { return tokenStates.find(token.symbol) == end(tokenStates); },
+                  [&](const AssetListItemDePool &dePool) {
+                    return dePoolStates.find(dePool.address) == end(dePoolStates);
+                  },
+                  [](const auto &) { return false; });
+            }),
         end(currentState.assetsList));
 
-    saveNewState(viewers,
-                 WalletState{.address = address,
-                             .account = state,
-                             .lastTransactions = std::move(currentState.lastTransactions),
-                             .pendingTransactions = std::move(pending),
-                             .tokenStates = tokenStates,
-                             .dePoolParticipantStates = dePoolStates,
-                             .assetsList = std::move(currentState.assetsList)},
-                 RefreshSource::Remote);
+    saveNewState(  //
+        viewers,
+        WalletState{.address = address,
+                    .account = state,
+                    .lastTransactions = std::move(currentState.lastTransactions),
+                    .pendingTransactions = std::move(pending),
+                    .tokenStates = tokenStates,
+                    .dePoolParticipantStates = dePoolStates,
+                    .assetsList = std::move(currentState.assetsList)},
+        RefreshSource::Remote);
   } else {
     finishRefreshing(viewers);
     checkNextRefresh();
@@ -337,14 +337,19 @@ void AccountViewers::refreshFromDatabase(const QString &address, Viewers &viewer
     if (!viewers) {
       return;
     }
-    saveNewStateEncrypted(address, *viewers, result.value_or(WalletState{address}), RefreshSource::Database);
+    saveNewStateEncrypted(address, *viewers,
+                          result.value_or(WalletState{.address = address, .assetsList = {Ton::AssetListItemWallet{}}}),
+                          RefreshSource::Database);
   };
   LoadWalletState(_db, address, crl::guard(this, loaded));
 }
 
 std::unique_ptr<AccountViewer> AccountViewers::createAccountViewer(const QByteArray &publicKey,
                                                                    const QString &address) {
-  const auto i = _map.emplace(address, Viewers{publicKey, WalletState{address}}).first;
+  const auto i =
+      _map.emplace(address,
+                   Viewers{publicKey, WalletState{.address = address, .assetsList = {Ton::AssetListItemWallet{}}}})
+          .first;
 
   auto &viewers = i->second;
   auto state = rpl::combine(viewers.state.value(), viewers.lastGoodRefresh.value(), viewers.refreshing.value()) |
