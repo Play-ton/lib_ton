@@ -204,11 +204,17 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
 
     const auto lastTransactionId = account.lastTransactionId;
 
-    const auto received = [=, currentState = std::move(currentState)](Result<TransactionsSlice> result) mutable {
+    const auto received = [=, currentState = std::move(currentState), account = std::move(account),
+                           tokenStates = std::move(tokenStates),
+                           dePoolParticipantStates =
+                               std::move(dePoolParticipantStates)](Result<TransactionsSlice> result) mutable {
       const auto viewers = findRefreshingViewers(address);
       if (viewers == nullptr || reportError(*viewers, result)) {
         return;
       }
+      currentState.account = std::move(account);
+      currentState.tokenStates = std::move(tokenStates);
+      currentState.dePoolParticipantStates = std::move(dePoolParticipantStates);
       currentState.lastTransactions = std::move(*result);
       currentState.assetsList.erase(  //
           ranges::remove_if(currentState.assetsList,
