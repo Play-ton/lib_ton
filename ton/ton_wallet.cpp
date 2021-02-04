@@ -155,6 +155,25 @@ TLftabi_Function TokenGetBalance() {
   return *function;
 }
 
+TLftabi_Function TokenAcceptFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("accept"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
+                               }),
+                               {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
 TLftabi_Function TokenTransferFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
@@ -417,6 +436,24 @@ std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
 
   return TokenTransfer{.address = args[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
                        .value = args[1].c_ftabi_valueInt().vvalue().v,
+                       .incoming = false,
+                       .direct = true};
+}
+
+std::optional<TokenTransfer> ParseTokenTransferToOwner(const QByteArray &body) {
+  const auto decodedTransferInput =
+      RequestSender::Execute(TLftabi_DecodeInput(TokenTransferToOwnerFunction(), tl_bytes(body), tl_boolTrue()));
+  if (!decodedTransferInput.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto args = decodedTransferInput.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 5 || args[1].type() != id_ftabi_valueAddress || args[2].type() != id_ftabi_valueInt) {
+    return std::nullopt;
+  }
+
+  return TokenTransfer{.address = args[1].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
+                       .value = args[2].c_ftabi_valueInt().vvalue().v,
                        .incoming = false};
 }
 
@@ -434,7 +471,23 @@ std::optional<TokenTransfer> ParseInternalTokenTransfer(const QByteArray &body) 
 
   return TokenTransfer{.address = args[2].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
                        .value = args[0].c_ftabi_valueInt().vvalue().v,
-                       .incoming = true};
+                       .incoming = true,
+                       .direct = true};
+}
+
+std::optional<TokenMint> ParseTokenAccept(const QByteArray &body) {
+  const auto decodedAcceptInput =
+      RequestSender::Execute(TLftabi_DecodeInput(TokenAcceptFunction(), tl_bytes(body), tl_boolTrue()));
+  if (!decodedAcceptInput.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto args = decodedAcceptInput.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 1 || args[0].type() != id_ftabi_valueInt) {
+    return std::nullopt;
+  }
+
+  return TokenMint{.value = args[0].c_ftabi_valueInt().vvalue().v};
 }
 
 std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
@@ -540,7 +593,8 @@ std::optional<RootTokenContractDetails> ParseRootTokenContractDetails(const TLft
   }
 
   const auto &tuple = tokens[0].c_ftabi_valueTuple().vvalues().v;
-  if (tuple.size() < 8 || tuple[2].type() != id_ftabi_valueInt || tuple[7].type() != id_ftabi_valueInt) {
+  if (tuple.size() < 8 || tuple[2].type() != id_ftabi_valueInt || tuple[5].type() != id_ftabi_valueAddress ||
+      tuple[7].type() != id_ftabi_valueInt) {
     return std::nullopt;
   }
 
@@ -548,6 +602,7 @@ std::optional<RootTokenContractDetails> ParseRootTokenContractDetails(const TLft
       .name = tuple[0].c_ftabi_valueBytes().vvalue().v,
       .symbol = tuple[1].c_ftabi_valueBytes().vvalue().v,
       .decimals = tuple[2].c_ftabi_valueInt().vvalue().v,
+      .ownerAddress = tuple[5].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
       .startGasBalance = tuple[7].c_ftabi_valueInt().vvalue().v,
   };
 }
@@ -588,20 +643,22 @@ Result<QByteArray> CreateTokenTransferToOwnerMessage(const QString &recipient, i
   return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
-Result<QByteArray> CreateSwapBackMessage(const QString &etheriumAddress, const QString &callback_address,
-                                         int64 amount) {
-  constexpr auto invalid_ethereum_address = "invalid ethereum address";
-  if (!etheriumAddress.startsWith("0x")) {
-    return Error{Error::Type::Web, invalid_ethereum_address};
+std::optional<QByteArray> ParseEthereumAddress(const QString &ethereumAddress) {
+  if (!ethereumAddress.startsWith("0x")) {
+    return std::nullopt;
   }
-  const auto target = etheriumAddress.mid(2, -1);
+  const auto target = ethereumAddress.mid(2, -1);
   const auto targetBytes = QByteArray::fromHex(target.toUtf8());
   if (targetBytes.size() != kEthereumAddressByteCount) {
-    return Error{Error::Type::Web, invalid_ethereum_address};
+    return std::nullopt;
   }
+  return targetBytes;
+}
 
+Result<QByteArray> CreateSwapBackMessage(const QByteArray &ethereumAddress, const QString &callback_address,
+                                         int64 amount) {
   auto callback_payload = RequestSender::Execute(TLftabi_PackIntoCell(
-      tl_vector(QVector<TLftabi_Value>{tl_ftabi_valueBytes(tl_ftabi_paramBytes(), tl_bytes(targetBytes))})));
+      tl_vector(QVector<TLftabi_Value>{tl_ftabi_valueBytes(tl_ftabi_paramBytes(), tl_bytes(ethereumAddress))})));
   if (!callback_payload.has_value()) {
     return callback_payload.error();
   }
@@ -746,6 +803,10 @@ std::optional<Ton::TokenTransaction> Wallet::ParseTokenTransaction(const Ton::Me
     return *transfer;
   } else if (auto internalTransfer = ParseInternalTokenTransfer(message.data); internalTransfer.has_value()) {
     return *internalTransfer;
+  } else if (auto transferToOwner = ParseTokenTransferToOwner(message.data); transferToOwner.has_value()) {
+    return *transferToOwner;
+  } else if (auto mint = ParseTokenAccept(message.data); mint.has_value()) {
+    return *mint;
   } else if (auto swapBack = ParseTokenSwapBack(message.data); swapBack.has_value()) {
     return *swapBack;
   } else {
@@ -1048,7 +1109,11 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
   Assert(!sender.isEmpty());
 
   if (transaction.tokenTransferType == TokenTransferType::SwapBack) {
-    auto body = CreateSwapBackMessage(transaction.recipient, transaction.callbackAddress, transaction.amount);
+    const auto ethereumAddress = ParseEthereumAddress(transaction.recipient);
+    if (!ethereumAddress.has_value()) {
+      return done(std::make_pair(TransactionCheckResult{}, InvalidEthAddress{}));
+    }
+    auto body = CreateSwapBackMessage(ethereumAddress.value(), transaction.callbackAddress, transaction.amount);
     if (!body.has_value()) {
       return InvokeCallback(done, body.error());
     }
@@ -1231,7 +1296,11 @@ void Wallet::sendTokens(const QByteArray &publicKey, const QByteArray &password,
       break;
     }
     case TokenTransferType::SwapBack: {
-      body = CreateSwapBackMessage(transaction.recipient, transaction.callbackAddress, transaction.amount);
+      const auto ethereumAddress = ParseEthereumAddress(transaction.recipient);
+      if (!ethereumAddress.has_value()) {
+        return InvokeCallback(done, Error{Error::Type::Web, "Invalid ethereum address"});
+      }
+      body = CreateSwapBackMessage(ethereumAddress.value(), transaction.callbackAddress, transaction.amount);
       break;
     }
   }
@@ -1426,6 +1495,7 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
           _accountViewers->addToken(
               account, TokenState{.token = Symbol::tip3(details.symbol, details.decimals, rawRootContractAddress),
                                   .walletContractAddress = rawWalletAddress,
+                                  .rootOwnerAddress = details.ownerAddress,
                                   .balance = 0});
           InvokeCallback(done);
         })
@@ -1522,6 +1592,7 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
       result.insert(std::make_pair(  //
           tokenState.token,          //
           TokenStateValue{.walletContractAddress = tokenState.walletContractAddress,
+                          .rootOwnerAddress = tokenState.rootOwnerAddress,
                           .lastTransactions = tokenState.lastTransactions,
                           .balance = tokenState.balance}));
       checkComplete(tokenState.token);
@@ -1552,8 +1623,10 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
         .request(TLGetAccountState(tl_accountAddress(tl_string(token.walletContractAddress))))
         .done([=, symbol = symbol, token = token](TLFullAccountState &&result) mutable {
           if (result.c_fullAccountState().vaccount_state().type() == id_uninited_accountState) {
-            return ctx->notifySuccess(
-                TokenState{.token = symbol, .walletContractAddress = token.walletContractAddress, .balance = 0});
+            return ctx->notifySuccess(TokenState{.token = symbol,
+                                                 .walletContractAddress = token.walletContractAddress,
+                                                 .rootOwnerAddress = token.rootOwnerAddress,
+                                                 .balance = 0});
           } else if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState) {
             return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a token wallet contract"});
           }
@@ -1586,6 +1659,7 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
                   ctx->notifySuccess(  //
                       TokenState{.token = symbol,
                                  .walletContractAddress = token.walletContractAddress,
+                                 .rootOwnerAddress = token.rootOwnerAddress,
                                  .lastTransactions = std::forward<TransactionsSlice>(lastTransactions),
                                  .balance = balance});
                 })

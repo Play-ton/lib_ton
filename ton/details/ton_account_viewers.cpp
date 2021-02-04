@@ -454,6 +454,7 @@ void AccountViewers::addToken(const QString &account, TokenState &&tokenState) {
         tokenState.token,       //
         TokenStateValue{
             .walletContractAddress = tokenState.walletContractAddress,
+            .rootOwnerAddress = tokenState.rootOwnerAddress,
             .lastTransactions = tokenState.lastTransactions,
             .balance = tokenState.balance,
         });

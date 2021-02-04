@@ -272,7 +272,8 @@ PendingTransaction Deserialize(const TLstorage_PendingTransaction &data) {
 TLstorage_TokenState Serialize(const TokenState &data) {
   Assert(data.token.isToken());
   return make_storage_tokenState(tl_string(data.token.rootContractAddress()), tl_string(data.walletContractAddress),
-                                 tl_string(data.token.name()), tl_int32(static_cast<int32_t>(data.token.decimals())),
+                                 tl_string(data.token.rootContractAddress()), tl_string(data.token.name()),
+                                 tl_int32(static_cast<int32_t>(data.token.decimals())),
                                  Serialize(data.lastTransactions), tl_int64(data.balance));
 }
 
@@ -281,6 +282,7 @@ TokenState Deserialize(const TLstorage_TokenState &data) {
     return TokenState{.token = Symbol::tip3(tl::utf8(data.vname().v), static_cast<size_t>(data.vdecimals().v),
                                             data.vrootContractAddress().v),
                       .walletContractAddress = data.vwalletContractAddress().v,
+                      .rootOwnerAddress = data.vrootOwnerAddress().v,
                       .lastTransactions = Deserialize(data.vlastTransactions()),
                       .balance = data.vbalance().v};
   });
@@ -348,6 +350,7 @@ WalletState Deserialize(const TLstorage_WalletState &data) {
     CurrencyMap<TokenStateValue> tokenStates;
     for (auto &item : storedTokenStates) {
       tokenStates.insert({item.token, TokenStateValue{.walletContractAddress = item.walletContractAddress,
+                                                      .rootOwnerAddress = item.rootOwnerAddress,
                                                       .lastTransactions = item.lastTransactions,
                                                       .balance = item.balance}});
     }

@@ -135,6 +135,7 @@ Transaction Parse(const TLraw_Transaction &data) {
     result.otherFee = data.vother_fee().v;
     result.storageFee = data.vstorage_fee().v;
     result.time = data.vutime().v;
+    result.aborted = data.vaborted().type() == id_boolTrue;
     return result;
   });
 }

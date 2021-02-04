@@ -124,6 +124,7 @@ struct RootTokenContractDetails {
   QString name;
   QString symbol;
   int64 decimals{};
+  QString ownerAddress{};
   int64 startGasBalance;
 };
 
@@ -161,6 +162,7 @@ struct TokenTransfer {
   QString address;
   int64 value{};
   bool incoming{};
+  bool direct{};
 };
 
 struct TokenSwapBack {
@@ -168,7 +170,11 @@ struct TokenSwapBack {
   int64 value{};
 };
 
-using TokenTransaction = std::variant<TokenTransfer, TokenSwapBack>;
+struct TokenMint {
+  int64 value{};
+};
+
+using TokenTransaction = std::variant<TokenTransfer, TokenSwapBack, TokenMint>;
 
 struct DePoolOrdinaryStakeTransaction {
   int64 stake = 0;
@@ -220,6 +226,7 @@ struct Transaction {
   Message incoming;
   std::vector<Message> outgoing;
   bool initializing = false;
+  bool aborted = false;
 };
 
 bool operator==(const Transaction &a, const Transaction &b);
@@ -238,6 +245,7 @@ bool operator!=(const TransactionsSlice &a, const TransactionsSlice &b);
 struct TokenState {
   Symbol token;
   QString walletContractAddress;
+  QString rootOwnerAddress;
   TransactionsSlice lastTransactions;
   int64 balance = kUnknownBalance;
 };
@@ -248,12 +256,14 @@ bool operator!=(const TokenState &a, const TokenState &b);
 
 struct TokenStateValue {
   QString walletContractAddress;
+  QString rootOwnerAddress;
   TransactionsSlice lastTransactions;
   int64 balance = kUnknownBalance;
 
   [[nodiscard]] auto withSymbol(Symbol symbol) const -> TokenState {
     return TokenState{.token = std::move(symbol),
                       .walletContractAddress = walletContractAddress,
+                      .rootOwnerAddress = rootOwnerAddress,
                       .lastTransactions = lastTransactions,
                       .balance = balance};
   }
@@ -337,13 +347,15 @@ struct TransactionCheckResult {
   std::vector<TransactionFees> destinationFees;
 };
 
+struct InvalidEthAddress {};
 struct TokenTransferUnchanged {};
 struct DirectAccountNotFound {};
 struct DirectRecipient {
   QString address;
 };
 
-using TokenTransferCheckResult = std::variant<TokenTransferUnchanged, DirectAccountNotFound, DirectRecipient>;
+using TokenTransferCheckResult =
+    std::variant<InvalidEthAddress, TokenTransferUnchanged, DirectAccountNotFound, DirectRecipient>;
 
 struct PendingTransaction {
   Transaction fake;

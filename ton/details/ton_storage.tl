@@ -22,6 +22,7 @@ storage.pendingTransaction fake:storage.Transaction sentUntilSyncTime:int64 = st
 storage.tokenState
     rootContractAddress:bytes
     walletContractAddress:bytes
+    rootOwnerAddress:bytes
     name:bytes
     decimals:int32
     lastTransactions:storage.TransactionsSlice
