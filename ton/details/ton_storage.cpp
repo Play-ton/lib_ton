@@ -34,6 +34,10 @@ constexpr auto kWalletMainListKey = Storage::Cache::Key{1ULL, 2ULL};
   return {0x2ULL | (a & 0xFFFFFFFFFFFF0000ULL), b};
 }
 
+[[nodiscard]] Storage::Cache::Key TokenOwnersCacheKey(bool useTestNetwork, const QString &rootContractAddress) {
+  return {useTestNetwork ? 0x3ULL : 0x4ULL, qHash(rootContractAddress)};
+}
+
 [[nodiscard]] QString ConvertLegacyUrl(const QString &configUrl) {
   return (configUrl == "https://test.ton.org/config.json") ? "https://ton.org/config-test.json" : configUrl;
 }
@@ -75,6 +79,8 @@ TLstorage_AssetsListItem Serialize(const AssetListItem &data);
 AssetListItem Deserialize(const TLstorage_AssetsListItem &data);
 TLstorage_WalletState Serialize(const WalletState &data);
 WalletState Deserialize(const TLstorage_WalletState &data);
+TLstorage_TokenOwnersCache Serialize(const TokenOwnersCache &data);
+TokenOwnersCache Deserialize(const TLstorage_TokenOwnersCache &data);
 TLstorage_Settings Serialize(const Settings &data);
 Settings Deserialize(const TLstorage_Settings &data);
 
@@ -391,6 +397,25 @@ WalletState Deserialize(const TLstorage_WalletState &data) {
   });
 }
 
+TLstorage_TokenOwnersCache Serialize(const TokenOwnersCache &data) {
+  TLvector<TLstorage_tokenOwnersCacheItem> wallets;
+  wallets.v.reserve(data.entries.size());
+  for (const auto &[owner, wallet] : data.entries) {
+    wallets.v.push_back(make_storage_tokenOwnersCacheItem(tl_string(owner), tl_string(wallet)));
+  }
+  return make_storage_tokenOwnersCache(wallets);
+}
+
+TokenOwnersCache Deserialize(const TLstorage_TokenOwnersCache &data) {
+  TokenOwnersCache owners;
+  for (const auto &item : data.c_storage_tokenOwnersCache().vwallets().v) {
+    const auto &wallet = item.c_storage_tokenOwnersCacheItem();
+    owners.entries.emplace(std::piecewise_construct, std::forward_as_tuple(wallet.vowner().v),
+                           std::forward_as_tuple(wallet.vwallet().v));
+  }
+  return owners;
+}
+
 TLstorage_Network Serialize(const NetSettings &data) {
   return make_storage_network(tl_string(data.blockchainName), tl_string(data.configUrl), tl_string(data.config),
                               Serialize(data.useCustomConfig));
@@ -484,7 +509,7 @@ void DeletePublicKey(not_null<RequestSender *> lib, const QByteArray &publicKey,
 
 void SaveWalletList(not_null<Storage::Cache::Database *> db, const WalletList &list, bool useTestNetwork,
                     Callback<> done) {
-  auto saved = [=](Storage::Cache::Error error) {
+  auto saved = [=](const Storage::Cache::Error &error) {
     crl::on_main([=] {
       if (const auto bad = ErrorFromStorage(error)) {
         InvokeCallback(done, *bad);
@@ -508,12 +533,39 @@ void LoadWalletList(not_null<Storage::Cache::Database *> db, bool useTestNetwork
   });
 }
 
-void SaveWalletState(not_null<Storage::Cache::Database *> db, const WalletState &state, Callback<> done) {
+void SaveTokenOwnersCache(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
+                          const QString &rootContractAddress, const TokenOwnersCache &owners, const Callback<> &done) {
+  auto saved = [=](const Storage::Cache::Error &error) {
+    crl::on_main([=] {
+      if (const auto bad = ErrorFromStorage(error)) {
+        InvokeCallback(done, *bad);
+      } else {
+        InvokeCallback(done);
+      }
+    });
+  };
+  if (owners.entries.empty()) {
+    db->remove(TokenOwnersCacheKey(useTestNetwork, rootContractAddress), std::move(saved));
+  } else {
+    db->put(TokenOwnersCacheKey(useTestNetwork, rootContractAddress), Pack(owners), std::move(saved));
+  }
+}
+
+void LoadTokenOwnersCache(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
+                          const QString &rootContractAddress, const Fn<void(TokenOwnersCache &&)> &done) {
+  Expects(done != nullptr);
+
+  db->get(TokenOwnersCacheKey(useTestNetwork, rootContractAddress), [=](const QByteArray &value) {
+    crl::on_main([done, result = Unpack<TokenOwnersCache>(value)]() mutable { done(std::move(result)); });
+  });
+}
+
+void SaveWalletState(not_null<Storage::Cache::Database *> db, const WalletState &state, const Callback<> &done) {
   if (state == WalletState{.address = state.address, .assetsList = {Ton::AssetListItemWallet{}}}) {
     InvokeCallback(done);
     return;
   }
-  auto saved = [=](Storage::Cache::Error error) {
+  auto saved = [=](const Storage::Cache::Error &error) {
     crl::on_main([=] {
       if (const auto bad = ErrorFromStorage(error)) {
         InvokeCallback(done, *bad);
@@ -525,10 +577,11 @@ void SaveWalletState(not_null<Storage::Cache::Database *> db, const WalletState 
   db->put(WalletStateKey(state.address), Pack(state), std::move(saved));
 }
 
-void LoadWalletState(not_null<Storage::Cache::Database *> db, const QString &address, Fn<void(WalletState &&)> done) {
+void LoadWalletState(not_null<Storage::Cache::Database *> db, const QString &address,
+                     const Fn<void(WalletState &&)> &done) {
   Expects(done != nullptr);
 
-  db->get(WalletStateKey(address), [=](QByteArray value) {
+  db->get(WalletStateKey(address), [=](const QByteArray &value) {
     crl::on_main([=, result = Unpack<WalletState>(value)]() mutable {
       done((result.address == address) ? std::move(result)
                                        : WalletState{.address = address, .assetsList = {Ton::AssetListItemWallet{}}});
@@ -536,8 +589,8 @@ void LoadWalletState(not_null<Storage::Cache::Database *> db, const QString &add
   });
 }
 
-void SaveSettings(not_null<Storage::Cache::Database *> db, const Settings &settings, Callback<> done) {
-  auto saved = [=](Storage::Cache::Error error) {
+void SaveSettings(not_null<Storage::Cache::Database *> db, const Settings &settings, const Callback<> &done) {
+  auto saved = [=](const Storage::Cache::Error &error) {
     crl::on_main([=] {
       if (const auto bad = ErrorFromStorage(error)) {
         InvokeCallback(done, *bad);
@@ -549,10 +602,10 @@ void SaveSettings(not_null<Storage::Cache::Database *> db, const Settings &setti
   db->put(kSettingsKey, Pack(settings), std::move(saved));
 }
 
-void LoadSettings(not_null<Storage::Cache::Database *> db, Fn<void(Settings &&)> done) {
+void LoadSettings(not_null<Storage::Cache::Database *> db, const Fn<void(Settings &&)> &done) {
   Expects(done != nullptr);
 
-  db->get(kSettingsKey, [=](QByteArray value) {
+  db->get(kSettingsKey, [=](const QByteArray &value) {
     crl::on_main([=, result = Unpack<Settings>(value)]() mutable { done(std::move(result)); });
   });
 }

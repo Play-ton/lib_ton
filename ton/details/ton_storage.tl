@@ -60,6 +60,9 @@ storage.walletState
     dePoolStates:vector<storage.DePoolState>
     assetsList:vector<storage.AssetsListItem> = storage.WalletState;
 
+storage.tokenOwnersCacheItem wallet:bytes owner:bytes = storage.TokenOwnersCacheItem;
+storage.tokenOwnersCache wallets:vector<storage.tokenOwnersCacheItem> = storage.TokenOwnersCache;
+
 storage.network blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool = storage.Network;
 storage.settings blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool useNetworkCallbacks:storage.Bool = storage.Settings; // old
 storage.settings2 blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool useNetworkCallbacks:storage.Bool version:int32 = storage.Settings; // old

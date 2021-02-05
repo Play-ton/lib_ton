@@ -37,6 +37,10 @@ struct WalletList {
   std::vector<Entry> entries;
 };
 
+struct TokenOwnersCache {
+  std::map<QString, QString> entries;
+};
+
 [[nodiscard]] std::optional<Error> ErrorFromStorage(const Storage::Cache::Error &error);
 
 void DeletePublicKey(not_null<RequestSender *> lib, const QByteArray &publicKey, const QByteArray &secret,
@@ -46,10 +50,15 @@ void SaveWalletList(not_null<Storage::Cache::Database *> db, const WalletList &l
                     Callback<> done);
 void LoadWalletList(not_null<Storage::Cache::Database *> db, bool useTestNetwork, Fn<void(WalletList &&)> done);
 
-void SaveWalletState(not_null<Storage::Cache::Database *> db, const WalletState &state, Callback<> done);
-void LoadWalletState(not_null<Storage::Cache::Database *> db, const QString &address, Fn<void(WalletState &&)> done);
+void SaveTokenOwnersCache(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
+                          const QString &rootContractAddress, const TokenOwnersCache &owners, const Callback<>& done);
+void LoadTokenOwnersCache(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
+                          const QString &rootContractAddress, const Fn<void(TokenOwnersCache &&)>& done);
 
-void SaveSettings(not_null<Storage::Cache::Database *> db, const Settings &settings, Callback<> done);
-void LoadSettings(not_null<Storage::Cache::Database *> db, Fn<void(Settings &&)> done);
+void SaveWalletState(not_null<Storage::Cache::Database *> db, const WalletState &state, const Callback<>& done);
+void LoadWalletState(not_null<Storage::Cache::Database *> db, const QString &address, const Fn<void(WalletState &&)>& done);
+
+void SaveSettings(not_null<Storage::Cache::Database *> db, const Settings &settings, const Callback<>& done);
+void LoadSettings(not_null<Storage::Cache::Database *> db, const Fn<void(Settings &&)>& done);
 
 }  // namespace Ton::details
