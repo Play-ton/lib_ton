@@ -15,8 +15,23 @@ storage.messageDataTextEncrypted data:bytes = storage.MessageData;
 storage.messageDataTextDecrypted text:string = storage.MessageData;
 storage.messageDataTextPlain text:string = storage.MessageData;
 storage.messageDataRaw body:bytes = storage.MessageData;
-storage.message2 source:string destination:string value:int64 created:int64 bodyHash:bytes message:storage.MessageData = storage.Message;
-storage.transaction id:storage.TransactionId time:int64 fee:int64 storageFee:int64 otherFee:int64 incoming:storage.Message outgoing:vector<storage.Message> = storage.Transaction;
+storage.message2
+    source:string
+    destination:string
+    value:int64
+    created:int64
+    bodyHash:bytes
+    message:storage.MessageData
+    bounce:storage.Bool = storage.Message;
+storage.transaction
+    id:storage.TransactionId
+    time:int64
+    fee:int64
+    storageFee:int64
+    otherFee:int64
+    incoming:storage.Message
+    outgoing:vector<storage.Message>
+    aborted:storage.Bool = storage.Transaction;
 storage.transactionsSlice list:vector<storage.Transaction> previousId:storage.TransactionId = storage.TransactionsSlice;
 storage.pendingTransaction fake:storage.Transaction sentUntilSyncTime:int64 = storage.PendingTransaction;
 storage.tokenState

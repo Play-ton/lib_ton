@@ -205,6 +205,7 @@ struct Message {
   int64 created = 0;
   QByteArray bodyHash;
   MessageData message;
+  bool bounce{};
 };
 
 struct EncryptedText {
@@ -458,7 +459,7 @@ struct hash<Ton::Symbol> {
     if (s.kind() == Ton::CurrencyKind::TON) {
       return 0;
     } else {
-      size_t hash{};
+      uint hash{};
       details::hash_combine(hash, s.name(), s.decimals(), s.rootContractAddress());
       return static_cast<std::size_t>(hash);
     }
