@@ -26,6 +26,7 @@ namespace Ton::details {
 
 class RequestSender;
 struct WalletList;
+struct TokenOwnersCache;
 
 class External final : public base::has_weak_ptr {
  public:
@@ -36,7 +37,10 @@ class External final : public base::has_weak_ptr {
 
   [[nodiscard]] const Settings &settings() const;
   void updateSettings(const Settings &settings, Callback<ConfigInfo> done);
-  void switchNetwork(const Callback<ConfigInfo>& done);
+  void switchNetwork(const Callback<ConfigInfo> &done);
+
+  void updateTokenOwnersCache(const QString &rootContractAddress, const TokenOwnersCache &newItems,
+                              const Callback<> &done);
 
   [[nodiscard]] RequestSender &lib();
   [[nodiscard]] Storage::Cache::Database &db();
@@ -62,6 +66,7 @@ class External final : public base::has_weak_ptr {
   const QString _basePath;
   const Fn<void(Update)> _updateCallback;
   Settings _settings;
+  std::map<QString, TokenOwnersCache> _tokenOwnersCache;
   RequestSender _lib;
   Storage::DatabasePointer _db;
   ConfigUpgrade _configUpgrade = ConfigUpgrade::None;

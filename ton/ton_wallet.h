@@ -138,6 +138,9 @@ class Wallet final : public base::has_weak_ptr {
   void trySilentDecrypt(const QByteArray &publicKey, std::vector<Transaction> &&list,
                         const Callback<std::vector<Transaction>> &done);
 
+  void saveTokenWalletOwner(const QString &rootContractAddress, const QString &walletAddress,
+                            const QString &ownerAddress, const Callback<> &done);
+
   // Internal API.
   void requestState(const QString &address, const Callback<AccountState> &done);
   void requestTransactions(const QString &address, const TransactionId &lastId,

@@ -121,8 +121,52 @@ void External::open(const QByteArray &globalPassword, const Settings &defaultSet
         *future = std::move(list);
       }
     });
-    LoadWalletList(_db.get(), _settings.useTestNetwork, loadedWallets);
-    startLibrary([=](Result<> result) {
+
+    const auto useTestNetwork = _settings.useTestNetwork;
+
+    class CacheContext {
+     public:
+      CacheContext(const Fn<void(std::map<QString, TokenOwnersCache> &&)> &done, size_t count)
+          : _done{done}, _count{static_cast<int>(count)} {
+      }
+
+      void notifyLoaded(const QString &address, TokenOwnersCache &&item) {
+        std::unique_lock<std::mutex> lock{_mutex};
+        _cache.emplace(std::piecewise_construct, std::forward_as_tuple(address),
+                       std::forward_as_tuple(std::forward<TokenOwnersCache>(item)));
+        if (--_count <= 0) {
+          _done(std::move(_cache));
+        }
+      }
+
+     private:
+      Fn<void(std::map<QString, TokenOwnersCache> &&)> _done;
+      int _count;
+      std::map<QString, TokenOwnersCache> _cache;
+      std::mutex _mutex;
+    };
+
+    auto knownContractsLoaded = crl::guard(this, [=](std::map<QString, TokenOwnersCache> &&cache) {
+      _tokenOwnersCache = std::move(cache);
+      LoadWalletList(_db.get(), useTestNetwork, loadedWallets);
+    });
+
+    LoadKnownTokenContracts(
+        _db.get(), _settings.useTestNetwork, crl::guard(this, [=](KnownTokenContracts &&knownTokenContracts) {
+          if (knownTokenContracts.addresses.empty()) {
+            return knownContractsLoaded(std::map<QString, TokenOwnersCache>{});
+          }
+
+          auto context = std::shared_ptr<CacheContext>{
+              new CacheContext{knownContractsLoaded, knownTokenContracts.addresses.size()}};
+          for (const auto &address : knownTokenContracts.addresses) {
+            LoadTokenOwnersCache(_db.get(), useTestNetwork, address, [=](TokenOwnersCache &&owners) {
+              context->notifyLoaded(address, std::forward<TokenOwnersCache>(owners));
+            });
+          }
+        }));
+
+    startLibrary([=](const Result<> &result) {
       if (!result) {
         _state = State::Initial;
         InvokeCallback(done, result.error());
@@ -197,6 +241,34 @@ void External::switchNetwork(const Callback<ConfigInfo> &done) {
     }
     InvokeCallback(done, *result);
   });
+}
+
+void External::updateTokenOwnersCache(const QString &rootContractAddress, const TokenOwnersCache &newItems,
+                                      const Callback<> &done) {
+  const auto useTestNetwork = settings().useTestNetwork;
+
+  auto it = _tokenOwnersCache.find(rootContractAddress);
+  if (it != _tokenOwnersCache.end()) {
+    auto &entries = it->second.entries;
+    for (const auto &[wallet, owner] : newItems.entries) {
+      entries.emplace(wallet, owner);
+    }
+    SaveTokenOwnersCache(_db.get(), useTestNetwork, rootContractAddress, it->second, done);
+  } else {
+    _tokenOwnersCache.emplace(rootContractAddress, newItems);
+
+    KnownTokenContracts knownTokenContracts;
+    knownTokenContracts.addresses.reserve(_tokenOwnersCache.size());
+    for (const auto &item : _tokenOwnersCache) {
+      knownTokenContracts.addresses.emplace_back(item.first);
+    }
+    SaveKnownTokenContracts(_db.get(), useTestNetwork, knownTokenContracts, [=](Result<> result) {
+      if (!result.has_value()) {
+        printf("failed to save known token contract addresses: %s\n", result.error().details.toStdString().data());
+      }
+      SaveTokenOwnersCache(_db.get(), useTestNetwork, rootContractAddress, newItems, done);
+    });
+  }
 }
 
 void External::resetNetwork() {

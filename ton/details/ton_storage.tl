@@ -62,6 +62,7 @@ storage.walletState
 
 storage.tokenOwnersCacheItem wallet:bytes owner:bytes = storage.TokenOwnersCacheItem;
 storage.tokenOwnersCache wallets:vector<storage.tokenOwnersCacheItem> = storage.TokenOwnersCache;
+storage.knownTokenContracts addresses:vector<string> = storage.KnownTokenContracts;
 
 storage.network blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool = storage.Network;
 storage.settings blockchainName:string configUrl:string config:string useCustomConfig:storage.Bool useNetworkCallbacks:storage.Bool = storage.Settings; // old

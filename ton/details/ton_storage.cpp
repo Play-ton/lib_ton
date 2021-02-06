@@ -18,6 +18,8 @@ namespace {
 constexpr auto kSettingsKey = Storage::Cache::Key{1ULL, 0ULL};
 constexpr auto kWalletTestListKey = Storage::Cache::Key{1ULL, 1ULL};
 constexpr auto kWalletMainListKey = Storage::Cache::Key{1ULL, 2ULL};
+constexpr auto kKnownTokenContractsTestList = Storage::Cache::Key{1ULL, 3ULL};
+constexpr auto kKnownTokenContractsMainList = Storage::Cache::Key{1ULL, 4ULL};
 
 [[nodiscard]] Storage::Cache::Key WalletListKey(bool useTestNetwork) {
   return useTestNetwork ? kWalletTestListKey : kWalletMainListKey;
@@ -36,6 +38,10 @@ constexpr auto kWalletMainListKey = Storage::Cache::Key{1ULL, 2ULL};
 
 [[nodiscard]] Storage::Cache::Key TokenOwnersCacheKey(bool useTestNetwork, const QString &rootContractAddress) {
   return {useTestNetwork ? 0x3ULL : 0x4ULL, qHash(rootContractAddress)};
+}
+
+[[nodiscard]] Storage::Cache::Key KnownTokenContractsKey(bool useTestNetwork) {
+  return useTestNetwork ? kKnownTokenContractsTestList : kKnownTokenContractsMainList;
 }
 
 [[nodiscard]] QString ConvertLegacyUrl(const QString &configUrl) {
@@ -81,6 +87,8 @@ TLstorage_WalletState Serialize(const WalletState &data);
 WalletState Deserialize(const TLstorage_WalletState &data);
 TLstorage_TokenOwnersCache Serialize(const TokenOwnersCache &data);
 TokenOwnersCache Deserialize(const TLstorage_TokenOwnersCache &data);
+TLstorage_KnownTokenContracts Serialize(const KnownTokenContracts &data);
+KnownTokenContracts Deserialize(const TLstorage_KnownTokenContracts &data);
 TLstorage_Settings Serialize(const Settings &data);
 Settings Deserialize(const TLstorage_Settings &data);
 
@@ -400,8 +408,8 @@ WalletState Deserialize(const TLstorage_WalletState &data) {
 TLstorage_TokenOwnersCache Serialize(const TokenOwnersCache &data) {
   TLvector<TLstorage_tokenOwnersCacheItem> wallets;
   wallets.v.reserve(data.entries.size());
-  for (const auto &[owner, wallet] : data.entries) {
-    wallets.v.push_back(make_storage_tokenOwnersCacheItem(tl_string(owner), tl_string(wallet)));
+  for (const auto &[wallet, owner] : data.entries) {
+    wallets.v.push_back(make_storage_tokenOwnersCacheItem(tl_string(wallet), tl_string(owner)));
   }
   return make_storage_tokenOwnersCache(wallets);
 }
@@ -410,10 +418,29 @@ TokenOwnersCache Deserialize(const TLstorage_TokenOwnersCache &data) {
   TokenOwnersCache owners;
   for (const auto &item : data.c_storage_tokenOwnersCache().vwallets().v) {
     const auto &wallet = item.c_storage_tokenOwnersCacheItem();
-    owners.entries.emplace(std::piecewise_construct, std::forward_as_tuple(wallet.vowner().v),
-                           std::forward_as_tuple(wallet.vwallet().v));
+    owners.entries.emplace(std::piecewise_construct, std::forward_as_tuple(wallet.vwallet().v),
+                           std::forward_as_tuple(wallet.vowner().v));
   }
   return owners;
+}
+
+TLstorage_KnownTokenContracts Serialize(const KnownTokenContracts &data) {
+  TLVector<TLstring> addresses;
+  addresses.v.reserve(data.addresses.size());
+  for (const auto &item : data.addresses) {
+    addresses.v.push_back(tl_string(item));
+  }
+  return make_storage_knownTokenContracts(addresses);
+}
+
+KnownTokenContracts Deserialize(const TLstorage_KnownTokenContracts &data) {
+  KnownTokenContracts result;
+  const auto &addresses = data.c_storage_knownTokenContracts().vaddresses().v;
+  result.addresses.reserve(addresses.size());
+  for (const auto &item : addresses) {
+    result.addresses.emplace_back(item.v);
+  }
+  return result;
 }
 
 TLstorage_Network Serialize(const NetSettings &data) {
@@ -557,6 +584,33 @@ void LoadTokenOwnersCache(not_null<Storage::Cache::Database *> db, bool useTestN
 
   db->get(TokenOwnersCacheKey(useTestNetwork, rootContractAddress), [=](const QByteArray &value) {
     crl::on_main([done, result = Unpack<TokenOwnersCache>(value)]() mutable { done(std::move(result)); });
+  });
+}
+
+void SaveKnownTokenContracts(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
+                             const KnownTokenContracts &knownContracts, const Callback<> &done) {
+  auto saved = [=](const Storage::Cache::Error &error) {
+    crl::on_main([=] {
+      if (const auto bad = ErrorFromStorage(error)) {
+        InvokeCallback(done, *bad);
+      } else {
+        InvokeCallback(done);
+      }
+    });
+  };
+  if (knownContracts.addresses.empty()) {
+    db->remove(KnownTokenContractsKey(useTestNetwork), std::move(saved));
+  } else {
+    db->put(KnownTokenContractsKey(useTestNetwork), Pack(knownContracts), std::move(saved));
+  }
+}
+
+void LoadKnownTokenContracts(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
+                             const Fn<void(KnownTokenContracts &&)> &done) {
+  Expects(done != nullptr);
+
+  db->get(KnownTokenContractsKey(useTestNetwork), [=](const QByteArray &value) {
+    crl::on_main([done, result = Unpack<KnownTokenContracts>(value)]() mutable { done(std::move(result)); });
   });
 }
 

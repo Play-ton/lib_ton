@@ -232,6 +232,8 @@ TLftabi_Function TokenInternalTransferFunction() {
                                    tl_ftabi_paramUint(tl_int32(256)),  // sender_public_key
                                    tl_ftabi_paramAddress(),            // sender_address
                                    tl_ftabi_paramAddress(),            // send_gas_to
+                                   tl_ftabi_paramBool(),               // notify_receiver
+                                   tl_ftabi_paramCell(),               // payload
                                }),
                                {}));
     Expects(createdFunction.has_value());
@@ -465,14 +467,13 @@ std::optional<TokenTransfer> ParseInternalTokenTransfer(const QByteArray &body) 
   }
 
   const auto args = decodedTransferInput.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 4 || args[0].type() != id_ftabi_valueInt || args[2].type() != id_ftabi_valueAddress) {
+  if (args.size() != 6 || args[0].type() != id_ftabi_valueInt || args[2].type() != id_ftabi_valueAddress) {
     return std::nullopt;
   }
 
   return TokenTransfer{.address = args[2].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
                        .value = args[0].c_ftabi_valueInt().vvalue().v,
-                       .incoming = true,
-                       .direct = true};
+                       .incoming = true};
 }
 
 std::optional<TokenMint> ParseTokenAccept(const QByteArray &body) {
@@ -1814,6 +1815,10 @@ void Wallet::trySilentDecrypt(const QByteArray &publicKey, std::vector<Transacti
       })
       .fail([=](const TLError &error) { InvokeCallback(done, std::move(*shared)); })
       .send();
+}
+
+void saveTokenWalletOwner(bool testnet, const QString &rootContractAddress, const QString &walletAddress,
+                          const QString &ownerAddress, const Callback<> &done) {
 }
 
 void Wallet::handleInputKeyError(const QByteArray &publicKey, int generation, const TLerror &error, Callback<> done) {
