@@ -41,6 +41,9 @@ class External final : public base::has_weak_ptr {
 
   void updateTokenOwnersCache(const QString &rootContractAddress, const TokenOwnersCache &newItems,
                               const Callback<> &done);
+  void updateTokenOwnersCache(const QString &rootContractAddress, const QString &walletAddress,
+                              const QString &ownerAddress, const Callback<> &done);
+  [[nodiscard]] const std::map<QString, TokenOwnersCache> &tokenOwnersCache() const;
 
   [[nodiscard]] RequestSender &lib();
   [[nodiscard]] Storage::Cache::Database &db();

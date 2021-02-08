@@ -271,6 +271,15 @@ void External::updateTokenOwnersCache(const QString &rootContractAddress, const 
   }
 }
 
+void External::updateTokenOwnersCache(const QString &rootContractAddress, const QString &walletAddress,
+                                      const QString &ownerAddress, const Callback<> &done) {
+  updateTokenOwnersCache(rootContractAddress, TokenOwnersCache{{{walletAddress, ownerAddress}}}, done);
+}
+
+const std::map<QString, TokenOwnersCache> &External::tokenOwnersCache() const {
+  return _tokenOwnersCache;
+}
+
 void External::resetNetwork() {
   Expects(_state == State::Opened);
 

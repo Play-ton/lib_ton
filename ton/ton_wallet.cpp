@@ -71,7 +71,30 @@ constexpr auto kEthereumAddressByteCount = 20;
   return result;
 }
 
-TLftabi_Function RootTokenGetDetails() {
+TLftabi_Function TokenWalletGetDetailsFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("getDetails"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               {},
+                               tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramAddress(),            // root_address
+                                   tl_ftabi_paramCell(),               // code
+                                   tl_ftabi_paramUint(tl_int32(256)),  // wallet_public_key
+                                   tl_ftabi_paramAddress(),            // owner_address
+                                   tl_ftabi_paramUint(tl_int32(128)),  // balance
+                               }))})));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function RootTokenGetDetailsFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
     const auto createdFunction = RequestSender::Execute(
@@ -97,7 +120,7 @@ TLftabi_Function RootTokenGetDetails() {
   return *function;
 }
 
-TLftabi_Function RootTokenGetWalletAddress() {
+TLftabi_Function RootTokenGetWalletAddressFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
     const auto createdFunction = RequestSender::Execute(
@@ -117,7 +140,7 @@ TLftabi_Function RootTokenGetWalletAddress() {
   return *function;
 }
 
-TLftabi_Function RootTokenDeployWallet() {
+TLftabi_Function RootTokenDeployWalletFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
     const auto createdFunction = RequestSender::Execute(
@@ -139,7 +162,7 @@ TLftabi_Function RootTokenDeployWallet() {
   return *function;
 }
 
-TLftabi_Function TokenGetBalance() {
+TLftabi_Function TokenGetBalanceFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
     const auto createdFunction = RequestSender::Execute(
@@ -608,6 +631,23 @@ std::optional<RootTokenContractDetails> ParseRootTokenContractDetails(const TLft
   };
 }
 
+std::optional<TokenWalletContractDetails> ParseTokenWalletContractDetails(const TLftabi_decodedOutput &result) {
+  const auto &tokens = result.c_ftabi_decodedOutput().vvalues().v;
+  if (tokens.empty() || tokens[0].type() != id_ftabi_valueTuple) {
+    return std::nullopt;
+  }
+
+  const auto &tuple = tokens[0].c_ftabi_valueTuple().vvalues().v;
+  if (tuple.size() < 5 || tuple[0].type() != id_ftabi_valueAddress || tuple[3].type() != id_ftabi_valueAddress) {
+    return std::nullopt;
+  }
+
+  return TokenWalletContractDetails{
+      .rootAddress = tuple[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
+      .ownerAddress = tuple[3].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
+  };
+}
+
 Result<QByteArray> CreateTokenMessage(const QString &recipient, int64 amount) {
   const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
       TokenTransferFunction(),
@@ -728,7 +768,7 @@ Result<QByteArray> CreateCancelWithdrawalMessage() {
 
 Result<QByteArray> CreateTokenWalletDeployMessage(int64 grams, const QString &owner) {
   const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-      RootTokenDeployWallet(),
+      RootTokenDeployWalletFunction(),
       tl_ftabi_functionCallInternal(
           {}, tl_vector(QVector<TLftabi_Value>{
                   tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(grams)),
@@ -1181,17 +1221,20 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
     _external->lib()
         .request(TLftabi_RunLocal(                                          //
             tl_accountAddress(tl_string(transaction.rootContractAddress)),  //
-            RootTokenGetWalletAddress(),                                    //
+            RootTokenGetWalletAddressFunction(),                            //
             tl_ftabi_functionCallExternal(
                 {}, tl_vector(QVector<TLftabi_Value>{
                         tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0)),  //
                         tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
                                               tl_accountAddress(tl_string(transaction.recipient))),  //
                     }))))
-        .done([=](const TLftabi_decodedOutput &decodedOutput) {
+        .done([=, rootContractAddress = transaction.rootContractAddress,
+               ownerAddress = transaction.recipient](const TLftabi_decodedOutput &decodedOutput) {
           const auto &tokens = decodedOutput.c_ftabi_decodedOutput().vvalues().v;
           const auto walletAddress = tokens[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v;
-          checkWalletAddress(walletAddress);
+
+          _external->updateTokenOwnersCache(rootContractAddress, walletAddress, ownerAddress,
+                                            [=](const Result<> &) { checkWalletAddress(walletAddress); });
         })
         .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
         .send();
@@ -1482,7 +1525,7 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
             info.vbalance(),                                               //
             accountState.vdata(),                                          //
             accountState.vcode(),                                          //
-            RootTokenGetWalletAddress(),                                   //
+            RootTokenGetWalletAddressFunction(),                           //
             tl_ftabi_functionCallExternal(
                 {}, tl_vector(QVector<TLftabi_Value>{
                         tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0)),                      //
@@ -1526,7 +1569,7 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
                 info.vbalance(),                                                                //
                 accountState.vdata(),                                                           //
                 accountState.vcode(),                                                           //
-                RootTokenGetDetails(),                                                          //
+                RootTokenGetDetailsFunction(),                                                  //
                 tl_ftabi_functionCallExternal({}, {})))
             .done([=, result = std::move(result)](const TLftabi_decodedOutput &decodedDetailsOutput) mutable {
               auto details = ParseRootTokenContractDetails(decodedDetailsOutput);
@@ -1646,7 +1689,7 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
                     info.vbalance(),                                                                //
                     accountState.vdata(),                                                           //
                     accountState.vcode(),                                                           //
-                    TokenGetBalance(),                                                              //
+                    TokenGetBalanceFunction(),                                                      //
                     tl_ftabi_functionCallExternal({}, {})))
                 .done([=, result = std::move(result)](const TLftabi_decodedOutput &balanceOutput) mutable {
                   const auto &results = balanceOutput.c_ftabi_decodedOutput().vvalues().v;
@@ -1817,8 +1860,44 @@ void Wallet::trySilentDecrypt(const QByteArray &publicKey, std::vector<Transacti
       .send();
 }
 
-void saveTokenWalletOwner(bool testnet, const QString &rootContractAddress, const QString &walletAddress,
-                          const QString &ownerAddress, const Callback<> &done) {
+void Wallet::getWalletOwner(const QString &rootTokenContract, const QString &walletAddress,
+                            const Callback<QString> &done) {
+  {
+    const auto &cache = _external->tokenOwnersCache();
+    if (const auto groupIt = cache.find(rootTokenContract); groupIt != cache.end()) {
+      const auto &group = groupIt->second.entries;
+      if (const auto it = group.find(walletAddress); it != group.end()) {
+        auto owner = it->second;
+        return InvokeCallback(done, std::move(owner));
+      }
+    }
+  }
+
+  _external->lib()
+      .request(TLftabi_RunLocal(                        //
+          tl_accountAddress(tl_string(walletAddress)),  //
+          TokenWalletGetDetailsFunction(),              //
+          tl_ftabi_functionCallExternal({}, {})))
+      .done([=](const TLftabi_decodedOutput &decodedOutput) {
+        const auto details = ParseTokenWalletContractDetails(decodedOutput);
+        if (!details.has_value()) {
+          return InvokeCallback(done, Ton::Error{Ton::Error::Type::TonLib, "Invalid TokenWallet.getDetails ABI"});
+        }
+        if (ConvertIntoRaw(details->rootAddress) != rootTokenContract) {
+          return InvokeCallback(
+              done, Ton::Error{Ton::Error::Type::TonLib, "Token wallet does not belong to this root token contract"});
+        }
+        const auto ownerAddress = details->ownerAddress;
+        _external->updateTokenOwnersCache(rootTokenContract, walletAddress, ownerAddress,
+                                          [=](const Result<> &) { InvokeCallback(done, ownerAddress); });
+      })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
+}
+
+void Wallet::getWalletOwners(const QString &rootTokenContract, const std::vector<QString> &addresses,
+                             const Callback<std::map<QString, QString>> &done) {
+  // TODO
 }
 
 void Wallet::handleInputKeyError(const QByteArray &publicKey, int generation, const TLerror &error, Callback<> done) {

@@ -128,6 +128,11 @@ struct RootTokenContractDetails {
   int64 startGasBalance;
 };
 
+struct TokenWalletContractDetails {
+  QString rootAddress;
+  QString ownerAddress;
+};
+
 struct InvestParams {
   int64 remainingAmount{};
   int64 lastWithdrawalTime{};
