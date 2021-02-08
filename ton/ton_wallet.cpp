@@ -28,6 +28,7 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QByteArray>
 #include <QtGui/QDesktopServices>
+#include <memory>
 #include <utility>
 #include <iostream>
 #include <shared_mutex>
@@ -1897,7 +1898,103 @@ void Wallet::getWalletOwner(const QString &rootTokenContract, const QString &wal
 
 void Wallet::getWalletOwners(const QString &rootTokenContract, const std::vector<QString> &addresses,
                              const Callback<std::map<QString, QString>> &done) {
-  // TODO
+  std::map<QString, QString> result;
+  QSet<QString> unknownOwners;
+
+  {
+    const auto &cache = _external->tokenOwnersCache();
+    if (const auto groupIt = cache.find(rootTokenContract); groupIt != cache.end()) {
+      const auto &group = groupIt->second.entries;
+      for (const auto &wallet : addresses) {
+        const auto it = group.find(wallet);
+        if (it != group.end()) {
+          result.emplace(std::piecewise_construct, std::forward_as_tuple(wallet), std::forward_as_tuple(it->second));
+        } else {
+          unknownOwners.insert(wallet);
+        }
+      }
+    }
+  }
+
+  if (unknownOwners.empty()) {
+    return InvokeCallback(done, std::move(result));
+  }
+
+  class OwnersContext {
+   public:
+    using Result = std::map<QString, QString>;
+    using Done = Fn<void(std::map<QString, QString> &&)>;
+
+    OwnersContext(Result &&result, int targetCount, Done &&done)
+        : _result{std::forward<Result>(result)}, _count{targetCount}, _done{std::forward<Done>(done)} {
+    }
+
+    void notifyFound(const QString &wallet, QString &&owner) {
+      std::unique_lock<std::mutex> lock{_mutex};
+      _result.emplace(std::piecewise_construct, std::forward_as_tuple(wallet),
+                      std::forward_as_tuple(std::forward<QString>(owner)));
+      checkFinished();
+    }
+
+    void notifyNotFound() {
+      std::unique_lock<std::mutex> lock{_mutex};
+      checkFinished();
+    }
+
+   private:
+    void checkFinished() {
+      if (--_count <= 0) {
+        _done(std::move(_result));
+      }
+    }
+
+    std::mutex _mutex;
+    Result _result;
+    int _count;
+    Done _done;
+  };
+
+  const auto onOwnersLoaded = crl::guard(this, [=](OwnersContext::Result &&result) {
+    const auto newItems = TokenOwnersCache{result};
+    _external->updateTokenOwnersCache(  //
+        rootTokenContract, newItems,
+        crl::guard(this, [=, result = std::forward<OwnersContext::Result>(result)](const Result<> &) {
+          InvokeCallback(done, result);
+        }));
+  });
+
+  auto context = std::make_shared<OwnersContext>(
+      std::move(result), unknownOwners.size(),
+      [=](OwnersContext::Result &&result) { InvokeCallback(done, std::forward<OwnersContext::Result>(result)); });
+
+  for (const auto &walletAddress : unknownOwners) {
+    _external->lib()
+        .request(TLftabi_RunLocal(                        //
+            tl_accountAddress(tl_string(walletAddress)),  //
+            TokenWalletGetDetailsFunction(),              //
+            tl_ftabi_functionCallExternal({}, {})))
+        .done([=](const TLftabi_decodedOutput &decodedOutput) {
+          auto details = ParseTokenWalletContractDetails(decodedOutput);
+
+          auto success = true;
+          if (!details.has_value()) {
+            std::cout << "Invalid TokenWallet.getDetails ABI";  // TODO: handle error?
+            success = false;
+          }
+          if (success && ConvertIntoRaw(details->rootAddress) != rootTokenContract) {
+            std::cout << "Token wallet does not belong to this root token contract";  // TODO: handle error?
+            success = false;
+          }
+
+          if (success) {
+            context->notifyFound(walletAddress, std::move(details->ownerAddress));
+          } else {
+            context->notifyNotFound();
+          }
+        })
+        .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+        .send();
+  }
 }
 
 void Wallet::handleInputKeyError(const QByteArray &publicKey, int generation, const TLerror &error, Callback<> done) {

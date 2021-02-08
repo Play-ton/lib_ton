@@ -388,7 +388,7 @@ void External::openDatabase(const QByteArray &globalPassword, Callback<Settings>
   });
 }
 
-void External::startLibrary(Callback<> done) {
+void External::startLibrary(const Callback<>& done) {
   const auto path = LibraryStoragePath(_basePath);
   if (!QDir().mkpath(path)) {
     InvokeCallback(done, Error{Error::Type::IO, path});

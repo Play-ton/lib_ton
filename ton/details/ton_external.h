@@ -62,7 +62,7 @@ class External final : public base::has_weak_ptr {
   [[nodiscard]] Result<> writeNewSalt();
   [[nodiscard]] Fn<void(const TLUpdate &)> generateUpdateCallback() const;
   void openDatabase(const QByteArray &globalPassword, Callback<Settings> done);
-  void startLibrary(Callback<> done);
+  void startLibrary(const Callback<>& done);
   void resetNetwork();
   void applyLocalSettings(const Settings &localSettings);
 

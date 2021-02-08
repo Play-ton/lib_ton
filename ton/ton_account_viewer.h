@@ -31,6 +31,7 @@ class AccountViewer final : public base::has_weak_ptr {
 
   void preloadSlice(const TransactionId &lastId);
   void preloadTokenSlice(const Symbol &symbol, const QString &tokenWalletAddress, const TransactionId &lastId);
+
   [[nodiscard]] rpl::producer<Result<std::pair<Symbol, LoadedSlice>>> loaded() const;
 
  private:
