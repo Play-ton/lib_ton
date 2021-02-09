@@ -139,8 +139,8 @@ class Wallet final : public base::has_weak_ptr {
                         const Callback<std::vector<Transaction>> &done);
 
   void getWalletOwner(const QString &rootTokenContract, const QString &walletAddress, const Callback<QString> &done);
-  void getWalletOwners(const QString &rootTokenContract, const std::vector<QString> &addresses,
-                       const Callback<std::map<QString, QString>> &done);
+  void getWalletOwners(const QString &rootTokenContract, const QSet<QString> &addresses,
+                       const Fn<void(std::map<QString, QString> &&)> &done);
 
   // Internal API.
   void requestState(const QString &address, const Callback<AccountState> &done);

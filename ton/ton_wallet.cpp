@@ -1896,10 +1896,10 @@ void Wallet::getWalletOwner(const QString &rootTokenContract, const QString &wal
       .send();
 }
 
-void Wallet::getWalletOwners(const QString &rootTokenContract, const std::vector<QString> &addresses,
-                             const Callback<std::map<QString, QString>> &done) {
+void Wallet::getWalletOwners(const QString &rootTokenContract, const QSet<QString> &addresses,
+                             const Fn<void(std::map<QString, QString> &&)> &done) {
   std::map<QString, QString> result;
-  QSet<QString> unknownOwners;
+  std::vector<QString> unknownOwners;
 
   {
     const auto &cache = _external->tokenOwnersCache();
@@ -1910,14 +1910,14 @@ void Wallet::getWalletOwners(const QString &rootTokenContract, const std::vector
         if (it != group.end()) {
           result.emplace(std::piecewise_construct, std::forward_as_tuple(wallet), std::forward_as_tuple(it->second));
         } else {
-          unknownOwners.insert(wallet);
+          unknownOwners.emplace_back(wallet);
         }
       }
     }
   }
 
   if (unknownOwners.empty()) {
-    return InvokeCallback(done, std::move(result));
+    return done(std::move(result));
   }
 
   class OwnersContext {
@@ -1958,14 +1958,14 @@ void Wallet::getWalletOwners(const QString &rootTokenContract, const std::vector
     const auto newItems = TokenOwnersCache{result};
     _external->updateTokenOwnersCache(  //
         rootTokenContract, newItems,
-        crl::guard(this, [=, result = std::forward<OwnersContext::Result>(result)](const Result<> &) {
-          InvokeCallback(done, result);
+        crl::guard(this, [=, result = std::forward<OwnersContext::Result>(result)](const Result<> &) mutable {
+          done(std::move(result));
         }));
   });
 
   auto context = std::make_shared<OwnersContext>(
       std::move(result), unknownOwners.size(),
-      [=](OwnersContext::Result &&result) { InvokeCallback(done, std::forward<OwnersContext::Result>(result)); });
+      [=](OwnersContext::Result &&result) { onOwnersLoaded(std::forward<OwnersContext::Result>(result)); });
 
   for (const auto &walletAddress : unknownOwners) {
     _external->lib()
@@ -1992,7 +1992,10 @@ void Wallet::getWalletOwners(const QString &rootTokenContract, const std::vector
             context->notifyNotFound();
           }
         })
-        .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+        .fail([=](const TLError &error) {
+          std::cout << "Failed to fetch wallet owner: " << error.c_error().vmessage().v.toStdString() << std::endl;
+          context->notifyNotFound();
+        })
         .send();
   }
 }
