@@ -72,6 +72,44 @@ constexpr auto kEthereumAddressByteCount = 20;
   return result;
 }
 
+TLftabi_Function EthEventStatusChangedNotification() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("notifyEthereumEventStatusChanged"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               {},
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(8))  // status
+                               })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function TonEventStatusChangedNotification() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("notifyTonEventStatusChanged"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               {},
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramUint(tl_int32(8))  // status
+                               })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
 TLftabi_Function TokenWalletGetDetailsFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
@@ -513,6 +551,68 @@ std::optional<TokenMint> ParseTokenAccept(const QByteArray &body) {
   }
 
   return TokenMint{.value = args[0].c_ftabi_valueInt().vvalue().v};
+}
+
+std::optional<EthEventStatus> ParseEthEventNotification(const QByteArray &body) {
+  const auto decodedNotification =
+      RequestSender::Execute(TLftabi_DecodeInput(EthEventStatusChangedNotification(), tl_bytes(body), tl_boolTrue()));
+  if (!decodedNotification.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto args = decodedNotification.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 1 || args[0].type() != id_ftabi_valueInt) {
+    return std::nullopt;
+  }
+
+  const auto status = args[0].c_ftabi_valueInt().vvalue().v;
+  switch (status) {
+    case 0:
+      return EthEventStatus::InProcess;
+    case 1:
+      return EthEventStatus::Confirmed;
+    case 2:
+      return EthEventStatus::Executed;
+    case 3:
+      return EthEventStatus::Rejected;
+    default:
+      return std::nullopt;
+  }
+}
+
+std::optional<TonEventStatus> ParseTonEventNotification(const QByteArray &body) {
+  const auto decodedNotification =
+      RequestSender::Execute(TLftabi_DecodeInput(TonEventStatusChangedNotification(), tl_bytes(body), tl_boolTrue()));
+  if (!decodedNotification.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto args = decodedNotification.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 1 || args[0].type() != id_ftabi_valueInt) {
+    return std::nullopt;
+  }
+
+  const auto status = args[0].c_ftabi_valueInt().vvalue().v;
+  switch (status) {
+    case 0:
+      return TonEventStatus::InProcess;
+    case 1:
+      return TonEventStatus::Confirmed;
+    case 2:
+      return TonEventStatus::Rejected;
+    default:
+      return std::nullopt;
+  }
+}
+
+std::optional<EventStatus> ParseEventNotification(const QByteArray &body) {
+  if (const auto ethEventNotification = ParseEthEventNotification(body); ethEventNotification.has_value()) {
+    return *ethEventNotification;
+  } else if (const auto tonEventNotification = ParseTonEventNotification(body); tonEventNotification.has_value()) {
+    return *tonEventNotification;
+  } else {
+    return std::nullopt;
+  }
 }
 
 std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {

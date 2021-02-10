@@ -133,6 +133,11 @@ struct TokenWalletContractDetails {
   QString ownerAddress;
 };
 
+enum class EthEventStatus { InProcess, Confirmed, Executed, Rejected };
+enum class TonEventStatus { InProcess, Confirmed, Rejected };
+
+using EventStatus = std::variant<EthEventStatus, TonEventStatus>;
+
 struct InvestParams {
   int64 remainingAmount{};
   int64 lastWithdrawalTime{};
