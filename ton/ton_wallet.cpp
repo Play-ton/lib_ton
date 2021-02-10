@@ -2013,6 +2013,10 @@ void Wallet::getWalletOwners(const QString &rootTokenContract, const QSet<QStrin
           unknownOwners.emplace_back(wallet);
         }
       }
+    } else {
+      for (const auto &address : addresses) {
+        unknownOwners.emplace_back(address);
+      }
     }
   }
 
