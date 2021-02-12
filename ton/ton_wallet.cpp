@@ -79,6 +79,10 @@ constexpr auto kEthereumAddressByteCount = 20;
   return tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(0));
 }
 
+[[nodiscard]] int64 UnpackUint(const TLftabi_Value &value) {
+  return value.c_ftabi_valueInt().vvalue().v;
+}
+
 [[nodiscard]] QString UnpackAddress(const TLftabi_Value &value) {
   return value.c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v;
 }
@@ -89,6 +93,14 @@ constexpr auto kEthereumAddressByteCount = 20;
 
 [[nodiscard]] TLftabi_Value PackCell(const TLtvm_Cell &value) {
   return tl_ftabi_valueCell(tl_ftabi_paramCell(), value);
+}
+
+[[nodiscard]] bool UnpackBool(const TLftabi_Value &value) {
+  return value.c_ftabi_valueBool().vvalue().type() == id_boolTrue;
+}
+
+[[nodiscard]] QByteArray UnpackBytes(const TLftabi_Value &value) {
+  return value.c_ftabi_valueBytes().vvalue().v;
 }
 
 bool IsAddress(const TLftabi_Value &value) {
@@ -114,17 +126,16 @@ bool IsCell(const TLftabi_Value &value) {
 [[nodiscard]] std::map<int64, InvestParams> parseInvestParamsMap(const TLDftabi_valueMap &map) {
   std::map<int64, InvestParams> result;
   for (const auto &item : map.vvalues().v) {
-    const auto key = item.c_ftabi_valueMapItem().vkey().c_ftabi_valueInt().vvalue().v;
+    const auto key = UnpackUint(item.c_ftabi_valueMapItem().vkey());
     const auto values = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueTuple().vvalues().v;
 
-    result.emplace(std::make_pair(
-        key, InvestParams{
-                 .remainingAmount = values[0].c_ftabi_valueInt().vvalue().v,
-                 .lastWithdrawalTime = values[1].c_ftabi_valueInt().vvalue().v,
-                 .withdrawalPeriod = static_cast<int32>(values[2].c_ftabi_valueInt().vvalue().v),
-                 .withdrawalValue = values[3].c_ftabi_valueInt().vvalue().v,
-                 .owner = values[4].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
-             }));
+    result.emplace(std::make_pair(key, InvestParams{
+                                           .remainingAmount = UnpackUint(values[0]),
+                                           .lastWithdrawalTime = UnpackUint(values[1]),
+                                           .withdrawalPeriod = static_cast<int32>(UnpackUint(values[2])),
+                                           .withdrawalValue = UnpackUint(values[3]),
+                                           .owner = UnpackAddress(values[4]),
+                                       }));
   }
   return result;
 }
@@ -600,7 +611,7 @@ std::optional<TokenMint> ParseTokenAccept(const QByteArray &body) {
     return std::nullopt;
   }
 
-  return TokenMint{.value = args[0].c_ftabi_valueInt().vvalue().v};
+  return TokenMint{.value = UnpackUint128(args[0])};
 }
 
 std::optional<EthEventStatus> ParseEthEventNotification(const QByteArray &body) {
@@ -611,11 +622,11 @@ std::optional<EthEventStatus> ParseEthEventNotification(const QByteArray &body) 
   }
 
   const auto args = decodedNotification.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 1 || args[0].type() != id_ftabi_valueInt) {
+  if (args.size() != 1 || !IsInt(args[0])) {
     return std::nullopt;
   }
 
-  const auto status = args[0].c_ftabi_valueInt().vvalue().v;
+  const auto status = UnpackUint(args[0]);
   switch (status) {
     case 0:
       return EthEventStatus::InProcess;
@@ -638,11 +649,11 @@ std::optional<TonEventStatus> ParseTonEventNotification(const QByteArray &body) 
   }
 
   const auto args = decodedNotification.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 1 || args[0].type() != id_ftabi_valueInt) {
+  if (args.size() != 1 || !IsInt(args[0])) {
     return std::nullopt;
   }
 
-  const auto status = args[0].c_ftabi_valueInt().vvalue().v;
+  const auto status = UnpackUint(args[0]);
   switch (status) {
     case 0:
       return TonEventStatus::InProcess;
@@ -685,7 +696,7 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
 
   const auto &payload = decodedSwapBackPayload.value().c_ftabi_decodedOutput().vvalues().v;
 
-  auto address = payload[0].c_ftabi_valueBytes().vvalue().v;
+  auto address = UnpackBytes(payload[0]);
   auto addressSize = address.size();
   if (addressSize < kEthereumAddressByteCount) {
     return std::nullopt;
@@ -710,7 +721,7 @@ std::optional<DePoolOrdinaryStakeTransaction> ParseOrdinaryStakeTransfer(const Q
     return std::nullopt;
   }
 
-  return DePoolOrdinaryStakeTransaction{.stake = args[0].c_ftabi_valueInt().vvalue().v};
+  return DePoolOrdinaryStakeTransaction{.stake = UnpackUint(args[0])};
 }
 
 std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const QByteArray &body) {
@@ -726,13 +737,13 @@ std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const
   }
 
   return DePoolOnRoundCompleteTransaction{
-      .roundId = args[0].c_ftabi_valueInt().vvalue().v,
-      .reward = args[1].c_ftabi_valueInt().vvalue().v,
-      .ordinaryStake = args[2].c_ftabi_valueInt().vvalue().v,
-      .vestingStake = args[3].c_ftabi_valueInt().vvalue().v,
-      .lockStake = args[4].c_ftabi_valueInt().vvalue().v,
-      .reinvest = args[5].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
-      .reason = static_cast<uint8>(args[6].c_ftabi_valueInt().vvalue().v),
+      .roundId = UnpackUint(args[0]),
+      .reward = UnpackUint(args[1]),
+      .ordinaryStake = UnpackUint(args[2]),
+      .vestingStake = UnpackUint(args[3]),
+      .lockStake = UnpackUint(args[4]),
+      .reinvest = UnpackBool(args[5]),
+      .reason = static_cast<uint8>(UnpackUint(args[6])),
   };
 }
 
@@ -744,16 +755,16 @@ std::optional<DePoolParticipantState> ParseDePoolParticipantState(const TLftabi_
 
   std::map<int64, int64> stakes;
   for (const auto &item : results[4].c_ftabi_valueMap().vvalues().v) {
-    const auto key = item.c_ftabi_valueMapItem().vkey().c_ftabi_valueInt().vvalue().v;
-    const auto value = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueInt().vvalue().v;
+    const auto key = UnpackUint(item.c_ftabi_valueMapItem().vkey());
+    const auto value = UnpackUint(item.c_ftabi_valueMapItem().vvalue());
     stakes.emplace(std::make_pair(key, value));
   }
 
   return DePoolParticipantState{
-      .total = results[0].c_ftabi_valueInt().vvalue().v,
-      .withdrawValue = results[1].c_ftabi_valueInt().vvalue().v,
-      .reinvest = results[2].c_ftabi_valueBool().vvalue().type() == id_boolTrue,
-      .reward = results[3].c_ftabi_valueInt().vvalue().v,
+      .total = UnpackUint(results[0]),
+      .withdrawValue = UnpackUint(results[1]),
+      .reinvest = UnpackBool(results[2]),
+      .reward = UnpackUint(results[3]),
       .stakes = std::move(stakes),
       .vestings = parseInvestParamsMap(results[5].c_ftabi_valueMap()),
       .locks = parseInvestParamsMap(results[6].c_ftabi_valueMap()),
@@ -772,11 +783,11 @@ std::optional<RootTokenContractDetails> ParseRootTokenContractDetails(const TLft
   }
 
   return RootTokenContractDetails{
-      .name = tuple[0].c_ftabi_valueBytes().vvalue().v,
-      .symbol = tuple[1].c_ftabi_valueBytes().vvalue().v,
-      .decimals = tuple[2].c_ftabi_valueInt().vvalue().v,
-      .ownerAddress = tuple[5].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
-      .startGasBalance = tuple[7].c_ftabi_valueInt().vvalue().v,
+      .name = UnpackBytes(tuple[0]),
+      .symbol = UnpackBytes(tuple[1]),
+      .decimals = UnpackUint(tuple[2]),
+      .ownerAddress = UnpackAddress(tuple[5]),
+      .startGasBalance = UnpackUint(tuple[7]),
   };
 }
 
@@ -1831,13 +1842,13 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
                     tl_ftabi_functionCallExternal({}, {})))
                 .done([=, result = std::move(result)](const TLftabi_decodedOutput &balanceOutput) mutable {
                   const auto &results = balanceOutput.c_ftabi_decodedOutput().vvalues().v;
-                  if (results.empty() || results[0].type() != id_ftabi_valueInt) {
+                  if (results.empty() || !IsBigInt(results[0])) {
                     //InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
                     std::cout << "failed to parse results: " << results.size() << std::endl;
                     return ctx->notifyError(symbol);
                   }
 
-                  const auto balance = results[0].c_ftabi_valueInt().vvalue().v;
+                  const auto balance = UnpackUint128(results[0]);
                   ctx->notifySuccess(  //
                       TokenState{.token = symbol,
                                  .walletContractAddress = token.walletContractAddress,
