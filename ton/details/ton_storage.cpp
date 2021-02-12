@@ -303,7 +303,7 @@ TLstorage_TokenState Serialize(const TokenState &data) {
   return make_storage_tokenState(tl_string(data.token.rootContractAddress()), tl_string(data.walletContractAddress),
                                  tl_string(data.token.rootContractAddress()), tl_string(data.token.name()),
                                  tl_int32(static_cast<int32_t>(data.token.decimals())),
-                                 Serialize(data.lastTransactions), tl_int64(data.balance));
+                                 Serialize(data.lastTransactions), tl_bytes(Int128ToBytesBE(data.balance)));
 }
 
 TokenState Deserialize(const TLstorage_TokenState &data) {
@@ -313,7 +313,7 @@ TokenState Deserialize(const TLstorage_TokenState &data) {
                       .walletContractAddress = data.vwalletContractAddress().v,
                       .rootOwnerAddress = data.vrootOwnerAddress().v,
                       .lastTransactions = Deserialize(data.vlastTransactions()),
-                      .balance = data.vbalance().v};
+                      .balance = BytesBEToInt128(data.vbalance().v)};
   });
 }
 

@@ -73,6 +73,7 @@ PUBLIC
     desktop-app::lib_tl
     desktop-app::lib_storage
     desktop-app::external_expected
+    desktop-app::external_boost
 PRIVATE
     desktop-app::external_ton
 )

@@ -47,10 +47,10 @@ class Wallet final : public base::has_weak_ptr {
   explicit Wallet(const QString &path);
   ~Wallet();
 
-  void open(const QByteArray &globalPassword, const Settings &defaultSettings, Callback<> done);
-  void start(Callback<> done);
+  void open(const QByteArray &globalPassword, const Settings &defaultSettings, const Callback<>& done);
+  void start(const Callback<>& done);
   [[nodiscard]] QString getUsedAddress(const QByteArray &publicKey) const;
-  void checkConfig(const QByteArray &config, Callback<> done);
+  void checkConfig(const QByteArray &config, const Callback<>& done);
 
   void sync();
 
@@ -168,10 +168,10 @@ class Wallet final : public base::has_weak_ptr {
   void handleInputKeyError(const QByteArray &publicKey, int generation, const details::TLerror &error, Callback<> done);
 
   auto makeSendCallback(const Callback<> &done) -> std::function<void(int64)>;
-  auto makeEstimateFeesCallback(Callback<TransactionCheckResult> done) -> std::function<void(int64)>;
+  auto makeEstimateFeesCallback(const Callback<TransactionCheckResult>& done) -> std::function<void(int64)>;
   void checkTransactionFees(const QString &sender, const QString &recipient,
                             const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount, int timeout,
-                            bool allowSendToUninited, Callback<TransactionCheckResult> done);
+                            bool allowSendToUninited, const Callback<TransactionCheckResult>& done);
   void sendMessage(const QByteArray &publicKey, const QByteArray &password, const QString &sender,
                    const QString &recipient, const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount,
                    int timeout, bool allowSendToUninited, const Callback<PendingTransaction> &ready,

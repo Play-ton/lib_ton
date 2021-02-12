@@ -41,7 +41,7 @@ storage.tokenState
     name:bytes
     decimals:int32
     lastTransactions:storage.TransactionsSlice
-    balance:int64 = storage.TokenState;
+    balance:bytes = storage.TokenState;
 storage.dePoolState
     address:string
     total:int64

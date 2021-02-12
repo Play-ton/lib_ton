@@ -13,11 +13,15 @@
 #include <QHash>
 #include <utility>
 
+#include <boost/multiprecision/cpp_int.hpp>
+
 namespace Ton {
 
 inline constexpr auto kUnknownBalance = int64(-666);
 
 extern const QString kZeroAddress;
+
+using int128 = boost::multiprecision::int128_t;
 
 struct ConfigInfo {
   int64 walletId = 0;
@@ -170,18 +174,18 @@ enum class MessageDataType { PlainText, EncryptedText, DecryptedText, RawBody };
 
 struct TokenTransfer {
   QString address;
-  int64 value{};
+  int128 value{};
   bool incoming{};
   bool direct{};
 };
 
 struct TokenSwapBack {
   QString address;
-  int64 value{};
+  int128 value{};
 };
 
 struct TokenMint {
-  int64 value{};
+  int128 value{};
 };
 
 using TokenTransaction = std::variant<TokenTransfer, TokenSwapBack, TokenMint>;
@@ -258,7 +262,7 @@ struct TokenState {
   QString walletContractAddress;
   QString rootOwnerAddress;
   TransactionsSlice lastTransactions;
-  int64 balance = kUnknownBalance;
+  int128 balance{};
 };
 
 bool operator==(const TokenState &a, const TokenState &b);
@@ -269,7 +273,7 @@ struct TokenStateValue {
   QString walletContractAddress;
   QString rootOwnerAddress;
   TransactionsSlice lastTransactions;
-  int64 balance = kUnknownBalance;
+  int128 balance{};
 
   [[nodiscard]] auto withSymbol(Symbol symbol) const -> TokenState {
     return TokenState{.token = std::move(symbol),
@@ -306,7 +310,7 @@ struct TokenTransactionToSend {
 
   QString rootContractAddress;
   QString walletContractAddress;
-  int64 amount = 0;
+  int128 amount = 0;
   QString recipient;
   QString callbackAddress;
   int timeout = 0;
@@ -442,6 +446,9 @@ struct DecryptPasswordGood {
 struct Update {
   std::variant<SyncState, LiteServerQuery, ConfigUpgrade, DecryptPasswordNeeded, DecryptPasswordGood> data;
 };
+
+QByteArray Int128ToBytesBE(const int128 &from);
+int128 BytesBEToInt128(const QByteArray &from);
 
 }  // namespace Ton
 

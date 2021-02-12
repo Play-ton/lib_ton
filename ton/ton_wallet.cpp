@@ -54,6 +54,63 @@ constexpr auto kEthereumAddressByteCount = 20;
   return tl_error(tl_int32(500), tl_string("INVALID_ABI"));
 }
 
+[[nodiscard]] TLftabi_Value PackPubKey() {
+  return tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0));
+}
+
+[[nodiscard]] int128 UnpackUint128(const TLftabi_Value &value) {
+  return value.match([](const TLDftabi_valueInt &value) { return int128{value.vvalue().v}; },
+                     [](const TLDftabi_valueBigInt &value) { return BytesBEToInt128(value.vvalue().v); },
+                     [](auto &&) {
+                       Unexpected("ftabi value");
+                       return int128{};
+                     });
+}
+
+[[nodiscard]] TLftabi_Value PackUint128(int64 value) {
+  return tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(value));
+}
+
+[[nodiscard]] TLftabi_Value PackUint128(const int128 &value) {
+  return tl_ftabi_valueBigInt(tl_ftabi_paramUint(tl_int32(128)), tl_bytes(Int128ToBytesBE(value)));
+}
+
+[[nodiscard]] TLftabi_Value PackUint128() {
+  return tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(0));
+}
+
+[[nodiscard]] QString UnpackAddress(const TLftabi_Value &value) {
+  return value.c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v;
+}
+
+[[nodiscard]] TLftabi_Value PackAddress(const QString &value) {
+  return tl_ftabi_valueAddress(tl_ftabi_paramAddress(), tl_accountAddress((tl_string(value))));
+}
+
+[[nodiscard]] TLftabi_Value PackCell(const TLtvm_Cell &value) {
+  return tl_ftabi_valueCell(tl_ftabi_paramCell(), value);
+}
+
+bool IsAddress(const TLftabi_Value &value) {
+  return value.type() == id_ftabi_valueAddress;
+}
+
+bool IsInt(const TLftabi_Value &value) {
+  return value.type() == id_ftabi_valueInt;
+}
+
+bool IsBigInt(const TLftabi_Value &value) {
+  return IsInt(value) || value.type() == id_ftabi_valueBigInt;
+}
+
+bool IsBool(const TLftabi_Value &value) {
+  return value.type() == id_ftabi_valueBool;
+}
+
+bool IsCell(const TLftabi_Value &value) {
+  return value.type() == id_ftabi_valueCell;
+}
+
 [[nodiscard]] std::map<int64, InvestParams> parseInvestParamsMap(const TLDftabi_valueMap &map) {
   std::map<int64, InvestParams> result;
   for (const auto &item : map.vvalues().v) {
@@ -493,15 +550,12 @@ std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
   }
 
   const auto args = decodedTransferInput.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 3 || args[0].type() != id_ftabi_valueAddress || args[1].type() != id_ftabi_valueInt ||
-      args[2].type() != id_ftabi_valueInt) {
+  if (args.size() != 3 || !IsAddress(args[0]) || !IsBigInt(args[1])) {
     return std::nullopt;
   }
 
-  return TokenTransfer{.address = args[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
-                       .value = args[1].c_ftabi_valueInt().vvalue().v,
-                       .incoming = false,
-                       .direct = true};
+  return TokenTransfer{
+      .address = UnpackAddress(args[0]), .value = UnpackUint128(args[1]), .incoming = false, .direct = true};
 }
 
 std::optional<TokenTransfer> ParseTokenTransferToOwner(const QByteArray &body) {
@@ -512,13 +566,11 @@ std::optional<TokenTransfer> ParseTokenTransferToOwner(const QByteArray &body) {
   }
 
   const auto args = decodedTransferInput.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 5 || args[1].type() != id_ftabi_valueAddress || args[2].type() != id_ftabi_valueInt) {
+  if (args.size() != 5 || !IsAddress(args[1]) || !IsBigInt(args[2])) {
     return std::nullopt;
   }
 
-  return TokenTransfer{.address = args[1].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
-                       .value = args[2].c_ftabi_valueInt().vvalue().v,
-                       .incoming = false};
+  return TokenTransfer{.address = UnpackAddress(args[1]), .value = UnpackUint128(args[2]), .incoming = false};
 }
 
 std::optional<TokenTransfer> ParseInternalTokenTransfer(const QByteArray &body) {
@@ -529,13 +581,11 @@ std::optional<TokenTransfer> ParseInternalTokenTransfer(const QByteArray &body) 
   }
 
   const auto args = decodedTransferInput.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 6 || args[0].type() != id_ftabi_valueInt || args[2].type() != id_ftabi_valueAddress) {
+  if (args.size() != 6 || !IsBigInt(args[0]) || !IsAddress(args[2])) {
     return std::nullopt;
   }
 
-  return TokenTransfer{.address = args[2].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
-                       .value = args[0].c_ftabi_valueInt().vvalue().v,
-                       .incoming = true};
+  return TokenTransfer{.address = UnpackAddress(args[2]), .value = UnpackUint128(args[0]), .incoming = true};
 }
 
 std::optional<TokenMint> ParseTokenAccept(const QByteArray &body) {
@@ -546,7 +596,7 @@ std::optional<TokenMint> ParseTokenAccept(const QByteArray &body) {
   }
 
   const auto args = decodedAcceptInput.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 1 || args[0].type() != id_ftabi_valueInt) {
+  if (args.size() != 1 || !IsBigInt(args[0])) {
     return std::nullopt;
   }
 
@@ -623,8 +673,7 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
   }
 
   const auto args = decodedSwapBackInput.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 4 || args[0].type() != id_ftabi_valueInt || args[1].type() != id_ftabi_valueInt ||
-      args[2].type() != id_ftabi_valueAddress || args[3].type() != id_ftabi_valueCell) {
+  if (args.size() != 4 || !IsBigInt(args[0]) || !IsAddress(args[2]) || !IsCell(args[3])) {
     return std::nullopt;
   }
 
@@ -646,7 +695,7 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
     address.resize(kEthereumAddressByteCount);
   }
 
-  return TokenSwapBack{.address = "0x" + address.toHex(), .value = args[0].c_ftabi_valueInt().vvalue().v};
+  return TokenSwapBack{.address = "0x" + address.toHex(), .value = UnpackUint128(args[0])};
 }
 
 std::optional<DePoolOrdinaryStakeTransaction> ParseOrdinaryStakeTransfer(const QByteArray &body) {
@@ -657,7 +706,7 @@ std::optional<DePoolOrdinaryStakeTransaction> ParseOrdinaryStakeTransfer(const Q
   }
 
   const auto args = decodedInput.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 1 || args[0].type() != id_ftabi_valueInt) {
+  if (args.size() != 1 || !IsInt(args[0])) {
     return std::nullopt;
   }
 
@@ -718,8 +767,7 @@ std::optional<RootTokenContractDetails> ParseRootTokenContractDetails(const TLft
   }
 
   const auto &tuple = tokens[0].c_ftabi_valueTuple().vvalues().v;
-  if (tuple.size() < 8 || tuple[2].type() != id_ftabi_valueInt || tuple[5].type() != id_ftabi_valueAddress ||
-      tuple[7].type() != id_ftabi_valueInt) {
+  if (tuple.size() < 8 || !IsInt(tuple[2]) || !IsAddress(tuple[5]) || !IsInt(tuple[7])) {
     return std::nullopt;
   }
 
@@ -739,26 +787,23 @@ std::optional<TokenWalletContractDetails> ParseTokenWalletContractDetails(const 
   }
 
   const auto &tuple = tokens[0].c_ftabi_valueTuple().vvalues().v;
-  if (tuple.size() < 5 || tuple[0].type() != id_ftabi_valueAddress || tuple[3].type() != id_ftabi_valueAddress) {
+  if (tuple.size() < 5 || !IsAddress(tuple[0]) || !IsAddress(tuple[3])) {
     return std::nullopt;
   }
 
   return TokenWalletContractDetails{
-      .rootAddress = tuple[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
-      .ownerAddress = tuple[3].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v,
+      .rootAddress = UnpackAddress(tuple[0]),
+      .ownerAddress = UnpackAddress(tuple[3]),
   };
 }
 
-Result<QByteArray> CreateTokenMessage(const QString &recipient, int64 amount) {
+Result<QByteArray> CreateTokenMessage(const QString &recipient, const int128 &amount) {
   const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-      TokenTransferFunction(),
-      tl_ftabi_functionCallInternal(
-          {}, tl_vector(QVector<TLftabi_Value>{
-                  tl_ftabi_valueAddress(tl_ftabi_paramAddress(),  // to
-                                        tl_accountAddress(tl_string(recipient))),
-                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(amount)),  // amount
-                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(0)),       // grams
-              }))));
+      TokenTransferFunction(), tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
+                                                                     PackAddress(recipient),  // to
+                                                                     PackUint128(amount),     // amount
+                                                                     PackUint128(),           // grams
+                                                                 }))));
   if (!encodedBody.has_value()) {
     return encodedBody.error();
   }
@@ -766,18 +811,17 @@ Result<QByteArray> CreateTokenMessage(const QString &recipient, int64 amount) {
   return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
-Result<QByteArray> CreateTokenTransferToOwnerMessage(const QString &recipient, int64 amount, int64 deployGrams) {
-  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
+Result<QByteArray> CreateTokenTransferToOwnerMessage(const QString &recipient, const int128 &amount,
+                                                     int64 deployGrams) {
+  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(  //
       TokenTransferToOwnerFunction(),
-      tl_ftabi_functionCallInternal(
-          {}, tl_vector(QVector<TLftabi_Value>{
-                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0)),  // recipient_public_key
-                  tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
-                                        tl_accountAddress(tl_string(recipient))),               // recipient_address
-                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(amount)),       // tokens
-                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(deployGrams)),  // deploy_grams
-                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(0)),            // transfer_grams
-              }))));
+      tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
+                                            PackPubKey(),              // recipient_public_key
+                                            PackAddress(recipient),    // recipient_address
+                                            PackUint128(amount),       // tokens
+                                            PackUint128(deployGrams),  // deploy_grams
+                                            PackUint128(),             // transfer_grams
+                                        }))));
   if (!encodedBody.has_value()) {
     return encodedBody.error();
   }
@@ -798,7 +842,7 @@ std::optional<QByteArray> ParseEthereumAddress(const QString &ethereumAddress) {
 }
 
 Result<QByteArray> CreateSwapBackMessage(const QByteArray &ethereumAddress, const QString &callback_address,
-                                         int64 amount) {
+                                         const int128 &amount) {
   auto callback_payload = RequestSender::Execute(TLftabi_PackIntoCell(
       tl_vector(QVector<TLftabi_Value>{tl_ftabi_valueBytes(tl_ftabi_paramBytes(), tl_bytes(ethereumAddress))})));
   if (!callback_payload.has_value()) {
@@ -806,15 +850,13 @@ Result<QByteArray> CreateSwapBackMessage(const QByteArray &ethereumAddress, cons
   }
 
   const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-      TokenSwapBackFunction(),
-      tl_ftabi_functionCallInternal(
-          {}, tl_vector(QVector<TLftabi_Value>{
-                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(amount)),  // tokens
-                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(0)),       // grams
-                  tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
-                                        tl_accountAddress(tl_string(callback_address))),  // callback_address
-                  tl_ftabi_valueCell(tl_ftabi_paramCell(), callback_payload.value()),     // callback_payload
-              }))));
+      TokenSwapBackFunction(),  //
+      tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
+                                            PackUint128(amount),                 // tokens
+                                            PackUint128(),                       // grams
+                                            PackAddress(callback_address),       // callback_address
+                                            PackCell(callback_payload.value()),  // callback_payload
+                                        }))));
   if (!encodedBody.has_value()) {
     return encodedBody.error();
   }
@@ -868,15 +910,14 @@ Result<QByteArray> CreateCancelWithdrawalMessage() {
 }
 
 Result<QByteArray> CreateTokenWalletDeployMessage(int64 grams, const QString &owner) {
-  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-      RootTokenDeployWalletFunction(),
-      tl_ftabi_functionCallInternal(
-          {}, tl_vector(QVector<TLftabi_Value>{
-                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(grams)),
-                  tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0)),
-                  tl_ftabi_valueAddress(tl_ftabi_paramAddress(), tl_accountAddress(tl_string(owner))),
-                  tl_ftabi_valueAddress(tl_ftabi_paramAddress(), tl_accountAddress(tl_string(owner))),
-              }))));
+  const auto encodedBody = RequestSender::Execute(
+      TLftabi_CreateMessageBody(RootTokenDeployWalletFunction(),  //
+                                tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
+                                                                      PackUint128(grams),
+                                                                      PackPubKey(),
+                                                                      PackAddress(owner),
+                                                                      PackAddress(owner),
+                                                                  }))));
   if (!encodedBody.has_value()) {
     return encodedBody.error();
   }
@@ -989,7 +1030,7 @@ bool Wallet::IsIncorrectPasswordError(const Error &error) {
   return error.details.startsWith(qstr("KEY_DECRYPT"));
 }
 
-void Wallet::open(const QByteArray &globalPassword, const Settings &defaultSettings, Callback<> done) {
+void Wallet::open(const QByteArray &globalPassword, const Settings &defaultSettings, const Callback<> &done) {
   auto opened = [=](Result<WalletList> result) {
     if (!result) {
       return InvokeCallback(done, result.error());
@@ -1007,7 +1048,7 @@ void Wallet::open(const QByteArray &globalPassword, const Settings &defaultSetti
   _external->open(globalPassword, defaultSettings, std::move(opened));
 }
 
-void Wallet::start(Callback<> done) {
+void Wallet::start(const Callback<> &done) {
   _external->start([=](Result<ConfigInfo> result) {
     if (!result) {
       return InvokeCallback(done, result.error());
@@ -1071,7 +1112,7 @@ void Wallet::updateSettings(Settings settings, const Callback<> &done) {
   });
 }
 
-void Wallet::checkConfig(const QByteArray &config, Callback<> done) {
+void Wallet::checkConfig(const QByteArray &config, const Callback<> &done) {
   // We want to check only validity of config,
   // not validity in one specific blockchain_name.
   // So we pass an empty blockchain name.
@@ -1323,16 +1364,14 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
         .request(TLftabi_RunLocal(                                          //
             tl_accountAddress(tl_string(transaction.rootContractAddress)),  //
             RootTokenGetWalletAddressFunction(),                            //
-            tl_ftabi_functionCallExternal(
-                {}, tl_vector(QVector<TLftabi_Value>{
-                        tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0)),  //
-                        tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
-                                              tl_accountAddress(tl_string(transaction.recipient))),  //
-                    }))))
+            tl_ftabi_functionCallExternal({}, tl_vector(QVector<TLftabi_Value>{
+                                                  PackPubKey(),                        //
+                                                  PackAddress(transaction.recipient),  //
+                                              }))))
         .done([=, rootContractAddress = transaction.rootContractAddress,
                ownerAddress = transaction.recipient](const TLftabi_decodedOutput &decodedOutput) {
           const auto &tokens = decodedOutput.c_ftabi_decodedOutput().vvalues().v;
-          const auto walletAddress = tokens[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v;
+          const auto walletAddress = UnpackAddress(tokens[0]);
 
           _external->updateTokenOwnersCache(rootContractAddress, walletAddress, ownerAddress,
                                             [=](const Result<> &) { checkWalletAddress(walletAddress); });
@@ -1572,7 +1611,7 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
         const auto &accountState = result.c_fullAccountState().vaccount_state().c_raw_accountState();
 
         _external->lib()
-            .request(TLftabi_RunLocalCachedSplit(
+            .request(TLftabi_RunLocalCachedSplit(                              //
                 tl_accountAddress(tl_string(rawDePoolAddress)),                //
                 info.vlast_transaction_id().c_internal_transactionId().vlt(),  //
                 tl_int32(static_cast<int32>(info.vsync_utime().v)),            //
@@ -1583,8 +1622,7 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
                 tl_ftabi_functionCallExternal(                                 //
                     {},                                                        // header values
                     tl_vector(QVector<TLftabi_Value>{
-                        tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
-                                              tl_accountAddress(tl_string(account))),  // account
+                        PackAddress(account),  // account
                     }))))
             .done([=](const TLftabi_decodedOutput &decodedOutput) {
               auto state = ParseDePoolParticipantState(decodedOutput);
@@ -1627,14 +1665,13 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
             accountState.vdata(),                                          //
             accountState.vcode(),                                          //
             RootTokenGetWalletAddressFunction(),                           //
-            tl_ftabi_functionCallExternal(
-                {}, tl_vector(QVector<TLftabi_Value>{
-                        tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0)),                      //
-                        tl_ftabi_valueAddress(tl_ftabi_paramAddress(), tl_accountAddress(tl_string(account))),  //
-                    }))))
+            tl_ftabi_functionCallExternal({}, tl_vector(QVector<TLftabi_Value>{
+                                                  PackPubKey(),          //
+                                                  PackAddress(account),  //
+                                              }))))
         .done([=](const TLftabi_decodedOutput &decodedOutput) {
           const auto &tokens = decodedOutput.c_ftabi_decodedOutput().vvalues().v;
-          const auto walletAddress = tokens[0].c_ftabi_valueAddress().vvalue().c_accountAddress().vaccount_address().v;
+          const auto walletAddress = UnpackAddress(tokens[0]);
           const auto rawWalletAddress = ConvertIntoRaw(walletAddress);
 
           _accountViewers->addToken(
@@ -1890,12 +1927,10 @@ void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const DeP
         .request(TLftabi_RunLocal(                  //
             tl_accountAddress(tl_string(address)),  //
             DePoolParticipantInfoFunction(),        //
-            tl_ftabi_functionCallExternal(
-                {},  // header values
-                tl_vector(QVector<TLftabi_Value>{
-                    tl_ftabi_valueAddress(tl_ftabi_paramAddress(),
-                                          tl_accountAddress(tl_string(walletAddress))),  // account
-                }))))
+            tl_ftabi_functionCallExternal({},
+                                          tl_vector(QVector<TLftabi_Value>{
+                                              PackAddress(walletAddress),  // account
+                                          }))))
         .done([=, address = address](const TLftabi_decodedOutput &result) {
           auto state = ParseDePoolParticipantState(result);
           if (state.has_value()) {
@@ -2215,7 +2250,7 @@ auto Wallet::makeSendCallback(const Callback<> &done) -> std::function<void(int6
   };
 }
 
-auto Wallet::makeEstimateFeesCallback(Callback<TransactionCheckResult> done) -> std::function<void(int64)> {
+auto Wallet::makeEstimateFeesCallback(const Callback<TransactionCheckResult> &done) -> std::function<void(int64)> {
   return [this, done = std::move(done)](int64 id) {
     _external->lib()
         .request(TLquery_EstimateFees(tl_int53(id), tl_boolTrue()))
@@ -2230,7 +2265,7 @@ auto Wallet::makeEstimateFeesCallback(Callback<TransactionCheckResult> done) -> 
 
 void Wallet::checkTransactionFees(const QString &sender, const QString &recipient, const TLmsg_Data &body,
                                   int64 realAmount, int timeout, bool allowSendToUninited,
-                                  Callback<TransactionCheckResult> done) {
+                                  const Callback<TransactionCheckResult> &done) {
   const auto check = makeEstimateFeesCallback(done);
 
   _external->lib()

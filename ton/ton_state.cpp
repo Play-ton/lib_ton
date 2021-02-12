@@ -167,4 +167,39 @@ bool operator!=(const SyncState &a, const SyncState &b) {
   return !(a == b);
 }
 
+QByteArray Int128ToBytesBE(const int128 &from) {
+  QByteArray to(32, 0);
+
+  auto size = from.backend().size() * sizeof(boost::multiprecision::limb_type);
+  auto iter = reinterpret_cast<const int8_t *>(from.backend().limbs());
+
+  for (int i = 0; i < size; ++i) {
+    to[to.size() - 1 - i] = iter[i];
+  }
+
+  return to;
+}
+
+int128 BytesBEToInt128(const QByteArray &from) {
+  if (from.length() != 32) {
+    Unexpected("Array is not a uint256");
+  }
+
+  constexpr auto size = 16;
+
+  int128 to = 0;
+  uint32_t limbCount = size / sizeof(boost::multiprecision::limb_type);
+  to.backend().resize(limbCount, limbCount);
+
+  auto iter = reinterpret_cast<int8_t *>(to.backend().limbs());
+
+  for (int i = 0; i < size; i++) {
+    iter[i] = from[from.size() - 1 - i];
+  }
+
+  to.backend().normalize();
+
+  return to;
+}
+
 }  // namespace Ton
