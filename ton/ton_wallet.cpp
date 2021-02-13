@@ -543,7 +543,9 @@ TLftabi_Function DePoolOnRoundCompleteFunction() {
   return *function;
 }
 
-TLftabi_Function DePoolParticipantInfoFunction(bool withVesting) {
+TLftabi_Function DePoolParticipantInfoFunction(int dePoolVersion) {
+  const bool withVesting = dePoolVersion == 3;
+
   static std::optional<TLftabi_function> function[2];
   if (!function[withVesting].has_value()) {
     auto outputs = QVector<TLftabi_Param>{
@@ -731,14 +733,15 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
   }
 
   const auto decodedSwapBackPayload = RequestSender::Execute(TLftabi_UnpackFromCell(
-      args[3].c_ftabi_valueCell().vvalue(), tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramBytes()})));
+      args[3].c_ftabi_valueCell().vvalue(), tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramUint(tl_int32(160))})));
   if (!decodedSwapBackPayload.has_value()) {
     return std::nullopt;
   }
 
   const auto &payload = decodedSwapBackPayload.value().c_ftabi_decodedOutput().vvalues().v;
 
-  auto address = UnpackBytes(payload[0]);
+  auto address = payload[0].c_ftabi_valueBigInt().vvalue().v;
+  address.remove(0, 32 - kEthereumAddressByteCount);
   auto addressSize = address.size();
   if (addressSize < kEthereumAddressByteCount) {
     return std::nullopt;
@@ -896,10 +899,13 @@ std::optional<QByteArray> ParseEthereumAddress(const QString &ethereumAddress) {
   return targetBytes;
 }
 
-Result<QByteArray> CreateSwapBackMessage(const QByteArray &ethereumAddress, const QString &callback_address,
+Result<QByteArray> CreateSwapBackMessage(QByteArray ethereumAddress, const QString &callback_address,
                                          const int128 &amount) {
-  auto callback_payload = RequestSender::Execute(TLftabi_PackIntoCell(
-      tl_vector(QVector<TLftabi_Value>{tl_ftabi_valueBytes(tl_ftabi_paramBytes(), tl_bytes(ethereumAddress))})));
+  Expects(ethereumAddress.size() == kEthereumAddressByteCount);
+  ethereumAddress.prepend(32 - kEthereumAddressByteCount, 0);
+
+  auto callback_payload = RequestSender::Execute(TLftabi_PackIntoCell(tl_vector(
+      QVector<TLftabi_Value>{tl_ftabi_valueBigInt(tl_ftabi_paramUint(tl_int32(160)), tl_bytes(ethereumAddress))})));
   if (!callback_payload.has_value()) {
     return callback_payload.error();
   }
@@ -1692,7 +1698,7 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
                 info.vbalance(),                                               //
                 accountState.vdata(),                                          //
                 accountState.vcode(),                                          //
-                DePoolParticipantInfoFunction(*dePoolVersion == 3),            //
+                DePoolParticipantInfoFunction(*dePoolVersion),                 //
                 tl_ftabi_functionCallExternal(                                 //
                     {},                                                        // header values
                     tl_vector(QVector<TLftabi_Value>{
@@ -1704,12 +1710,10 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
                 _accountViewers->addDePool(account, packedDePoolAddress, std::move(state.value()));
                 InvokeCallback(done);
               } else {
-                std::cout << "Invalid abi" << std::endl;
                 InvokeCallback(done, Error{Error::Type::TonLib, "Invalid DePool ABI"});
               }
             })
             .fail([=](const TLError &error) {
-              std::cout << "Error: " << error.c_error().vmessage().v.toStdString() << std::endl;
               _accountViewers->addDePool(account, packedDePoolAddress,
                                          DePoolParticipantState{.dePoolVersion = *dePoolVersion});
               InvokeCallback(done);
@@ -1996,29 +2000,26 @@ void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const DeP
 
   std::shared_ptr<StateContext> ctx{new StateContext{previousStates, done}};
 
-  for (const auto &item : previousStates) {
-    const auto &address = item.first;
-    const auto dePoolVersion = item.second.dePoolVersion;
-
+  for (const auto &[address, previousState] : previousStates) {
     _external->lib()
-        .request(TLftabi_RunLocal(                              //
-            tl_accountAddress(tl_string(address)),              //
-            DePoolParticipantInfoFunction(dePoolVersion == 3),  //
+        .request(TLftabi_RunLocal(                                       //
+            tl_accountAddress(tl_string(address)),                       //
+            DePoolParticipantInfoFunction(previousState.dePoolVersion),  //
             tl_ftabi_functionCallExternal({},
                                           tl_vector(QVector<TLftabi_Value>{
                                               PackAddress(walletAddress),  // account
                                           }))))
-        .done([=, address = address](const TLftabi_decodedOutput &result) {
-          auto state = ParseDePoolParticipantState(dePoolVersion, result);
+        .done([=, address = address, previousState = previousState](const TLftabi_decodedOutput &result) {
+          auto state = ParseDePoolParticipantState(previousState.dePoolVersion, result);
           if (state.has_value()) {
             ctx->notifySuccess(address, std::move(state.value()));
           } else {
             ctx->notifyError(address);
           }
         })
-        .fail([=, address = address](const TLError &error) {
+        .fail([=, address = address, previousState = previousState](const TLError &error) mutable {
           // ErrorFromLib(error)
-          ctx->notifySuccess(address, DePoolParticipantState{});
+          ctx->notifySuccess(address, std::move(previousState));
         })
         .send();
   }
