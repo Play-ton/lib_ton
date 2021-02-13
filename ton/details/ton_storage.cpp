@@ -318,7 +318,7 @@ TokenState Deserialize(const TLstorage_TokenState &data) {
 }
 
 TLstorage_DePoolState Serialize(const NamedDePoolState &data) {
-  return make_storage_dePoolState(tl_string(data.address), tl_int64(data.state.total),
+  return make_storage_dePoolState(tl_string(data.address), tl_int32(data.state.version), tl_int64(data.state.total),
                                   tl_int64(data.state.withdrawValue), Serialize(data.state.reinvest),
                                   tl_int64(data.state.reward));
 }
@@ -326,7 +326,8 @@ TLstorage_DePoolState Serialize(const NamedDePoolState &data) {
 NamedDePoolState Deserialize(const TLstorage_DePoolState &data) {
   return data.match([&](const TLDstorage_dePoolState &data) {
     auto address = QString::fromUtf8(data.vaddress().v);
-    auto state = DePoolParticipantState{.total = data.vtotal().v,
+    auto state = DePoolParticipantState{.version = data.vversion().v,
+                                        .total = data.vtotal().v,
                                         .withdrawValue = data.vwithdrawValue().v,
                                         .reinvest = Deserialize(data.vreinvest()),
                                         .reward = data.vreward().v};

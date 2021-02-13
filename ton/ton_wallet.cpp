@@ -123,14 +123,14 @@ bool IsCell(const TLftabi_Value &value) {
   return value.type() == id_ftabi_valueCell;
 }
 
-std::optional<int> GuessDePoolVersion(const QByteArray &codeHash) {
+std::optional<int32> GuessDePoolVersion(const QByteArray &codeHash) {
   static const std::vector<QByteArray> codeHashes = {
       QByteArray::fromHex("b4ad6c42427a12a65d9a0bffb0c2730dd9cdf830a086d94636dab7784e13eb38"),
       QByteArray::fromHex("a46c6872712ec49e481a7f3fc1f42469d8bd6ef3fae906aa5b9927e5a3fb3b6b"),
       QByteArray::fromHex("14e20e304f53e6da152eb95fffc993dbd28245a775d847eed043f7c78a503885"),
   };
 
-  for (int i = 0; i < codeHashes.size(); ++i) {
+  for (int32 i = 0; i < codeHashes.size(); ++i) {
     if (codeHashes[i] == codeHash) {
       return i + 1;
     }
@@ -543,7 +543,7 @@ TLftabi_Function DePoolOnRoundCompleteFunction() {
   return *function;
 }
 
-TLftabi_Function DePoolParticipantInfoFunction(int dePoolVersion) {
+TLftabi_Function DePoolParticipantInfoFunction(int32 dePoolVersion) {
   const bool withVesting = dePoolVersion == 3;
 
   static std::optional<TLftabi_function> function[2];
@@ -792,7 +792,7 @@ std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const
   };
 }
 
-std::optional<DePoolParticipantState> ParseDePoolParticipantState(int dePoolVersion,
+std::optional<DePoolParticipantState> ParseDePoolParticipantState(int32 dePoolVersion,
                                                                   const TLftabi_decodedOutput &result) {
   const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
   if (results.size() < 4) {
@@ -807,7 +807,7 @@ std::optional<DePoolParticipantState> ParseDePoolParticipantState(int dePoolVers
   }
 
   return DePoolParticipantState{
-      .dePoolVersion = dePoolVersion,
+      .version = dePoolVersion,
       .total = UnpackUint(results[0]),
       .withdrawValue = UnpackUint(results[1]),
       .reinvest = UnpackBool(results[2]),
@@ -1033,7 +1033,7 @@ QString Wallet::ConvertIntoRaw(const QString &address) {
 
   const auto &unpacked = result->c_unpackedAccountAddress();
   const auto workchain = unpacked.vworkchain_id().v;
-  const auto addr = QString::fromLocal8Bit(unpacked.vaddr().v.toHex().toUpper());
+  const auto addr = QString::fromLocal8Bit(unpacked.vaddr().v.toHex());
 
   return QString{"%1:%2"}.arg(workchain).arg(addr);
 }
@@ -1715,7 +1715,7 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
             })
             .fail([=](const TLError &error) {
               _accountViewers->addDePool(account, packedDePoolAddress,
-                                         DePoolParticipantState{.dePoolVersion = *dePoolVersion});
+                                         DePoolParticipantState{.version = *dePoolVersion});
               InvokeCallback(done);
             })
             .send();
@@ -2004,13 +2004,13 @@ void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const DeP
     _external->lib()
         .request(TLftabi_RunLocal(                                       //
             tl_accountAddress(tl_string(address)),                       //
-            DePoolParticipantInfoFunction(previousState.dePoolVersion),  //
+            DePoolParticipantInfoFunction(previousState.version),  //
             tl_ftabi_functionCallExternal({},
                                           tl_vector(QVector<TLftabi_Value>{
                                               PackAddress(walletAddress),  // account
                                           }))))
         .done([=, address = address, previousState = previousState](const TLftabi_decodedOutput &result) {
-          auto state = ParseDePoolParticipantState(previousState.dePoolVersion, result);
+          auto state = ParseDePoolParticipantState(previousState.version, result);
           if (state.has_value()) {
             ctx->notifySuccess(address, std::move(state.value()));
           } else {

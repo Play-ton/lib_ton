@@ -44,6 +44,7 @@ storage.tokenState
     balance:bytes = storage.TokenState;
 storage.dePoolState
     address:string
+    version:int32
     total:int64
     withdrawValue:int64
     reinvest:storage.Bool

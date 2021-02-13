@@ -169,7 +169,7 @@ bool operator==(const InvestParams &a, const InvestParams &b);
 bool operator!=(const InvestParams &a, const InvestParams &b);
 
 struct DePoolParticipantState {
-  int dePoolVersion;
+  int32 version = 0;
   int64 total = 0;
   int64 withdrawValue = 0;
   bool reinvest = false;
