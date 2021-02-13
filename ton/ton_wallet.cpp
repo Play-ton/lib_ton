@@ -123,6 +123,21 @@ bool IsCell(const TLftabi_Value &value) {
   return value.type() == id_ftabi_valueCell;
 }
 
+std::optional<int> GuessDePoolVersion(const QByteArray &codeHash) {
+  static const std::vector<QByteArray> codeHashes = {
+      QByteArray::fromHex("b4ad6c42427a12a65d9a0bffb0c2730dd9cdf830a086d94636dab7784e13eb38"),
+      QByteArray::fromHex("a46c6872712ec49e481a7f3fc1f42469d8bd6ef3fae906aa5b9927e5a3fb3b6b"),
+      QByteArray::fromHex("14e20e304f53e6da152eb95fffc993dbd28245a775d847eed043f7c78a503885"),
+  };
+
+  for (int i = 0; i < codeHashes.size(); ++i) {
+    if (codeHashes[i] == codeHash) {
+      return i + 1;
+    }
+  }
+  return std::nullopt;
+}
+
 [[nodiscard]] std::map<int64, InvestParams> parseInvestParamsMap(const TLDftabi_valueMap &map) {
   std::map<int64, InvestParams> result;
   for (const auto &item : map.vvalues().v) {
@@ -172,6 +187,22 @@ TLftabi_Function TonEventStatusChangedNotification() {
                                tl_vector(QVector<TLftabi_Param>{
                                    tl_ftabi_paramUint(tl_int32(8))  // status
                                })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function TokenWalletDeployedNotification() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("notifyWalletDeployed"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramAddress()}), {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -512,45 +543,51 @@ TLftabi_Function DePoolOnRoundCompleteFunction() {
   return *function;
 }
 
-TLftabi_Function DePoolParticipantInfoFunction() {
-  static std::optional<TLftabi_function> function;
-  if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(
-        tl_string("getParticipantInfo"),
-        tl_vector(QVector<TLftabi_namedParam>{
-            tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-            tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-        }),
-        tl_vector(QVector<TLftabi_Param>{
-            tl_ftabi_paramAddress(),  // addr
-        }),
-        tl_vector(QVector<TLftabi_Param>{
-            tl_ftabi_paramUint(tl_int32(64)),                                                       // total
-            tl_ftabi_paramUint(tl_int32(64)),                                                       // withdrawValue
-            tl_ftabi_paramBool(),                                                                   // reinvest
-            tl_ftabi_paramUint(tl_int32(64)),                                                       // reward
-            tl_ftabi_paramMap(tl_ftabi_paramUint(tl_int32(64)), tl_ftabi_paramUint(tl_int32(64))),  // stakes
-            tl_ftabi_paramMap(tl_ftabi_paramUint(tl_int32(64)),
-                              tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
-                                  tl_ftabi_paramUint(tl_int32(64)),  // remainingAmount
-                                  tl_ftabi_paramUint(tl_int32(64)),  // lastWithdrawalTime
-                                  tl_ftabi_paramUint(tl_int32(32)),  // withdrawalPeriod
-                                  tl_ftabi_paramUint(tl_int32(64)),  // withdrawalValue
-                                  tl_ftabi_paramAddress(),           // owner
-                              }))),                                  // vestings
-            tl_ftabi_paramMap(tl_ftabi_paramUint(tl_int32(64)),
-                              tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
-                                  tl_ftabi_paramUint(tl_int32(64)),  // remainingAmount
-                                  tl_ftabi_paramUint(tl_int32(64)),  // lastWithdrawalTime
-                                  tl_ftabi_paramUint(tl_int32(32)),  // withdrawalPeriod
-                                  tl_ftabi_paramUint(tl_int32(64)),  // withdrawalValue
-                                  tl_ftabi_paramAddress(),           // owner
-                              }))),                                  // locks
-        })));
+TLftabi_Function DePoolParticipantInfoFunction(bool withVesting) {
+  static std::optional<TLftabi_function> function[2];
+  if (!function[withVesting].has_value()) {
+    auto outputs = QVector<TLftabi_Param>{
+        tl_ftabi_paramUint(tl_int32(64)),                                                       // total
+        tl_ftabi_paramUint(tl_int32(64)),                                                       // withdrawValue
+        tl_ftabi_paramBool(),                                                                   // reinvest
+        tl_ftabi_paramUint(tl_int32(64)),                                                       // reward
+        tl_ftabi_paramMap(tl_ftabi_paramUint(tl_int32(64)), tl_ftabi_paramUint(tl_int32(64))),  // stakes
+        tl_ftabi_paramMap(tl_ftabi_paramUint(tl_int32(64)),
+                          tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
+                              tl_ftabi_paramUint(tl_int32(64)),  // remainingAmount
+                              tl_ftabi_paramUint(tl_int32(64)),  // lastWithdrawalTime
+                              tl_ftabi_paramUint(tl_int32(32)),  // withdrawalPeriod
+                              tl_ftabi_paramUint(tl_int32(64)),  // withdrawalValue
+                              tl_ftabi_paramAddress(),           // owner
+                          }))),                                  // vestings
+        tl_ftabi_paramMap(tl_ftabi_paramUint(tl_int32(64)),
+                          tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
+                              tl_ftabi_paramUint(tl_int32(64)),  // remainingAmount
+                              tl_ftabi_paramUint(tl_int32(64)),  // lastWithdrawalTime
+                              tl_ftabi_paramUint(tl_int32(32)),  // withdrawalPeriod
+                              tl_ftabi_paramUint(tl_int32(64)),  // withdrawalValue
+                              tl_ftabi_paramAddress(),           // owner
+                          }))),                                  // locks
+    };
+    if (withVesting) {
+      outputs.push_back(tl_ftabi_paramAddress());  // vestingDonor
+      outputs.push_back(tl_ftabi_paramAddress());  // lockDonor
+    }
+
+    const auto createdFunction = RequestSender::Execute(
+        TLftabi_CreateFunction(tl_string("getParticipantInfo"),
+                               tl_vector(QVector<TLftabi_namedParam>{
+                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+                               }),
+                               tl_vector(QVector<TLftabi_Param>{
+                                   tl_ftabi_paramAddress(),  // addr
+                               }),
+                               tl_vector(outputs)));
     Expects(createdFunction.has_value());
-    function = createdFunction.value();
+    function[withVesting] = createdFunction.value();
   }
-  return *function;
+  return *function[withVesting];
 }
 
 std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
@@ -666,14 +703,19 @@ std::optional<TonEventStatus> ParseTonEventNotification(const QByteArray &body) 
   }
 }
 
-std::optional<EventStatus> ParseEventNotification(const QByteArray &body) {
-  if (const auto ethEventNotification = ParseEthEventNotification(body); ethEventNotification.has_value()) {
-    return *ethEventNotification;
-  } else if (const auto tonEventNotification = ParseTonEventNotification(body); tonEventNotification.has_value()) {
-    return *tonEventNotification;
-  } else {
+std::optional<TokenWalletDeployed> ParseTokenWalletDeployedNotification(const QByteArray &body) {
+  const auto decoded =
+      RequestSender::Execute(TLftabi_DecodeInput(TokenWalletDeployedNotification(), tl_bytes(body), tl_boolTrue()));
+  if (!decoded.has_value()) {
     return std::nullopt;
   }
+
+  const auto args = decoded.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 1 || !IsAddress(args[0])) {
+    return std::nullopt;
+  }
+
+  return TokenWalletDeployed{.rootTokenContract = UnpackAddress(args[0])};
 }
 
 std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
@@ -747,7 +789,8 @@ std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const
   };
 }
 
-std::optional<DePoolParticipantState> ParseDePoolParticipantState(const TLftabi_decodedOutput &result) {
+std::optional<DePoolParticipantState> ParseDePoolParticipantState(int dePoolVersion,
+                                                                  const TLftabi_decodedOutput &result) {
   const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
   if (results.size() < 4) {
     return std::nullopt;
@@ -761,6 +804,7 @@ std::optional<DePoolParticipantState> ParseDePoolParticipantState(const TLftabi_
   }
 
   return DePoolParticipantState{
+      .dePoolVersion = dePoolVersion,
       .total = UnpackUint(results[0]),
       .withdrawValue = UnpackUint(results[1]),
       .reinvest = UnpackBool(results[2]),
@@ -988,6 +1032,12 @@ QString Wallet::ConvertIntoRaw(const QString &address) {
   return QString{"%1:%2"}.arg(workchain).arg(addr);
 }
 
+QString Wallet::ConvertIntoPacked(const QString &address) {
+  const auto result = RequestSender::Execute(TLConvertIntoPacked(tl_string(address), tl_boolTrue()));
+  Expects(result.has_value());
+  return result.value().c_accountAddress().vaccount_address().v;
+}
+
 std::optional<Ton::TokenTransaction> Wallet::ParseTokenTransaction(const Ton::MessageData &message) {
   if (message.type != Ton::MessageDataType::RawBody) {
     return std::nullopt;
@@ -1024,6 +1074,22 @@ std::optional<Ton::DePoolTransaction> Wallet::ParseDePoolTransaction(const Ton::
   }
 
   return std::nullopt;
+}
+
+std::optional<Ton::Notification> Wallet::ParseNotification(const Ton::MessageData &message) {
+  if (message.type != Ton::MessageDataType::RawBody) {
+    return std::nullopt;
+  }
+
+  if (auto ethEventNotification = ParseEthEventNotification(message.data); ethEventNotification.has_value()) {
+    return EthEventStatusChanged{.status = *ethEventNotification};
+  } else if (auto tonEventNotification = ParseTonEventNotification(message.data); tonEventNotification.has_value()) {
+    return TonEventStatusChanged{.status = *tonEventNotification};
+  } else if (auto walletDeployed = ParseTokenWalletDeployedNotification(message.data); walletDeployed.has_value()) {
+    return *walletDeployed;
+  } else {
+    return std::nullopt;
+  }
 }
 
 base::flat_set<QString> Wallet::GetValidWords() {
@@ -1603,18 +1669,15 @@ void Wallet::openReveal(const QString &rawAddress, const QString &ethereumAddres
 
 void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress, const Callback<> &done) {
   const auto account = getUsedAddress(publicKey);
-  const auto rawDePoolAddress = ConvertIntoRaw(dePoolAddress);
-
-  static const auto dePoolV1 = QByteArray::fromHex("b4ad6c42427a12a65d9a0bffb0c2730dd9cdf830a086d94636dab7784e13eb38");
-  static const auto dePoolV2 = QByteArray::fromHex("a46c6872712ec49e481a7f3fc1f42469d8bd6ef3fae906aa5b9927e5a3fb3b6b");
-  static const auto dePoolV3 = QByteArray::fromHex("14e20e304f53e6da152eb95fffc993dbd28245a775d847eed043f7c78a503885");
+  const auto packedDePoolAddress = ConvertIntoPacked(dePoolAddress);
 
   _external->lib()
-      .request(TLGetAccountState(tl_accountAddress(tl_string(rawDePoolAddress))))
-      .done([this, done, account, rawDePoolAddress](const TLFullAccountState &result) {
+      .request(TLGetAccountState(tl_accountAddress(tl_string(packedDePoolAddress))))
+      .done([this, done, account, packedDePoolAddress](const TLFullAccountState &result) {
         const auto &codeHash = result.c_fullAccountState().vcode_hash().v;
-        if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState ||
-            codeHash != dePoolV1 && codeHash != dePoolV2) {
+        const auto dePoolVersion = GuessDePoolVersion(codeHash);
+
+        if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState || !dePoolVersion.has_value()) {
           return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a DePool"});
         }
 
@@ -1623,29 +1686,32 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
 
         _external->lib()
             .request(TLftabi_RunLocalCachedSplit(                              //
-                tl_accountAddress(tl_string(rawDePoolAddress)),                //
+                tl_accountAddress(tl_string(packedDePoolAddress)),             //
                 info.vlast_transaction_id().c_internal_transactionId().vlt(),  //
                 tl_int32(static_cast<int32>(info.vsync_utime().v)),            //
                 info.vbalance(),                                               //
                 accountState.vdata(),                                          //
                 accountState.vcode(),                                          //
-                DePoolParticipantInfoFunction(),                               //
+                DePoolParticipantInfoFunction(*dePoolVersion == 3),            //
                 tl_ftabi_functionCallExternal(                                 //
                     {},                                                        // header values
                     tl_vector(QVector<TLftabi_Value>{
                         PackAddress(account),  // account
                     }))))
             .done([=](const TLftabi_decodedOutput &decodedOutput) {
-              auto state = ParseDePoolParticipantState(decodedOutput);
+              auto state = ParseDePoolParticipantState(*dePoolVersion, decodedOutput);
               if (state.has_value()) {
-                _accountViewers->addDePool(account, rawDePoolAddress, std::move(state.value()));
+                _accountViewers->addDePool(account, packedDePoolAddress, std::move(state.value()));
                 InvokeCallback(done);
               } else {
+                std::cout << "Invalid abi" << std::endl;
                 InvokeCallback(done, Error{Error::Type::TonLib, "Invalid DePool ABI"});
               }
             })
             .fail([=](const TLError &error) {
-              _accountViewers->addDePool(account, rawDePoolAddress, DePoolParticipantState{});
+              std::cout << "Error: " << error.c_error().vmessage().v.toStdString() << std::endl;
+              _accountViewers->addDePool(account, packedDePoolAddress,
+                                         DePoolParticipantState{.dePoolVersion = *dePoolVersion});
               InvokeCallback(done);
             })
             .send();
@@ -1655,21 +1721,21 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
 }
 
 void Wallet::removeDePool(const QByteArray &publicKey, const QString &dePoolAddress) {
-  _accountViewers->removeDePool(getUsedAddress(publicKey), ConvertIntoRaw(dePoolAddress));
+  _accountViewers->removeDePool(getUsedAddress(publicKey), dePoolAddress);
 }
 
 void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAddress, const Callback<> &done) {
   const auto account = getUsedAddress(publicKey);
-  const auto rawRootContractAddress = ConvertIntoRaw(rootContractAddress);
+  const auto packedRootContractAddress = ConvertIntoPacked(rootContractAddress);
 
-  const auto getWalletAddress = [this, done, account, rawRootContractAddress](TLFullAccountState &&result,
-                                                                              const RootTokenContractDetails &details) {
+  const auto getWalletAddress = [this, done, account, packedRootContractAddress](
+                                    TLFullAccountState &&result, const RootTokenContractDetails &details) {
     const auto &info = result.c_fullAccountState();
     const auto &accountState = result.c_fullAccountState().vaccount_state().c_raw_accountState();
 
     _external->lib()
         .request(TLftabi_RunLocalCachedSplit(                              //
-            tl_accountAddress(tl_string(rawRootContractAddress)),          //
+            tl_accountAddress(tl_string(packedRootContractAddress)),       //
             info.vlast_transaction_id().c_internal_transactionId().vlt(),  //
             tl_int32(static_cast<int32>(info.vsync_utime().v)),            //
             info.vbalance(),                                               //
@@ -1683,11 +1749,10 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
         .done([=](const TLftabi_decodedOutput &decodedOutput) {
           const auto &tokens = decodedOutput.c_ftabi_decodedOutput().vvalues().v;
           const auto walletAddress = UnpackAddress(tokens[0]);
-          const auto rawWalletAddress = ConvertIntoRaw(walletAddress);
 
           _accountViewers->addToken(
-              account, TokenState{.token = Symbol::tip3(details.symbol, details.decimals, rawRootContractAddress),
-                                  .walletContractAddress = rawWalletAddress,
+              account, TokenState{.token = Symbol::tip3(details.symbol, details.decimals, packedRootContractAddress),
+                                  .walletContractAddress = walletAddress,
                                   .rootOwnerAddress = details.ownerAddress,
                                   .balance = 0});
           InvokeCallback(done);
@@ -1701,8 +1766,8 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
   };
 
   _external->lib()
-      .request(TLGetAccountState(tl_accountAddress(tl_string(rawRootContractAddress))))
-      .done([this, done, account, rawRootContractAddress, getWalletAddress](TLFullAccountState &&result) {
+      .request(TLGetAccountState(tl_accountAddress(tl_string(packedRootContractAddress))))
+      .done([this, done, account, packedRootContractAddress, getWalletAddress](TLFullAccountState &&result) {
         if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState) {
           return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a root token contract"});
         }
@@ -1712,7 +1777,7 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
 
         _external->lib()
             .request(TLftabi_RunLocalCachedSplit(                                               //
-                tl_accountAddress(tl_string(rawRootContractAddress)),                           //
+                tl_accountAddress(tl_string(packedRootContractAddress)),                        //
                 tl_int64(info.vlast_transaction_id().c_internal_transactionId().vlt().v + 10),  //
                 tl_int32(static_cast<int32>(info.vsync_utime().v)),                             //
                 info.vbalance(),                                                                //
@@ -1933,17 +1998,18 @@ void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const DeP
 
   for (const auto &item : previousStates) {
     const auto &address = item.first;
+    const auto dePoolVersion = item.second.dePoolVersion;
 
     _external->lib()
-        .request(TLftabi_RunLocal(                  //
-            tl_accountAddress(tl_string(address)),  //
-            DePoolParticipantInfoFunction(),        //
+        .request(TLftabi_RunLocal(                              //
+            tl_accountAddress(tl_string(address)),              //
+            DePoolParticipantInfoFunction(dePoolVersion == 3),  //
             tl_ftabi_functionCallExternal({},
                                           tl_vector(QVector<TLftabi_Value>{
                                               PackAddress(walletAddress),  // account
                                           }))))
         .done([=, address = address](const TLftabi_decodedOutput &result) {
-          auto state = ParseDePoolParticipantState(result);
+          auto state = ParseDePoolParticipantState(dePoolVersion, result);
           if (state.has_value()) {
             ctx->notifySuccess(address, std::move(state.value()));
           } else {
@@ -2030,7 +2096,7 @@ void Wallet::getWalletOwner(const QString &rootTokenContract, const QString &wal
         if (!details.has_value()) {
           return InvokeCallback(done, Ton::Error{Ton::Error::Type::TonLib, "Invalid TokenWallet.getDetails ABI"});
         }
-        if (ConvertIntoRaw(details->rootAddress) != rootTokenContract) {
+        if (details->rootAddress != rootTokenContract) {
           return InvokeCallback(
               done, Ton::Error{Ton::Error::Type::TonLib, "Token wallet does not belong to this root token contract"});
         }
@@ -2131,7 +2197,7 @@ void Wallet::getWalletOwners(const QString &rootTokenContract, const QSet<QStrin
             std::cout << "Invalid TokenWallet.getDetails ABI";  // TODO: handle error?
             success = false;
           }
-          if (success && ConvertIntoRaw(details->rootAddress) != rootTokenContract) {
+          if (success && details->rootAddress != rootTokenContract) {
             std::cout << "Token wallet does not belong to this root token contract";  // TODO: handle error?
             success = false;
           }

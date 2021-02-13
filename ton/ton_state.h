@@ -142,6 +142,20 @@ enum class TonEventStatus { InProcess, Confirmed, Rejected };
 
 using EventStatus = std::variant<EthEventStatus, TonEventStatus>;
 
+struct TokenWalletDeployed {
+  QString rootTokenContract;
+};
+
+struct EthEventStatusChanged {
+  EthEventStatus status;
+};
+
+struct TonEventStatusChanged {
+  TonEventStatus status;
+};
+
+using Notification = std::variant<TokenWalletDeployed, EthEventStatusChanged, TonEventStatusChanged>;
+
 struct InvestParams {
   int64 remainingAmount{};
   int64 lastWithdrawalTime{};
@@ -155,6 +169,7 @@ bool operator==(const InvestParams &a, const InvestParams &b);
 bool operator!=(const InvestParams &a, const InvestParams &b);
 
 struct DePoolParticipantState {
+  int dePoolVersion;
   int64 total = 0;
   int64 withdrawValue = 0;
   bool reinvest = false;
