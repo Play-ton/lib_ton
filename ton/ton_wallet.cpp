@@ -158,16 +158,12 @@ std::optional<int32> GuessDePoolVersion(const QByteArray &codeHash) {
 TLftabi_Function EthEventStatusChangedNotification() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("notifyEthereumEventStatusChanged"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               {},
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(8))  // status
-                               })));
+    const auto createdFunction =
+        RequestSender::Execute(TLftabi_CreateFunction(tl_string("notifyEthereumEventStatusChanged"), {},
+                                                      tl_vector(QVector<TLftabi_Param>{
+                                                          tl_ftabi_paramUint(tl_int32(8))  // status
+                                                      }),
+                                                      {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -177,16 +173,12 @@ TLftabi_Function EthEventStatusChangedNotification() {
 TLftabi_Function TonEventStatusChangedNotification() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("notifyTonEventStatusChanged"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               {},
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(8))  // status
-                               })));
+    const auto createdFunction =
+        RequestSender::Execute(TLftabi_CreateFunction(tl_string("notifyTonEventStatusChanged"), {},
+                                                      tl_vector(QVector<TLftabi_Param>{
+                                                          tl_ftabi_paramUint(tl_int32(8))  // status
+                                                      }),
+                                                      {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -2002,8 +1994,8 @@ void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const DeP
 
   for (const auto &[address, previousState] : previousStates) {
     _external->lib()
-        .request(TLftabi_RunLocal(                                       //
-            tl_accountAddress(tl_string(address)),                       //
+        .request(TLftabi_RunLocal(                                 //
+            tl_accountAddress(tl_string(address)),                 //
             DePoolParticipantInfoFunction(previousState.version),  //
             tl_ftabi_functionCallExternal({},
                                           tl_vector(QVector<TLftabi_Value>{
