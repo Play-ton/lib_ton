@@ -88,6 +88,9 @@ class Wallet final : public base::has_weak_ptr {
   void checkDeployTokenWallet(const QByteArray &publicKey, const DeployTokenWalletTransactionToSend &transaction,
                               const Callback<TransactionCheckResult> &done);
 
+  void checkCollectTokens(const QByteArray &publicKey, const CollectTokensTransactionToSend &transaction,
+                          const Callback<TransactionCheckResult> &done);
+
   void sendGrams(const QByteArray &publicKey, const QByteArray &password, const TransactionToSend &transaction,
                  const Callback<PendingTransaction> &ready, const Callback<> &done);
 
@@ -107,6 +110,10 @@ class Wallet final : public base::has_weak_ptr {
   void deployTokenWallet(const QByteArray &publicKey, const QByteArray &password,
                          const DeployTokenWalletTransactionToSend &transaction,
                          const Callback<PendingTransaction> &ready, const Callback<> &done);
+
+  void collectTokens(const QByteArray &publicKey, const QByteArray &password,
+                     const CollectTokensTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                     const Callback<> &done);
 
   void openGate(const QString &rawAddress, const std::optional<Symbol> &token = {});
   void openReveal(const QString &rawAddress, const QString &ethereumAddress);

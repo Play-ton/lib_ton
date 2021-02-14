@@ -292,6 +292,17 @@ TLftabi_Function RootTokenDeployWalletFunction() {
   return *function;
 }
 
+TLftabi_Function ExecuteProxyCallbackFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction =
+        RequestSender::Execute(TLftabi_CreateFunction(tl_string("executeProxyCallback"), {}, {}, {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
 TLftabi_Function TokenGetBalanceFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
@@ -978,6 +989,16 @@ Result<QByteArray> CreateTokenWalletDeployMessage(int64 grams, const QString &ow
   return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
+Result<QByteArray> CreateExecuteProxyCallbackMessage() {
+  static auto encodedBody = RequestSender::Execute(
+      TLftabi_CreateMessageBody(ExecuteProxyCallbackFunction(), tl_ftabi_functionCallInternal({}, {})));
+  if (!encodedBody.has_value()) {
+    return encodedBody.error();
+  }
+
+  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+}
+
 }  // namespace
 
 namespace details {
@@ -1521,6 +1542,20 @@ void Wallet::checkDeployTokenWallet(const QByteArray &publicKey, const DeployTok
                        DeployTokenWalletTransactionToSend::realAmount, transaction.timeout, false, done);
 }
 
+void Wallet::checkCollectTokens(const QByteArray &publicKey, const CollectTokensTransactionToSend &transaction,
+                                const Callback<TransactionCheckResult> &done) {
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
+
+  const auto body = CreateExecuteProxyCallbackMessage();
+  if (!body.has_value()) {
+    return InvokeCallback(done, body.error());
+  }
+
+  checkTransactionFees(sender, transaction.eventContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                       CollectTokensTransactionToSend::realAmount, transaction.timeout, true, done);
+}
+
 void Wallet::sendGrams(const QByteArray &publicKey, const QByteArray &password, const TransactionToSend &transaction,
                        const Callback<PendingTransaction> &ready, const Callback<> &done) {
   Expects(transaction.amount >= 0);
@@ -1624,6 +1659,23 @@ void Wallet::deployTokenWallet(const QByteArray &publicKey, const QByteArray &pa
 
   sendMessage(publicKey, password, sender, transaction.rootContractAddress,
               tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready, done);
+}
+
+void Wallet::collectTokens(const QByteArray &publicKey, const QByteArray &password,
+                           const CollectTokensTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                           const Callback<> &done) {
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
+
+  const auto body = CreateExecuteProxyCallbackMessage();
+  if (!body.has_value()) {
+    return InvokeCallback(done, body.error());
+  }
+
+  const auto realAmount = CollectTokensTransactionToSend::realAmount;
+
+  sendMessage(publicKey, password, sender, transaction.eventContractAddress,
+              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, true, ready, done);
 }
 
 void Wallet::sendStake(const QByteArray &publicKey, const QByteArray &password,
