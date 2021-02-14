@@ -267,14 +267,14 @@ TLstorage_Transaction Serialize(const Transaction &data) {
 
 Transaction Deserialize(const TLstorage_Transaction &data) {
   return data.match([&](const TLDstorage_transaction &data) {
-    return Transaction{Deserialize(data.vid()),
-                       data.vtime().v,
-                       data.vfee().v,
-                       data.vstorageFee().v,
-                       data.votherFee().v,
-                       Deserialize(data.vincoming()),
-                       Deserialize(data.voutgoing()),
-                       Deserialize(data.vaborted())};
+    return Transaction{.id = Deserialize(data.vid()),
+                       .time = data.vtime().v,
+                       .fee = data.vfee().v,
+                       .storageFee = data.vstorageFee().v,
+                       .otherFee = data.votherFee().v,
+                       .incoming = Deserialize(data.vincoming()),
+                       .outgoing = Deserialize(data.voutgoing()),
+                       .aborted = Deserialize(data.vaborted())};
   });
 }
 
@@ -464,7 +464,6 @@ TLstorage_Settings Serialize(const Settings &data) {
 }
 
 Settings Deserialize(const TLstorage_Settings &data) {
-  auto result = Settings();
   return data.match(
       [&](const TLDstorage_settings &data) {
         return Settings{
@@ -495,7 +494,6 @@ Settings Deserialize(const TLstorage_Settings &data) {
             .version = data.vversion().v,
         };
       });
-  return result;
 }
 
 template <typename Data>
