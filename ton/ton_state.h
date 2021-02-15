@@ -142,6 +142,15 @@ enum class TonEventStatus { InProcess, Confirmed, Rejected };
 
 using EventStatus = std::variant<EthEventStatus, TonEventStatus>;
 
+struct EthEventDetails {
+  QString rootTokenContract;
+  EthEventStatus status;
+  uint16 requiredConfirmationCount{};
+  uint16 requiredRejectionCount{};
+  uint16 confirmationCount{};
+  uint16 rejectionCount{};
+};
+
 struct TokenWalletDeployed {
   QString rootTokenContract;
 };

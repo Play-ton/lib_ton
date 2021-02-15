@@ -138,6 +138,13 @@ std::optional<int32> GuessDePoolVersion(const QByteArray &codeHash) {
   return std::nullopt;
 }
 
+[[nodiscard]] TLVector<TLftabi_namedParam> DefaultHeaders() {
+  return tl_vector(QVector<TLftabi_namedParam>{
+      tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
+      tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
+  });
+}
+
 [[nodiscard]] std::map<int64, InvestParams> parseInvestParamsMap(const TLDftabi_valueMap &map) {
   std::map<int64, InvestParams> result;
   for (const auto &item : map.vvalues().v) {
@@ -188,13 +195,103 @@ TLftabi_Function TonEventStatusChangedNotification() {
 TLftabi_Function TokenWalletDeployedNotification() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("notifyWalletDeployed"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramAddress()}), {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("notifyWalletDeployed"), DefaultHeaders(), tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramAddress()}),
+        {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function EthEventGetDetailsFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("getDetails"), DefaultHeaders(), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
+                tl_ftabi_paramUint(tl_int32(256)),         // eventTransaction
+                tl_ftabi_paramUint(tl_int32(32)),          // eventIndex
+                tl_ftabi_paramCell(),                      // eventData
+                tl_ftabi_paramUint(tl_int32(32)),          // eventBlockNumber
+                tl_ftabi_paramUint(tl_int32(256)),         // eventBlock
+                tl_ftabi_paramAddress(),                   // ethereumEventConfiguration
+                tl_ftabi_paramUint(tl_int32(16)),          // requiredConfirmations
+                tl_ftabi_paramUint(tl_int32(16)),          // requiredRejects
+                tl_ftabi_paramAddress(),                   // proxyAddress
+                tl_ftabi_paramCell(),                      // configurationMeta
+            })),                                           // initData
+            tl_ftabi_paramUint(tl_int32(8)),               // status
+            tl_ftabi_paramArray(tl_ftabi_paramAddress()),  // confirmRelays
+            tl_ftabi_paramArray(tl_ftabi_paramAddress()),  // rejectRelays
+        })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function EthEventGetDecodedDataFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("getDecodedData"), DefaultHeaders(), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramAddress(),            // rootToken
+            tl_ftabi_paramUint(tl_int32(128)),  // tokens
+            tl_ftabi_paramInt(tl_int32(8)),     // wid
+            tl_ftabi_paramUint(tl_int32(256)),  // owner_addr
+            tl_ftabi_paramUint(tl_int32(256)),  // owner_pubkey
+            tl_ftabi_paramAddress(),            // owner_address
+        })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function TonEventGetDetailsFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("getDetails"), DefaultHeaders(), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
+                tl_ftabi_paramUint(tl_int32(256)),         // eventTransaction
+                tl_ftabi_paramUint(tl_int32(64)),          // eventTransactionLt
+                tl_ftabi_paramUint(tl_int32(32)),          // eventTimestamp
+                tl_ftabi_paramUint(tl_int32(32)),          // eventIndex
+                tl_ftabi_paramCell(),                      // eventData
+                tl_ftabi_paramAddress(),                   // tonEventConfiguration
+                tl_ftabi_paramUint(tl_int32(16)),          // requiredConfirmations
+                tl_ftabi_paramUint(tl_int32(16)),          // requiredRejects
+                tl_ftabi_paramCell(),                      // configurationMeta
+            })),                                           // initData
+            tl_ftabi_paramUint(tl_int32(8)),               // status
+            tl_ftabi_paramArray(tl_ftabi_paramAddress()),  // confirmRelays
+            tl_ftabi_paramArray(tl_ftabi_paramAddress()),  // rejectRelays
+            tl_ftabi_paramArray(tl_ftabi_paramBytes()),    // eventDataSignatures
+        })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function TonEventGetDecodedDataFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("getDecodedData"), DefaultHeaders(), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramAddress(),            // rootToken
+            tl_ftabi_paramUint(tl_int32(8)),    // wid
+            tl_ftabi_paramUint(tl_int32(256)),  // addr
+            tl_ftabi_paramUint(tl_int32(128)),  // tokens
+            tl_ftabi_paramUint(tl_int32(160)),  // ethereum_address
+            tl_ftabi_paramAddress(),            // owner_address
+        })));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -204,20 +301,15 @@ TLftabi_Function TokenWalletDeployedNotification() {
 TLftabi_Function TokenWalletGetDetailsFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("getDetails"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               {},
-                               tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramAddress(),            // root_address
-                                   tl_ftabi_paramCell(),               // code
-                                   tl_ftabi_paramUint(tl_int32(256)),  // wallet_public_key
-                                   tl_ftabi_paramAddress(),            // owner_address
-                                   tl_ftabi_paramUint(tl_int32(128)),  // balance
-                               }))})));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("getDetails"), DefaultHeaders(), {},
+        tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramAddress(),            // root_address
+            tl_ftabi_paramCell(),               // code
+            tl_ftabi_paramUint(tl_int32(256)),  // wallet_public_key
+            tl_ftabi_paramAddress(),            // owner_address
+            tl_ftabi_paramUint(tl_int32(128)),  // balance
+        }))})));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -227,23 +319,18 @@ TLftabi_Function TokenWalletGetDetailsFunction() {
 TLftabi_Function RootTokenGetDetailsFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("getDetails"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               {},
-                               tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramBytes(),              // name
-                                   tl_ftabi_paramBytes(),              // symbol
-                                   tl_ftabi_paramUint(tl_int32(8)),    // decimals
-                                   tl_ftabi_paramCell(),               // wallet code
-                                   tl_ftabi_paramUint(tl_int32(256)),  // root_public_key
-                                   tl_ftabi_paramAddress(),            // root_owner_address
-                                   tl_ftabi_paramUint(tl_int32(128)),  // total_supply
-                                   tl_ftabi_paramUint(tl_int32(128)),  // start_gas_balance
-                               }))})));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("getDetails"), DefaultHeaders(), {},
+        tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramBytes(),              // name
+            tl_ftabi_paramBytes(),              // symbol
+            tl_ftabi_paramUint(tl_int32(8)),    // decimals
+            tl_ftabi_paramCell(),               // wallet code
+            tl_ftabi_paramUint(tl_int32(256)),  // root_public_key
+            tl_ftabi_paramAddress(),            // root_owner_address
+            tl_ftabi_paramUint(tl_int32(128)),  // total_supply
+            tl_ftabi_paramUint(tl_int32(128)),  // start_gas_balance
+        }))})));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -253,17 +340,13 @@ TLftabi_Function RootTokenGetDetailsFunction() {
 TLftabi_Function RootTokenGetWalletAddressFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("getWalletAddress"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(256)),  // wallet_public_key
-                                   tl_ftabi_paramAddress(),            // owner_address
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramAddress()})));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("getWalletAddress"), DefaultHeaders(),
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(256)),  // wallet_public_key
+            tl_ftabi_paramAddress(),            // owner_address
+        }),
+        tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramAddress()})));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -273,19 +356,15 @@ TLftabi_Function RootTokenGetWalletAddressFunction() {
 TLftabi_Function RootTokenDeployWalletFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("deployEmptyWallet"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(128)),  // grams
-                                   tl_ftabi_paramUint(tl_int32(256)),  // wallet_public_key
-                                   tl_ftabi_paramAddress(),            // owner_address
-                                   tl_ftabi_paramAddress(),            // gas_back_address
-                               }),
-                               {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("deployEmptyWallet"), DefaultHeaders(),
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(128)),  // grams
+            tl_ftabi_paramUint(tl_int32(256)),  // wallet_public_key
+            tl_ftabi_paramAddress(),            // owner_address
+            tl_ftabi_paramAddress(),            // gas_back_address
+        }),
+        {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -306,13 +385,9 @@ TLftabi_Function ExecuteProxyCallbackFunction() {
 TLftabi_Function TokenGetBalanceFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("balance"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               {}, tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramUint(tl_int32(128))})));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("balance"), DefaultHeaders(), {},
+        tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramUint(tl_int32(128))})));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -322,16 +397,12 @@ TLftabi_Function TokenGetBalanceFunction() {
 TLftabi_Function TokenAcceptFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("accept"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
-                               }),
-                               {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("accept"), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(128)),  // tokens
+        }),
+        {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -341,18 +412,14 @@ TLftabi_Function TokenAcceptFunction() {
 TLftabi_Function TokenTransferFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("transfer"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramAddress(),            // to
-                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
-                                   tl_ftabi_paramUint(tl_int32(128))   // grams
-                               }),
-                               {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("transfer"), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramAddress(),            // to
+            tl_ftabi_paramUint(tl_int32(128)),  // tokens
+            tl_ftabi_paramUint(tl_int32(128))   // grams
+        }),
+        {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -362,20 +429,16 @@ TLftabi_Function TokenTransferFunction() {
 TLftabi_Function TokenTransferToOwnerFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("transferToRecipient"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(256)),  // recipient_public_key
-                                   tl_ftabi_paramAddress(),            // recipient_address
-                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
-                                   tl_ftabi_paramUint(tl_int32(128)),  // deploy_grams
-                                   tl_ftabi_paramUint(tl_int32(128)),  // transfer_grams
-                               }),
-                               {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("transferToRecipient"), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(256)),  // recipient_public_key
+            tl_ftabi_paramAddress(),            // recipient_address
+            tl_ftabi_paramUint(tl_int32(128)),  // tokens
+            tl_ftabi_paramUint(tl_int32(128)),  // deploy_grams
+            tl_ftabi_paramUint(tl_int32(128)),  // transfer_grams
+        }),
+        {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -385,21 +448,17 @@ TLftabi_Function TokenTransferToOwnerFunction() {
 TLftabi_Function TokenInternalTransferFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("internalTransfer"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
-                                   tl_ftabi_paramUint(tl_int32(256)),  // sender_public_key
-                                   tl_ftabi_paramAddress(),            // sender_address
-                                   tl_ftabi_paramAddress(),            // send_gas_to
-                                   tl_ftabi_paramBool(),               // notify_receiver
-                                   tl_ftabi_paramCell(),               // payload
-                               }),
-                               {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("internalTransfer"), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(128)),  // tokens
+            tl_ftabi_paramUint(tl_int32(256)),  // sender_public_key
+            tl_ftabi_paramAddress(),            // sender_address
+            tl_ftabi_paramAddress(),            // send_gas_to
+            tl_ftabi_paramBool(),               // notify_receiver
+            tl_ftabi_paramCell(),               // payload
+        }),
+        {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -409,19 +468,15 @@ TLftabi_Function TokenInternalTransferFunction() {
 TLftabi_Function TokenSwapBackFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("burnByOwner"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(128)),  // tokens
-                                   tl_ftabi_paramUint(tl_int32(128)),  // grams
-                                   tl_ftabi_paramAddress(),            // callback_address
-                                   tl_ftabi_paramCell(),               // callback payload
-                               }),
-                               {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("burnByOwner"), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(128)),  // tokens
+            tl_ftabi_paramUint(tl_int32(128)),  // grams
+            tl_ftabi_paramAddress(),            // callback_address
+            tl_ftabi_paramCell(),               // callback payload
+        }),
+        {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -431,16 +486,12 @@ TLftabi_Function TokenSwapBackFunction() {
 TLftabi_Function OrdinaryStakeFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("addOrdinaryStake"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(64)),
-                               }),
-                               {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("addOrdinaryStake"), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(64)),
+        }),
+        {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -450,20 +501,16 @@ TLftabi_Function OrdinaryStakeFunction() {
 TLftabi_Function VestingOrLockStakeFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("addVestingOrLock"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(64)),  // stake
-                                   tl_ftabi_paramAddress(),           // beneficiary
-                                   tl_ftabi_paramUint(tl_int32(32)),  // withdrawalPeriod
-                                   tl_ftabi_paramUint(tl_int32(32)),  // totalPeriod
-                                   tl_ftabi_paramBool(),              // isVesting
-                               }),
-                               {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("addVestingOrLock"), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(64)),  // stake
+            tl_ftabi_paramAddress(),           // beneficiary
+            tl_ftabi_paramUint(tl_int32(32)),  // withdrawalPeriod
+            tl_ftabi_paramUint(tl_int32(32)),  // totalPeriod
+            tl_ftabi_paramBool(),              // isVesting
+        }),
+        {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -473,16 +520,12 @@ TLftabi_Function VestingOrLockStakeFunction() {
 TLftabi_Function DePoolWithdrawPartFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("withdrawPart"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(64)),  // withdrawValue
-                               }),
-                               {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("withdrawPart"), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(64)),  // withdrawValue
+        }),
+        {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -492,13 +535,8 @@ TLftabi_Function DePoolWithdrawPartFunction() {
 TLftabi_Function DePoolWithdrawAllFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("withdrawAll"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               {}, {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("withdrawAll"), {}, {}, {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -508,13 +546,8 @@ TLftabi_Function DePoolWithdrawAllFunction() {
 TLftabi_Function DePoolCancelWithdrawalFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("cancelWithdrawal"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               {}, {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("cancelWithdrawal"), {}, {}, {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -524,22 +557,18 @@ TLftabi_Function DePoolCancelWithdrawalFunction() {
 TLftabi_Function DePoolOnRoundCompleteFunction() {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("onRoundComplete"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramUint(tl_int32(64)),  // roundId
-                                   tl_ftabi_paramUint(tl_int32(64)),  // reward
-                                   tl_ftabi_paramUint(tl_int32(64)),  // ordinaryStake
-                                   tl_ftabi_paramUint(tl_int32(64)),  // vestingStake
-                                   tl_ftabi_paramUint(tl_int32(64)),  // lockStake
-                                   tl_ftabi_paramBool(),              // reinvest
-                                   tl_ftabi_paramUint(tl_int32(8)),   // reason
-                               }),
-                               {}));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("onRoundComplete"), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(64)),  // roundId
+            tl_ftabi_paramUint(tl_int32(64)),  // reward
+            tl_ftabi_paramUint(tl_int32(64)),  // ordinaryStake
+            tl_ftabi_paramUint(tl_int32(64)),  // vestingStake
+            tl_ftabi_paramUint(tl_int32(64)),  // lockStake
+            tl_ftabi_paramBool(),              // reinvest
+            tl_ftabi_paramUint(tl_int32(8)),   // reason
+        }),
+        {}));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }
@@ -579,16 +608,12 @@ TLftabi_Function DePoolParticipantInfoFunction(int32 dePoolVersion) {
       outputs.push_back(tl_ftabi_paramAddress());  // lockDonor
     }
 
-    const auto createdFunction = RequestSender::Execute(
-        TLftabi_CreateFunction(tl_string("getParticipantInfo"),
-                               tl_vector(QVector<TLftabi_namedParam>{
-                                   tl_ftabi_namedParam(tl_string("time"), tl_ftabi_paramTime()),
-                                   tl_ftabi_namedParam(tl_string("expire"), tl_ftabi_paramExpire()),
-                               }),
-                               tl_vector(QVector<TLftabi_Param>{
-                                   tl_ftabi_paramAddress(),  // addr
-                               }),
-                               tl_vector(outputs)));
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("getParticipantInfo"), DefaultHeaders(),
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramAddress(),  // addr
+        }),
+        tl_vector(outputs)));
     Expects(createdFunction.has_value());
     function[withVesting] = createdFunction.value();
   }
@@ -656,20 +681,11 @@ std::optional<TokenMint> ParseTokenAccept(const QByteArray &body) {
   return TokenMint{.value = UnpackUint128(args[0])};
 }
 
-std::optional<EthEventStatus> ParseEthEventNotification(const QByteArray &body) {
-  const auto decodedNotification =
-      RequestSender::Execute(TLftabi_DecodeInput(EthEventStatusChangedNotification(), tl_bytes(body), tl_boolTrue()));
-  if (!decodedNotification.has_value()) {
+std::optional<EthEventStatus> ParseEthEventStatus(const TLftabi_Value &value) {
+  if (!IsInt(value)) {
     return std::nullopt;
   }
-
-  const auto args = decodedNotification.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 1 || !IsInt(args[0])) {
-    return std::nullopt;
-  }
-
-  const auto status = UnpackUint(args[0]);
-  switch (status) {
+  switch (value.c_ftabi_valueInt().vvalue().v) {
     case 0:
       return EthEventStatus::InProcess;
     case 1:
@@ -683,20 +699,25 @@ std::optional<EthEventStatus> ParseEthEventNotification(const QByteArray &body) 
   }
 }
 
-std::optional<TonEventStatus> ParseTonEventNotification(const QByteArray &body) {
+std::optional<EthEventStatus> ParseEthEventNotification(const QByteArray &body) {
   const auto decodedNotification =
-      RequestSender::Execute(TLftabi_DecodeInput(TonEventStatusChangedNotification(), tl_bytes(body), tl_boolTrue()));
+      RequestSender::Execute(TLftabi_DecodeInput(EthEventStatusChangedNotification(), tl_bytes(body), tl_boolTrue()));
   if (!decodedNotification.has_value()) {
     return std::nullopt;
   }
 
   const auto args = decodedNotification.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 1 || !IsInt(args[0])) {
+  if (args.size() != 1) {
     return std::nullopt;
   }
+  return ParseEthEventStatus(args[0]);
+}
 
-  const auto status = UnpackUint(args[0]);
-  switch (status) {
+std::optional<TonEventStatus> ParseTonEventStatus(const TLftabi_Value &value) {
+  if (!IsInt(value)) {
+    return std::nullopt;
+  }
+  switch (value.c_ftabi_valueInt().vvalue().v) {
     case 0:
       return TonEventStatus::InProcess;
     case 1:
@@ -706,6 +727,20 @@ std::optional<TonEventStatus> ParseTonEventNotification(const QByteArray &body) 
     default:
       return std::nullopt;
   }
+}
+
+std::optional<TonEventStatus> ParseTonEventNotification(const QByteArray &body) {
+  const auto decodedNotification =
+      RequestSender::Execute(TLftabi_DecodeInput(TonEventStatusChangedNotification(), tl_bytes(body), tl_boolTrue()));
+  if (!decodedNotification.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto args = decodedNotification.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 1) {
+    return std::nullopt;
+  }
+  return ParseTonEventStatus(args[0]);
 }
 
 std::optional<TokenWalletDeployed> ParseTokenWalletDeployedNotification(const QByteArray &body) {
@@ -2259,6 +2294,101 @@ void Wallet::getWalletOwners(const QString &rootTokenContract, const QSet<QStrin
         })
         .send();
   }
+}
+
+void Wallet::getEthEventDetails(const QString &ethEventContract, const Callback<EthEventDetails> &done) {
+  _external->lib()
+      .request(TLGetAccountState(tl_accountAddress(tl_string(ethEventContract))))
+      .done([=](TLFullAccountState &&result) mutable {
+        if (result.c_fullAccountState().vaccount_state().type() == id_uninited_accountState) {
+          return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account doesn't exist"});
+        } else if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState) {
+          return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a token wallet contract"});
+        }
+
+        const auto &info = result.c_fullAccountState();
+        const auto &transactionLt = info.vlast_transaction_id().c_internal_transactionId().vlt().v;
+        const auto &syncUtime = static_cast<int32>(info.vsync_utime().v);
+        const auto &accountState = info.vaccount_state().c_raw_accountState();
+        const auto &balance = info.vbalance();
+        const auto &data = accountState.vdata();
+        const auto &code = accountState.vcode();
+
+        auto getDecodedData = [=](EthEventDetails &&ethEventDetails) {
+          const auto &info = result.c_fullAccountState();
+          const auto &accountState = result.c_fullAccountState().vaccount_state().c_raw_accountState();
+
+          _external->lib()
+              .request(TLftabi_RunLocalCachedSplit(                //
+                  tl_accountAddress(tl_string(ethEventContract)),  //
+                  tl_int64(transactionLt + 10),                    //
+                  tl_int32(syncUtime),                             //
+                  balance,                                         //
+                  data,                                            //
+                  code,                                            //
+                  EthEventGetDecodedDataFunction(),                //
+                  tl_ftabi_functionCallExternal({}, {})))
+              .done([=](const TLftabi_decodedOutput &balanceOutput) mutable {
+                const auto &results = balanceOutput.c_ftabi_decodedOutput().vvalues().v;
+                if (results.size() > 1 && IsAddress(results[0])) {
+                  ethEventDetails.rootTokenContract = UnpackAddress(results[0]);
+                }
+                InvokeCallback(done, ethEventDetails);
+              })
+              .fail([=](const TLError &error) {
+                std::cout << "error in EthEvent.getDecodedData: " << error.c_error().vmessage().v.toStdString()
+                          << std::endl;
+                InvokeCallback(done, ethEventDetails);
+              })
+              .send();
+        };
+
+        _external->lib()
+            .request(TLftabi_RunLocalCachedSplit(                //
+                tl_accountAddress(tl_string(ethEventContract)),  //
+                tl_int64(transactionLt + 10),                    //
+                tl_int32(syncUtime),                             //
+                balance,                                         //
+                data,                                            //
+                code,                                            //
+                EthEventGetDetailsFunction(),                    //
+                tl_ftabi_functionCallExternal({}, {})))
+            .done([=](const TLftabi_decodedOutput &output) mutable {
+              const auto &results = output.c_ftabi_decodedOutput().vvalues().v;
+              const auto invalidAbiError = Error{Error::Type::TonLib, "Invalid EthEvent.getDetails abi"};
+              if (results.size() != 4) {
+                return InvokeCallback(done, invalidAbiError);
+              }
+              auto status = ParseEthEventStatus(results[1]);
+              if (!status.has_value() || results[0].type() != id_ftabi_valueTuple ||
+                  results[2].type() != id_ftabi_valueArray || results[3].type() != id_ftabi_valueArray) {
+                return InvokeCallback(done, invalidAbiError);
+              }
+              const auto &initData = results[0].c_ftabi_valueTuple().vvalues().v;
+              if (initData.size() < 10 || !IsInt(initData[6]) || !IsInt(initData[7])) {
+                return InvokeCallback(done, invalidAbiError);
+              }
+              getDecodedData(EthEventDetails{
+                  .status = *status,
+                  .requiredConfirmationCount = static_cast<uint16>(UnpackUint(initData[6])),
+                  .requiredRejectionCount = static_cast<uint16>(UnpackUint(initData[7])),
+                  .confirmationCount = static_cast<uint16>(results[2].c_ftabi_valueArray().vvalues().v.size()),
+                  .rejectionCount = static_cast<uint16>(results[3].c_ftabi_valueArray().vvalues().v.size()),
+              });
+            })
+            .fail([=](const TLError &error) {
+              InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get EthEvent details"});
+            })
+            .send();
+      })
+      .fail([=](const TLError &error) {
+        InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get token wallet state"});
+      })
+      .send();
+}
+
+void Wallet::getRootTokenContractDetails(const QString &rootTokenContract, const Callback<RootTokenContractDetails> &done) {
+  // TODO
 }
 
 void Wallet::handleInputKeyError(const QByteArray &publicKey, int generation, const TLerror &error, Callback<> done) {
