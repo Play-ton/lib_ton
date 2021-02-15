@@ -59,7 +59,7 @@ class Symbol {
     return _name;
   }
 
-  auto decimals() const -> const size_t {
+  auto decimals() const -> size_t {
     return _decimals;
   }
 

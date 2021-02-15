@@ -13,8 +13,8 @@ namespace Ton {
 const QString kZeroAddress = "0:0000000000000000000000000000000000000000000000000000000000000000";
 
 bool operator==(const Symbol &a, const Symbol &b) {
-  return a.kind() == b.kind() && (a.isTon() || a.name() == b.name() && a.decimals() == b.decimals() &&
-                                                   a.rootContractAddress() == b.rootContractAddress());
+  return a.kind() == b.kind() && (a.isTon() || (a.name() == b.name() && a.decimals() == b.decimals() &&
+                                                a.rootContractAddress() == b.rootContractAddress()));
 }
 
 bool operator!=(const Symbol &a, const Symbol &b) {

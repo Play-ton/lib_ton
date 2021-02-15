@@ -330,6 +330,7 @@ TLftabi_Function RootTokenGetDetailsFunction() {
             tl_ftabi_paramAddress(),            // root_owner_address
             tl_ftabi_paramUint(tl_int32(128)),  // total_supply
             tl_ftabi_paramUint(tl_int32(128)),  // start_gas_balance
+            tl_ftabi_paramBool(),               // paused
         }))})));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
@@ -1058,7 +1059,7 @@ Wallet::Wallet(const QString &path)
   _accountViewers->blockchainTime() |
       rpl::start_with_next([=](BlockchainTime time) { checkLocalTime(time); }, _lifetime);
 
-  _gateUrl = "https://gate.broxus.com/";
+  _gateUrl = "http://127.0.0.1/";
 }
 
 Wallet::~Wallet() = default;
@@ -1427,7 +1428,7 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
     if (!ethereumAddress.has_value()) {
       return done(std::make_pair(TransactionCheckResult{}, InvalidEthAddress{}));
     }
-    auto body = CreateSwapBackMessage(ethereumAddress.value(), transaction.callbackAddress, transaction.amount);
+    auto body = CreateSwapBackMessage(*ethereumAddress, transaction.callbackAddress, transaction.amount);
     if (!body.has_value()) {
       return InvokeCallback(done, body.error());
     }
@@ -1629,7 +1630,7 @@ void Wallet::sendTokens(const QByteArray &publicKey, const QByteArray &password,
       if (!ethereumAddress.has_value()) {
         return InvokeCallback(done, Error{Error::Type::Web, "Invalid ethereum address"});
       }
-      body = CreateSwapBackMessage(ethereumAddress.value(), transaction.callbackAddress, transaction.amount);
+      body = CreateSwapBackMessage(*ethereumAddress, transaction.callbackAddress, transaction.amount);
       break;
     }
   }
@@ -1748,7 +1749,7 @@ void Wallet::openGate(const QString &rawAddress, const std::optional<Symbol> &to
 
 void Wallet::openGateExecuteSwapBack(const QString &eventAddress) {
   auto url = QUrl(_gateUrl).resolved(QUrl{"ton-to-eth"});
-  url.setQuery(QString{"event=%1"}.arg(eventAddress));
+  url.setQuery(QString{"event=%1"}.arg(ConvertIntoRaw(eventAddress)));
   QDesktopServices::openUrl(url);
 }
 
@@ -1786,7 +1787,7 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
             .done([=](const TLftabi_decodedOutput &decodedOutput) {
               auto state = ParseDePoolParticipantState(*dePoolVersion, decodedOutput);
               if (state.has_value()) {
-                _accountViewers->addDePool(account, packedDePoolAddress, std::move(state.value()));
+                _accountViewers->addDePool(account, packedDePoolAddress, std::move(*state));
                 InvokeCallback(done);
               } else {
                 InvokeCallback(done, Error{Error::Type::TonLib, "Invalid DePool ABI"});
@@ -1871,7 +1872,7 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
             .done([=, result = std::move(result)](const TLftabi_decodedOutput &decodedDetailsOutput) mutable {
               auto details = ParseRootTokenContractDetails(decodedDetailsOutput);
               if (details.has_value()) {
-                getWalletAddress(std::move(result), details.value());
+                getWalletAddress(std::move(result), *details);
               } else {
                 InvokeCallback(done, Error{Error::Type::TonLib, "Invalid RootTokenContract.getDetails ABI"});
               }
@@ -2091,7 +2092,7 @@ void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const DeP
         .done([=, address = address, previousState = previousState](const TLftabi_decodedOutput &result) {
           auto state = ParseDePoolParticipantState(previousState.version, result);
           if (state.has_value()) {
-            ctx->notifySuccess(address, std::move(state.value()));
+            ctx->notifySuccess(address, std::move(*state));
           } else {
             ctx->notifyError(address);
           }
