@@ -165,6 +165,10 @@ struct TonEventStatusChanged {
 
 using Notification = std::variant<TokenWalletDeployed, EthEventStatusChanged, TonEventStatusChanged>;
 
+struct TokensBounced {
+  int128 amount;
+};
+
 struct InvestParams {
   int64 remainingAmount{};
   int64 lastWithdrawalTime{};

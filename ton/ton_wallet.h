@@ -134,6 +134,7 @@ class Wallet final : public base::has_weak_ptr {
   [[nodiscard]] static std::optional<Ton::DePoolTransaction> ParseDePoolTransaction(const Ton::MessageData &message,
                                                                                     bool incoming);
   [[nodiscard]] static std::optional<Ton::Notification> ParseNotification(const Ton::MessageData &message);
+  [[nodiscard]] static std::optional<Ton::TokensBounced> ParseTokensBounced(const Ton::MessageData &message);
   [[nodiscard]] static base::flat_set<QString> GetValidWords();
   [[nodiscard]] static bool IsIncorrectPasswordError(const Error &error);
 
