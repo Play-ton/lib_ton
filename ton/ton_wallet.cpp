@@ -1746,9 +1746,9 @@ void Wallet::openGate(const QString &rawAddress, const std::optional<Symbol> &to
   QDesktopServices::openUrl(url);
 }
 
-void Wallet::openReveal(const QString &rawAddress, const QString &ethereumAddress) {
-  auto url = QUrl(_gateUrl);
-  url.setQuery(QString{"TONAddress=%1&revealEthereumAddress=%2"}.arg(rawAddress, ethereumAddress));
+void Wallet::openGateExecuteSwapBack(const QString &eventAddress) {
+  auto url = QUrl(_gateUrl).resolved(QUrl{"ton-to-eth"});
+  url.setQuery(QString{"event=%1"}.arg(eventAddress));
   QDesktopServices::openUrl(url);
 }
 
@@ -2387,8 +2387,23 @@ void Wallet::getEthEventDetails(const QString &ethEventContract, const Callback<
       .send();
 }
 
-void Wallet::getRootTokenContractDetails(const QString &rootTokenContract, const Callback<RootTokenContractDetails> &done) {
-  // TODO
+void Wallet::getRootTokenContractDetails(const QString &rootTokenContract,
+                                         const Callback<RootTokenContractDetails> &done) {
+  _external->lib()
+      .request(TLftabi_RunLocal(                            //
+          tl_accountAddress(tl_string(rootTokenContract)),  //
+          RootTokenGetDetailsFunction(),                    //
+          tl_ftabi_functionCallExternal({}, {})))
+      .done([=](const TLftabi_decodedOutput &decodedOutput) {
+        auto details = ParseRootTokenContractDetails(decodedOutput);
+        if (details.has_value()) {
+          InvokeCallback(done, *details);
+        } else {
+          InvokeCallback(done, Error{Error::Type::TonLib, "Invalid RootTokenContract.getDetails ABI"});
+        }
+      })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
 }
 
 void Wallet::handleInputKeyError(const QByteArray &publicKey, int generation, const TLerror &error, Callback<> done) {

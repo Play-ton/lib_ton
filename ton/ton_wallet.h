@@ -116,7 +116,7 @@ class Wallet final : public base::has_weak_ptr {
                      const Callback<> &done);
 
   void openGate(const QString &rawAddress, const std::optional<Symbol> &token = {});
-  void openReveal(const QString &rawAddress, const QString &ethereumAddress);
+  void openGateExecuteSwapBack(const QString &eventAddress);
 
   void addDePool(const QByteArray &publicKey, const QString &dePoolAddress, const Callback<> &done);
   void removeDePool(const QByteArray &publicKey, const QString &dePoolAddress);
