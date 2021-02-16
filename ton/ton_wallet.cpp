@@ -1173,7 +1173,7 @@ std::optional<Ton::Notification> Wallet::ParseNotification(const Ton::MessageDat
   }
 }
 
-std::optional<Ton::TokensBounced> ParseTokensBounced(const Ton::MessageData &message) {
+std::optional<Ton::TokensBounced> Wallet::ParseTokensBounced(const Ton::MessageData &message) {
   if (message.type != Ton::MessageDataType::RawBody) {
     return std::nullopt;
   }
@@ -1184,6 +1184,7 @@ std::optional<Ton::TokensBounced> ParseTokensBounced(const Ton::MessageData &mes
   if (!result.has_value()) {
     return std::nullopt;
   }
+
   const auto &body = result.value().c_ftabi_decodedOutput().vvalues().v;
   if (!IsInt(body[0]) || !IsBigInt(body[1])) {
     return std::nullopt;

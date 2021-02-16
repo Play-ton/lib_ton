@@ -165,10 +165,6 @@ struct TonEventStatusChanged {
 
 using Notification = std::variant<TokenWalletDeployed, EthEventStatusChanged, TonEventStatusChanged>;
 
-struct TokensBounced {
-  int128 amount;
-};
-
 struct InvestParams {
   int64 remainingAmount{};
   int64 lastWithdrawalTime{};
@@ -216,7 +212,11 @@ struct TokenMint {
   int128 value{};
 };
 
-using TokenTransaction = std::variant<TokenTransfer, TokenSwapBack, TokenMint>;
+struct TokensBounced {
+  int128 amount;
+};
+
+using TokenTransaction = std::variant<TokenTransfer, TokenSwapBack, TokenMint, TokensBounced>;
 
 struct DePoolOrdinaryStakeTransaction {
   int64 stake = 0;
@@ -248,6 +248,7 @@ struct Message {
   QByteArray bodyHash;
   MessageData message;
   bool bounce{};
+  bool bounced{};
 };
 
 struct EncryptedText {

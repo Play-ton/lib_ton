@@ -120,6 +120,7 @@ Message Parse(const TLraw_Message &data) {
     result.message = Parse(data.vmsg_data());
     result.value = data.vvalue().v;
     result.bounce = data.vbounce().type() == id_boolTrue;
+    result.bounced = data.vbounced().type() == id_boolTrue;
     return result;
   });
 }

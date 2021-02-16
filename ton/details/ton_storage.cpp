@@ -234,7 +234,7 @@ MessageData Deserialize(const TLstorage_MessageData &data) {
 TLstorage_Message Serialize(const Message &data) {
   return make_storage_message2(tl_string(data.source), tl_string(data.destination), tl_int64(data.value),
                                tl_int64(data.created), tl_bytes(data.bodyHash), Serialize(data.message),
-                               Serialize(data.bounce));
+                               Serialize(data.bounce), Serialize(data.bounced));
 }
 
 Message Deserialize(const TLstorage_Message &data) {
@@ -255,7 +255,8 @@ Message Deserialize(const TLstorage_Message &data) {
                        data.vcreated().v,
                        data.vbodyHash().v,
                        Deserialize(data.vmessage()),
-                       Deserialize(data.vbounce())};
+                       Deserialize(data.vbounce()),
+                       Deserialize(data.vbounced())};
       });
 }
 
@@ -267,14 +268,16 @@ TLstorage_Transaction Serialize(const Transaction &data) {
 
 Transaction Deserialize(const TLstorage_Transaction &data) {
   return data.match([&](const TLDstorage_transaction &data) {
-    return Transaction{.id = Deserialize(data.vid()),
-                       .time = data.vtime().v,
-                       .fee = data.vfee().v,
-                       .storageFee = data.vstorageFee().v,
-                       .otherFee = data.votherFee().v,
-                       .incoming = Deserialize(data.vincoming()),
-                       .outgoing = Deserialize(data.voutgoing()),
-                       .aborted = Deserialize(data.vaborted())};
+    return Transaction{
+        .id = Deserialize(data.vid()),
+        .time = data.vtime().v,
+        .fee = data.vfee().v,
+        .storageFee = data.vstorageFee().v,
+        .otherFee = data.votherFee().v,
+        .incoming = Deserialize(data.vincoming()),
+        .outgoing = Deserialize(data.voutgoing()),
+        .aborted = Deserialize(data.vaborted()),
+    };
   });
 }
 

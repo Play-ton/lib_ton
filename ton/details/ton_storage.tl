@@ -22,7 +22,8 @@ storage.message2
     created:int64
     bodyHash:bytes
     message:storage.MessageData
-    bounce:storage.Bool = storage.Message;
+    bounce:storage.Bool
+    bounced:storage.Bool = storage.Message;
 storage.transaction
     id:storage.TransactionId
     time:int64
