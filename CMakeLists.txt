@@ -24,6 +24,8 @@ PRIVATE
 target_precompile_headers(lib_ton PRIVATE ${src_loc}/ton/details/ton_pch.h)
 nice_target_sources(lib_ton ${src_loc}
 PRIVATE
+    ton/details/ton_abi.cpp
+    ton/details/ton_abi.h
     ton/details/ton_account_viewers.cpp
     ton/details/ton_account_viewers.h
     ton/details/ton_external.cpp

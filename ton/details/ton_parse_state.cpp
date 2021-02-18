@@ -7,6 +7,8 @@
 #include "ton/details/ton_parse_state.h"
 
 #include "base/unixtime.h"
+#include "ton/details/ton_abi.h"
+#include "ton/ton_state.h"
 
 #include <QtCore/QDateTime>
 
@@ -112,17 +114,79 @@ QString Parse(const TLAccountAddress &data) {
 
 Message Parse(const TLraw_Message &data) {
   return data.match([&](const TLDraw_message &data) {
-    auto result = Message();
-    result.bodyHash = data.vbody_hash().v;
-    result.created = data.vcreated_lt().v;
-    result.source = Parse(data.vsource());
-    result.destination = Parse(data.vdestination());
-    result.message = Parse(data.vmsg_data());
-    result.value = data.vvalue().v;
-    result.bounce = data.vbounce().type() == id_boolTrue;
-    result.bounced = data.vbounced().type() == id_boolTrue;
-    return result;
+    return Message{.source = Parse(data.vsource()),
+                   .destination = Parse(data.vdestination()),
+                   .value = data.vvalue().v,
+                   .created = data.vcreated_lt().v,
+                   .bodyHash = data.vbody_hash().v,
+                   .message = Parse(data.vmsg_data()),
+                   .bounce = data.vbounce().type() == id_boolTrue,
+                   .bounced = data.vbounced().type() == id_boolTrue};
   });
+}
+
+bool ParseTokenTransaction(Ton::Transaction &transaction) {
+  const auto &message = transaction.incoming.message;
+  if (message.type != Ton::MessageDataType::RawBody) {
+    return false;
+  }
+
+  if (auto transfer = ParseTokenTransfer(message.data); transfer.has_value()) {
+    transaction.additional = TokenTransaction{std::move(*transfer)};
+    return true;
+  } else if (auto internalTransfer = ParseInternalTokenTransfer(message.data); internalTransfer.has_value()) {
+    transaction.additional = TokenTransaction{std::move(*internalTransfer)};
+    return true;
+  } else if (auto transferToOwner = ParseTokenTransferToOwner(message.data); transferToOwner.has_value()) {
+    transaction.additional = TokenTransaction{std::move(*transferToOwner)};
+    return true;
+  } else if (auto mint = ParseTokenAccept(message.data); mint.has_value()) {
+    transaction.additional = TokenTransaction{std::move(*mint)};
+    return true;
+  } else if (auto swapBack = ParseTokenSwapBack(message.data); swapBack.has_value()) {
+    transaction.additional = TokenTransaction{std::move(*swapBack)};
+    return true;
+  } else if (auto ethEventNotification = ParseEthEventNotification(message.data); ethEventNotification.has_value()) {
+    transaction.additional = TokenTransaction{EthEventStatusChanged{.status = *ethEventNotification}};
+    return true;
+  } else if (auto tonEventNotification = ParseTonEventNotification(message.data); tonEventNotification.has_value()) {
+    transaction.additional = TokenTransaction{TonEventStatusChanged{.status = *tonEventNotification}};
+    return true;
+  } else if (auto walletDeployed = ParseTokenWalletDeployedNotification(message.data); walletDeployed.has_value()) {
+    transaction.additional = TokenTransaction{std::move(*walletDeployed)};
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool ParseDePoolTransaction(Ton::Transaction &transaction) {
+  const auto incoming = !transaction.incoming.source.isEmpty();
+
+  if (incoming) {
+    const auto &message = transaction.incoming.message;
+    if (message.type != Ton::MessageDataType::RawBody) {
+      return false;
+    }
+
+    if (auto onRoundComplete = ParseDePoolOnRoundComplete(message.data); onRoundComplete.has_value()) {
+      transaction.additional = DePoolTransaction{*onRoundComplete};
+      return true;
+    }
+  } else {
+    for (const auto &out : transaction.outgoing) {
+      if (out.message.type != Ton::MessageDataType::RawBody) {
+        continue;
+      }
+
+      if (auto ordinaryState = ParseOrdinaryStakeTransfer(out.message.data); ordinaryState.has_value()) {
+        transaction.additional = DePoolTransaction{*ordinaryState};
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 Transaction Parse(const TLraw_Transaction &data) {
@@ -138,6 +202,9 @@ Transaction Parse(const TLraw_Transaction &data) {
     result.storageFee = data.vstorage_fee().v;
     result.time = data.vutime().v;
     result.aborted = data.vaborted().type() == id_boolTrue;
+    if (!ParseTokenTransaction(result) && !ParseDePoolTransaction(result)) {
+      result.additional = RegularTransaction{};
+    }
     return result;
   });
 }

@@ -71,6 +71,12 @@ TLstorage_AccountState Serialize(const AccountState &data);
 AccountState Deserialize(const TLstorage_AccountState &data);
 TLstorage_Message Serialize(const Message &data);
 Message Deserialize(const TLstorage_Message &data);
+TLstorage_TokenTransaction Serialize(const TokenTransaction &data);
+TokenTransaction Deserialize(const TLstorage_TokenTransaction &data);
+TLstorage_DePoolTransaction Serialize(const DePoolTransaction &data);
+DePoolTransaction Deserialize(const TLstorage_DePoolTransaction &data);
+TLstorage_TransactionAdditionalInfo Serialize(const TransactionAdditionalInfo &data);
+TransactionAdditionalInfo Deserialize(const TLstorage_TransactionAdditionalInfo &data);
 TLstorage_Transaction Serialize(const Transaction &data);
 Transaction Deserialize(const TLstorage_Transaction &data);
 TLstorage_TransactionsSlice Serialize(const TransactionsSlice &data);
@@ -232,52 +238,159 @@ MessageData Deserialize(const TLstorage_MessageData &data) {
 }
 
 TLstorage_Message Serialize(const Message &data) {
-  return make_storage_message2(tl_string(data.source), tl_string(data.destination), tl_int64(data.value),
-                               tl_int64(data.created), tl_bytes(data.bodyHash), Serialize(data.message),
-                               Serialize(data.bounce), Serialize(data.bounced));
+  return make_storage_message(tl_string(data.source), tl_string(data.destination), tl_int64(data.value),
+                              tl_int64(data.created), tl_bytes(data.bodyHash), Serialize(data.message),
+                              Serialize(data.bounce), Serialize(data.bounced));
 }
 
 Message Deserialize(const TLstorage_Message &data) {
-  return data.match(
-      [&](const TLDstorage_message &data) {
-        return Message{tl::utf16(data.vsource()),
-                       tl::utf16(data.vdestination()),
-                       data.vvalue().v,
-                       data.vcreated().v,
-                       data.vbodyHash().v,
-                       MessageData{tl::utf16(data.vmessage())},
-                       false};
+  return data.match([&](const TLDstorage_message &data) {
+    return Message{.source = tl::utf16(data.vsource()),
+                   .destination = tl::utf16(data.vdestination()),
+                   .value = data.vvalue().v,
+                   .created = data.vcreated().v,
+                   .bodyHash = data.vbodyHash().v,
+                   .message = Deserialize(data.vmessage()),
+                   .bounce = Deserialize(data.vbounce()),
+                   .bounced = Deserialize(data.vbounced())};
+  });
+}
+
+TLstorage_TokenTransaction Serialize(const TokenTransaction &data) {
+  return v::match(
+      data,
+      [](const TokenWalletDeployed &data) {
+        return make_storage_tokenWalletDeployed(tl_string(data.rootTokenContract));
       },
-      [&](const TLDstorage_message2 &data) {
-        return Message{tl::utf16(data.vsource()),
-                       tl::utf16(data.vdestination()),
-                       data.vvalue().v,
-                       data.vcreated().v,
-                       data.vbodyHash().v,
-                       Deserialize(data.vmessage()),
-                       Deserialize(data.vbounce()),
-                       Deserialize(data.vbounced())};
+      [](const EthEventStatusChanged &data) {
+        return make_storage_tokenEthEventStatusChanged(tl_int32(static_cast<int32>(data.status)));
+      },
+      [](const TonEventStatusChanged &data) {
+        return make_storage_tokenTonEventStatusChanged(tl_int32(static_cast<int32>(data.status)));
+      },
+      [](const TokenTransfer &data) {
+        return make_storage_tokenTransfer(tl_string(data.address), tl_bytes(Int128ToBytesBE(data.value)),
+                                          Serialize(data.incoming), Serialize(data.direct));
+      },
+      [](const TokenSwapBack &data) {
+        return make_storage_tokenSwapBack(tl_string(data.address), tl_bytes(Int128ToBytesBE(data.value)));
+      },
+      [](const TokenMint &data) { return make_storage_tokenMint(tl_bytes(Int128ToBytesBE(data.value))); },
+      [](const TokensBounced &data) { return make_storage_tokenBounced(tl_bytes(Int128ToBytesBE(data.amount))); });
+}
+
+TokenTransaction Deserialize(const TLstorage_TokenTransaction &data) {
+  return data.match(
+      [](const TLDstorage_tokenWalletDeployed &data) -> TokenTransaction {
+        return TokenWalletDeployed{
+            .rootTokenContract = tl::utf8(data.vrootTokenContract().v),
+        };
+      },
+      [](const TLDstorage_tokenEthEventStatusChanged &data) -> TokenTransaction {
+        return EthEventStatusChanged{.status = static_cast<EthEventStatus>(data.vstatus().v)};
+      },
+      [](const TLDstorage_tokenTonEventStatusChanged &data) -> TokenTransaction {
+        return TonEventStatusChanged{.status = static_cast<TonEventStatus>(data.vstatus().v)};
+      },
+      [](const TLDstorage_tokenTransfer &data) -> TokenTransaction {
+        return TokenTransfer{
+            .address = data.vaddress().v,
+            .value = BytesBEToInt128(data.vvalue().v),
+            .incoming = Deserialize(data.vincoming()),
+            .direct = Deserialize(data.vdirect()),
+        };
+      },
+      [](const TLDstorage_tokenSwapBack &data) -> TokenTransaction {
+        return TokenSwapBack{
+            .address = data.vaddress().v,
+            .value = BytesBEToInt128(data.vvalue().v),
+        };
+      },
+      [](const TLDstorage_tokenMint &data) -> TokenTransaction {
+        return TokenMint{
+            .value = BytesBEToInt128(data.vvalue().v),
+        };
+      },
+      [](const TLDstorage_tokenBounced &data) -> TokenTransaction {
+        return TokensBounced{
+            .amount = BytesBEToInt128(data.vvalue().v),
+        };
+      });
+}
+
+TLstorage_DePoolTransaction Serialize(const DePoolTransaction &data) {
+  return v::match(
+      data,
+      [](const DePoolOrdinaryStakeTransaction &data) -> TLstorage_DePoolTransaction {
+        return make_storage_dePoolOrdinaryStake(tl_int64(data.stake));
+      },
+      [](const DePoolOnRoundCompleteTransaction &data) -> TLstorage_DePoolTransaction {
+        return make_storage_dePoolOnRoundComplete(
+            tl_int64(data.roundId), tl_int64(data.reward), tl_int64(data.ordinaryStake), tl_int64(data.vestingStake),
+            tl_int64(data.lockStake), Serialize(data.reinvest), tl_int32(data.reason));
+      });
+}
+
+DePoolTransaction Deserialize(const TLstorage_DePoolTransaction &data) {
+  return data.match(
+      [](const TLDstorage_dePoolOrdinaryStake &data) -> DePoolTransaction {
+        return DePoolOrdinaryStakeTransaction{.stake = data.vstake().v};
+      },
+      [](const TLDstorage_dePoolOnRoundComplete &data) -> DePoolTransaction {
+        return DePoolOnRoundCompleteTransaction{
+            .roundId = data.vroundId().v,
+            .reward = data.vreward().v,
+            .ordinaryStake = data.vordinaryStake().v,
+            .vestingStake = data.vvestingStake().v,
+            .lockStake = data.vlockStake().v,
+            .reinvest = Deserialize(data.vreinvest()),
+            .reason = static_cast<uint8>(data.vreason().v),
+        };
+      });
+}
+
+TLstorage_TransactionAdditionalInfo Serialize(const TransactionAdditionalInfo &data) {
+  return v::match(
+      data,
+      [](const RegularTransaction &) -> TLstorage_TransactionAdditionalInfo {
+        return make_storage_additionalInfoRegular();
+      },
+      [](const TokenTransaction &data) -> TLstorage_TransactionAdditionalInfo {
+        return make_storage_additionalInfoTokenTransaction(Serialize(data));
+      },
+      [](const DePoolTransaction &data) -> TLstorage_TransactionAdditionalInfo {
+        return make_storage_additionalInfoDePoolTransaction(Serialize(data));
+      });
+}
+
+TransactionAdditionalInfo Deserialize(const TLstorage_TransactionAdditionalInfo &data) {
+  return data.match(
+      [](const TLDstorage_additionalInfoRegular &) -> TransactionAdditionalInfo { return RegularTransaction{}; },
+      [](const TLDstorage_additionalInfoTokenTransaction &additional) -> TransactionAdditionalInfo {
+        return Deserialize(additional.vdata());
+      },
+      [](const TLDstorage_additionalInfoDePoolTransaction &additional) -> TransactionAdditionalInfo {
+        return Deserialize(additional.vdata());
       });
 }
 
 TLstorage_Transaction Serialize(const Transaction &data) {
   return make_storage_transaction(Serialize(data.id), tl_int64(data.time), tl_int64(data.fee),
                                   tl_int64(data.storageFee), tl_int64(data.otherFee), Serialize(data.incoming),
-                                  Serialize(data.outgoing), Serialize(data.aborted));
+                                  Serialize(data.outgoing), Serialize(data.aborted), Serialize(data.additional));
 }
 
 Transaction Deserialize(const TLstorage_Transaction &data) {
   return data.match([&](const TLDstorage_transaction &data) {
-    return Transaction{
-        .id = Deserialize(data.vid()),
-        .time = data.vtime().v,
-        .fee = data.vfee().v,
-        .storageFee = data.vstorageFee().v,
-        .otherFee = data.votherFee().v,
-        .incoming = Deserialize(data.vincoming()),
-        .outgoing = Deserialize(data.voutgoing()),
-        .aborted = Deserialize(data.vaborted()),
-    };
+    return Transaction{.id = Deserialize(data.vid()),
+                       .time = data.vtime().v,
+                       .fee = data.vfee().v,
+                       .storageFee = data.vstorageFee().v,
+                       .otherFee = data.votherFee().v,
+                       .incoming = Deserialize(data.vincoming()),
+                       .outgoing = Deserialize(data.voutgoing()),
+                       .aborted = Deserialize(data.vaborted()),
+                       .additional = Deserialize(data.vadditional())};
   });
 }
 

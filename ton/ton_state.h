@@ -140,8 +140,6 @@ struct TokenWalletContractDetails {
 enum class EthEventStatus { InProcess, Confirmed, Executed, Rejected };
 enum class TonEventStatus { InProcess, Confirmed, Rejected };
 
-using EventStatus = std::variant<EthEventStatus, TonEventStatus>;
-
 struct EthEventDetails {
   QString rootTokenContract;
   EthEventStatus status;
@@ -150,20 +148,6 @@ struct EthEventDetails {
   uint16 confirmationCount{};
   uint16 rejectionCount{};
 };
-
-struct TokenWalletDeployed {
-  QString rootTokenContract;
-};
-
-struct EthEventStatusChanged {
-  EthEventStatus status;
-};
-
-struct TonEventStatusChanged {
-  TonEventStatus status;
-};
-
-using Notification = std::variant<TokenWalletDeployed, EthEventStatusChanged, TonEventStatusChanged>;
 
 struct InvestParams {
   int64 remainingAmount{};
@@ -196,6 +180,18 @@ using DePoolStatesMap = std::map<QString, DePoolParticipantState>;
 
 enum class MessageDataType { PlainText, EncryptedText, DecryptedText, RawBody };
 
+struct TokenWalletDeployed {
+  QString rootTokenContract;
+};
+
+struct EthEventStatusChanged {
+  EthEventStatus status;
+};
+
+struct TonEventStatusChanged {
+  TonEventStatus status;
+};
+
 struct TokenTransfer {
   QString address;
   int128 value{};
@@ -216,7 +212,8 @@ struct TokensBounced {
   int128 amount;
 };
 
-using TokenTransaction = std::variant<TokenTransfer, TokenSwapBack, TokenMint, TokensBounced>;
+using TokenTransaction = std::variant<TokenWalletDeployed, EthEventStatusChanged, TonEventStatusChanged, TokenTransfer,
+                                      TokenSwapBack, TokenMint, TokensBounced>;
 
 struct DePoolOrdinaryStakeTransaction {
   int64 stake = 0;
@@ -261,6 +258,10 @@ struct DecryptedText {
   QByteArray proof;
 };
 
+struct RegularTransaction {};
+
+using TransactionAdditionalInfo = std::variant<RegularTransaction, TokenTransaction, DePoolTransaction>;
+
 struct Transaction {
   TransactionId id;
   int64 time = 0;
@@ -270,7 +271,7 @@ struct Transaction {
   Message incoming;
   std::vector<Message> outgoing;
   bool aborted = false;
-  bool initializing = false;
+  TransactionAdditionalInfo additional = RegularTransaction{};
 };
 
 bool operator==(const Transaction &a, const Transaction &b);

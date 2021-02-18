@@ -10,12 +10,34 @@ storage.accountStateNormal = storage.AccountStateDetails;
 storage.accountStateRestricted lockedBalance:int64 startAt:int64 limits:vector<storage.RestrictionLimit> = storage.AccountStateDetails;
 storage.accountState balance:int64 syncTime:int64 lastTransactionId:storage.TransactionId = storage.AccountState; // old
 storage.accountStateFull balance:int64 syncTime:int64 lastTransactionId:storage.TransactionId details:storage.AccountStateDetails = storage.AccountState;
-storage.message source:string destination:string value:int64 created:int64 bodyHash:bytes message:string = storage.Message; // old
 storage.messageDataTextEncrypted data:bytes = storage.MessageData;
 storage.messageDataTextDecrypted text:string = storage.MessageData;
 storage.messageDataTextPlain text:string = storage.MessageData;
 storage.messageDataRaw body:bytes = storage.MessageData;
-storage.message2
+
+storage.tokenWalletDeployed rootTokenContract:string = storage.TokenTransaction;
+storage.tokenEthEventStatusChanged status:int32 = storage.TokenTransaction;
+storage.tokenTonEventStatusChanged status:int32 = storage.TokenTransaction;
+storage.tokenTransfer address:string value:bytes incoming:storage.Bool direct:storage.Bool = storage.TokenTransaction;
+storage.tokenSwapBack address:string value:bytes = storage.TokenTransaction;
+storage.tokenMint value:bytes = storage.TokenTransaction;
+storage.tokenBounced value:bytes = storage.TokenTransaction;
+
+storage.dePoolOrdinaryStake stake:int64 = storage.DePoolTransaction;
+storage.dePoolOnRoundComplete
+    roundId:int64
+    reward:int64
+    ordinaryStake:int64
+    vestingStake:int64
+    lockStake:int64
+    reinvest:storage.Bool
+    reason:int32 = storage.DePoolTransaction;
+
+storage.additionalInfoRegular = storage.TransactionAdditionalInfo;
+storage.additionalInfoTokenTransaction data:storage.TokenTransaction = storage.TransactionAdditionalInfo;
+storage.additionalInfoDePoolTransaction data:storage.DePoolTransaction = storage.TransactionAdditionalInfo;
+
+storage.message
     source:string
     destination:string
     value:int64
@@ -32,7 +54,8 @@ storage.transaction
     otherFee:int64
     incoming:storage.Message
     outgoing:vector<storage.Message>
-    aborted:storage.Bool = storage.Transaction;
+    aborted:storage.Bool
+    additional:storage.TransactionAdditionalInfo = storage.Transaction;
 storage.transactionsSlice list:vector<storage.Transaction> previousId:storage.TransactionId = storage.TransactionsSlice;
 storage.pendingTransaction fake:storage.Transaction sentUntilSyncTime:int64 = storage.PendingTransaction;
 storage.tokenState
