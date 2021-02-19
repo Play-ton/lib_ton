@@ -132,28 +132,28 @@ bool ParseTokenTransaction(Ton::Transaction &transaction) {
   }
 
   if (auto transfer = ParseTokenTransfer(message.data); transfer.has_value()) {
-    transaction.additional = TokenTransaction{std::move(*transfer)};
+    transaction.additional = std::move(*transfer);
     return true;
   } else if (auto internalTransfer = ParseInternalTokenTransfer(message.data); internalTransfer.has_value()) {
-    transaction.additional = TokenTransaction{std::move(*internalTransfer)};
+    transaction.additional = std::move(*internalTransfer);
     return true;
   } else if (auto transferToOwner = ParseTokenTransferToOwner(message.data); transferToOwner.has_value()) {
-    transaction.additional = TokenTransaction{std::move(*transferToOwner)};
+    transaction.additional = std::move(*transferToOwner);
     return true;
   } else if (auto mint = ParseTokenAccept(message.data); mint.has_value()) {
-    transaction.additional = TokenTransaction{std::move(*mint)};
+    transaction.additional = std::move(*mint);
     return true;
   } else if (auto swapBack = ParseTokenSwapBack(message.data); swapBack.has_value()) {
-    transaction.additional = TokenTransaction{std::move(*swapBack)};
+    transaction.additional = std::move(*swapBack);
     return true;
   } else if (auto ethEventNotification = ParseEthEventNotification(message.data); ethEventNotification.has_value()) {
-    transaction.additional = TokenTransaction{EthEventStatusChanged{.status = *ethEventNotification}};
+    transaction.additional = EthEventStatusChanged{.status = *ethEventNotification};
     return true;
   } else if (auto tonEventNotification = ParseTonEventNotification(message.data); tonEventNotification.has_value()) {
-    transaction.additional = TokenTransaction{TonEventStatusChanged{.status = *tonEventNotification}};
+    transaction.additional = TonEventStatusChanged{.status = *tonEventNotification};
     return true;
   } else if (auto walletDeployed = ParseTokenWalletDeployedNotification(message.data); walletDeployed.has_value()) {
-    transaction.additional = TokenTransaction{std::move(*walletDeployed)};
+    transaction.additional = std::move(*walletDeployed);
     return true;
   } else {
     return false;
@@ -170,7 +170,7 @@ bool ParseDePoolTransaction(Ton::Transaction &transaction) {
     }
 
     if (auto onRoundComplete = ParseDePoolOnRoundComplete(message.data); onRoundComplete.has_value()) {
-      transaction.additional = DePoolTransaction{*onRoundComplete};
+      transaction.additional = *onRoundComplete;
       return true;
     }
   } else {
@@ -180,7 +180,7 @@ bool ParseDePoolTransaction(Ton::Transaction &transaction) {
       }
 
       if (auto ordinaryState = ParseOrdinaryStakeTransfer(out.message.data); ordinaryState.has_value()) {
-        transaction.additional = DePoolTransaction{*ordinaryState};
+        transaction.additional = *ordinaryState;
         return true;
       }
     }

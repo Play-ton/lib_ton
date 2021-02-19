@@ -212,9 +212,6 @@ struct TokensBounced {
   int128 amount;
 };
 
-using TokenTransaction = std::variant<TokenWalletDeployed, EthEventStatusChanged, TonEventStatusChanged, TokenTransfer,
-                                      TokenSwapBack, TokenMint, TokensBounced>;
-
 struct DePoolOrdinaryStakeTransaction {
   int64 stake = 0;
 };
@@ -228,8 +225,6 @@ struct DePoolOnRoundCompleteTransaction {
   bool reinvest{};
   uint8 reason{};
 };
-
-using DePoolTransaction = std::variant<DePoolOrdinaryStakeTransaction, DePoolOnRoundCompleteTransaction>;
 
 struct MessageData {
   QString text;
@@ -260,7 +255,17 @@ struct DecryptedText {
 
 struct RegularTransaction {};
 
-using TransactionAdditionalInfo = std::variant<RegularTransaction, TokenTransaction, DePoolTransaction>;
+using TransactionAdditionalInfo =                 //
+    std::variant<RegularTransaction,              //
+                 TokenWalletDeployed,             //
+                 EthEventStatusChanged,           //
+                 TonEventStatusChanged,           //
+                 TokenTransfer,                   //
+                 TokenSwapBack,                   //
+                 TokenMint,                       //
+                 TokensBounced,                   //
+                 DePoolOrdinaryStakeTransaction,  //
+                 DePoolOnRoundCompleteTransaction>;
 
 struct Transaction {
   TransactionId id;

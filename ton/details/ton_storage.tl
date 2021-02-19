@@ -15,15 +15,17 @@ storage.messageDataTextDecrypted text:string = storage.MessageData;
 storage.messageDataTextPlain text:string = storage.MessageData;
 storage.messageDataRaw body:bytes = storage.MessageData;
 
-storage.tokenWalletDeployed rootTokenContract:string = storage.TokenTransaction;
-storage.tokenEthEventStatusChanged status:int32 = storage.TokenTransaction;
-storage.tokenTonEventStatusChanged status:int32 = storage.TokenTransaction;
-storage.tokenTransfer address:string value:bytes incoming:storage.Bool direct:storage.Bool = storage.TokenTransaction;
-storage.tokenSwapBack address:string value:bytes = storage.TokenTransaction;
-storage.tokenMint value:bytes = storage.TokenTransaction;
-storage.tokenBounced value:bytes = storage.TokenTransaction;
+storage.additionalInfoRegular = storage.TransactionAdditionalInfo;
 
-storage.dePoolOrdinaryStake stake:int64 = storage.DePoolTransaction;
+storage.tokenWalletDeployed rootTokenContract:string = storage.TransactionAdditionalInfo;
+storage.tokenEthEventStatusChanged status:int32 = storage.TransactionAdditionalInfo;
+storage.tokenTonEventStatusChanged status:int32 = storage.TransactionAdditionalInfo;
+storage.tokenTransfer address:string value:bytes incoming:storage.Bool direct:storage.Bool = storage.TransactionAdditionalInfo;
+storage.tokenSwapBack address:string value:bytes = storage.TransactionAdditionalInfo;
+storage.tokenMint value:bytes = storage.TransactionAdditionalInfo;
+storage.tokenBounced value:bytes = storage.TransactionAdditionalInfo;
+
+storage.dePoolOrdinaryStake stake:int64 = storage.TransactionAdditionalInfo;
 storage.dePoolOnRoundComplete
     roundId:int64
     reward:int64
@@ -31,11 +33,7 @@ storage.dePoolOnRoundComplete
     vestingStake:int64
     lockStake:int64
     reinvest:storage.Bool
-    reason:int32 = storage.DePoolTransaction;
-
-storage.additionalInfoRegular = storage.TransactionAdditionalInfo;
-storage.additionalInfoTokenTransaction data:storage.TokenTransaction = storage.TransactionAdditionalInfo;
-storage.additionalInfoDePoolTransaction data:storage.DePoolTransaction = storage.TransactionAdditionalInfo;
+    reason:int32 = storage.TransactionAdditionalInfo;
 
 storage.message
     source:string
