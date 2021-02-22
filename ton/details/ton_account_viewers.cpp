@@ -338,7 +338,7 @@ void AccountViewers::checkNextRefresh() {
 
 void AccountViewers::refreshFromDatabase(const QString &address, Viewers &viewers) {
   viewers.refreshing = true;
-  auto loaded = [=](Result<WalletState> result) {
+  auto loaded = [=](const Result<WalletState> &result) {
     const auto viewers = findRefreshingViewers(address);
     if (!viewers) {
       return;

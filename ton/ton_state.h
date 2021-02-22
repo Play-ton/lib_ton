@@ -149,6 +149,15 @@ struct EthEventDetails {
   uint16 rejectionCount{};
 };
 
+struct TonEventDetails {
+  QString rootTokenContract;
+  TonEventStatus status;
+  uint16 requiredConfirmationCount{};
+  uint16 requiredRejectionCount{};
+  uint16 confirmationCount{};
+  uint16 rejectionCount{};
+};
+
 struct InvestParams {
   int64 remainingAmount{};
   int64 lastWithdrawalTime{};

@@ -54,11 +54,11 @@ constexpr auto kDefaultMessageFlags = 3;
 }
 
 [[nodiscard]] TLError GenerateVmError(int32 exitCode) {
-  return tl_error(tl_int32(500), tl_string(QString{"VM terminated with exit code: {}"}.arg(exitCode)));
+  return tl_error(tl_int32(500), tl_string(QString{"VM terminated with exit code: %1"}.arg(exitCode)));
 }
 
 [[nodiscard]] TLError GenerateVmError(const TLint32 &exitCode) {
-  return tl_error(tl_int32(500), tl_string(QString{"VM terminated with exit code: {}"}.arg(exitCode.v)));
+  return GenerateVmError(exitCode.v);
 }
 
 std::optional<int32> GuessDePoolVersion(const QByteArray &codeHash) {
@@ -1436,6 +1436,107 @@ void Wallet::getEthEventDetails(const QString &ethEventContract, const Callback<
             })
             .fail([=](const TLError &error) {
               InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get EthEvent details"});
+            })
+            .send();
+      })
+      .fail([=](const TLError &error) {
+        InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get token wallet state"});
+      })
+      .send();
+}
+
+void Wallet::getTonEventDetails(const QString &tonEventContract, const Callback<TonEventDetails> &done) {
+  _external->lib()
+      .request(TLGetAccountState(tl_accountAddress(tl_string(tonEventContract))))
+      .done([=](TLFullAccountState &&result) mutable {
+        if (result.c_fullAccountState().vaccount_state().type() == id_uninited_accountState) {
+          return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account doesn't exist"});
+        } else if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState) {
+          return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a token wallet contract"});
+        }
+
+        const auto &info = result.c_fullAccountState();
+        const auto &transactionLt = info.vlast_transaction_id().c_internal_transactionId().vlt().v;
+        const auto &syncUtime = static_cast<int32>(info.vsync_utime().v);
+        const auto &accountState = info.vaccount_state().c_raw_accountState();
+        const auto &balance = info.vbalance();
+        const auto &data = accountState.vdata();
+        const auto &code = accountState.vcode();
+
+        auto getDecodedData = [=](TonEventDetails &&tonEventDetails) {
+          const auto &info = result.c_fullAccountState();
+          const auto &accountState = result.c_fullAccountState().vaccount_state().c_raw_accountState();
+
+          _external->lib()
+              .request(TLftabi_RunLocalCachedSplit(                //
+                  tl_accountAddress(tl_string(tonEventContract)),  //
+                  tl_int64(transactionLt + 10),                    //
+                  tl_int32(syncUtime),                             //
+                  balance,                                         //
+                  data,                                            //
+                  code,                                            //
+                  TonEventGetDecodedDataFunction(),                //
+                  tl_ftabi_functionCallExternal({}, {})))
+              .done([=](const TLftabi_tvmOutput &tvmResult) mutable {
+                const auto &output = tvmResult.c_ftabi_tvmOutput();
+                if (output.vsuccess().type() != id_boolTrue) {
+                  return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+                }
+
+                const auto &results = output.vvalues().v;
+                if (results.size() > 1 && IsAddress(results[0])) {
+                  tonEventDetails.rootTokenContract = UnpackAddress(results[0]);
+                }
+                InvokeCallback(done, tonEventDetails);
+              })
+              .fail([=](const TLError &error) {
+                std::cout << "error in TonEvent.getDecodedData: " << error.c_error().vmessage().v.toStdString()
+                          << std::endl;
+                InvokeCallback(done, tonEventDetails);
+              })
+              .send();
+        };
+
+        _external->lib()
+            .request(TLftabi_RunLocalCachedSplit(                //
+                tl_accountAddress(tl_string(tonEventContract)),  //
+                tl_int64(transactionLt + 10),                    //
+                tl_int32(syncUtime),                             //
+                balance,                                         //
+                data,                                            //
+                code,                                            //
+                TonEventGetDetailsFunction(),                    //
+                tl_ftabi_functionCallExternal({}, {})))
+            .done([=](const TLftabi_tvmOutput &tvmResult) mutable {
+              const auto &output = tvmResult.c_ftabi_tvmOutput();
+              if (output.vsuccess().type() != id_boolTrue) {
+                return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+              }
+
+              const auto &results = output.vvalues().v;
+              const auto invalidAbiError = Error{Error::Type::TonLib, "Invalid TonEvent.getDetails abi"};
+              if (results.size() != 5) {
+                return InvokeCallback(done, invalidAbiError);
+              }
+              auto status = ParseTonEventStatus(results[1]);
+              if (!status.has_value() || results[0].type() != id_ftabi_valueTuple ||
+                  results[2].type() != id_ftabi_valueArray || results[3].type() != id_ftabi_valueArray) {
+                return InvokeCallback(done, invalidAbiError);
+              }
+              const auto &initData = results[0].c_ftabi_valueTuple().vvalues().v;
+              if (initData.size() < 9 || !IsInt(initData[6]) || !IsInt(initData[7])) {
+                return InvokeCallback(done, invalidAbiError);
+              }
+              getDecodedData(TonEventDetails{
+                  .status = *status,
+                  .requiredConfirmationCount = static_cast<uint16>(UnpackUint(initData[6])),
+                  .requiredRejectionCount = static_cast<uint16>(UnpackUint(initData[7])),
+                  .confirmationCount = static_cast<uint16>(results[2].c_ftabi_valueArray().vvalues().v.size()),
+                  .rejectionCount = static_cast<uint16>(results[3].c_ftabi_valueArray().vvalues().v.size()),
+              });
+            })
+            .fail([=](const TLError &error) {
+              InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get TonEvent details"});
             })
             .send();
       })

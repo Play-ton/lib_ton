@@ -231,7 +231,7 @@ TLftabi_Function TonEventGetDecodedDataFunction() {
         tl_string("getDecodedData"), DefaultHeaders(), {},
         tl_vector(QVector<TLftabi_Param>{
             tl_ftabi_paramAddress(),            // rootToken
-            tl_ftabi_paramUint(tl_int32(8)),    // wid
+            tl_ftabi_paramInt(tl_int32(8)),    // wid
             tl_ftabi_paramUint(tl_int32(256)),  // addr
             tl_ftabi_paramUint(tl_int32(128)),  // tokens
             tl_ftabi_paramUint(tl_int32(160)),  // ethereum_address
