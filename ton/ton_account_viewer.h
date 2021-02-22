@@ -33,6 +33,8 @@ class AccountViewer final : public base::has_weak_ptr {
   void preloadTokenSlice(const Symbol &symbol, const QString &tokenWalletAddress, const TransactionId &lastId);
 
   [[nodiscard]] rpl::producer<Result<std::pair<Symbol, LoadedSlice>>> loaded() const;
+  [[nodiscard]] rpl::producer<not_null<const QString *>> tokenWalletDeployed() const;
+  [[nodiscard]] rpl::producer<not_null<const QString *>> dePoolAdded() const;
 
  private:
   const not_null<Wallet *> _wallet;
@@ -40,11 +42,14 @@ class AccountViewer final : public base::has_weak_ptr {
   const QString _address;
 
   base::flat_set<TransactionId> _preloadIds;
+  base::flat_set<QString> _knownDePools;
 
   rpl::producer<WalletViewerState> _state;
   rpl::variable<crl::time> _refreshEach;
   rpl::event_stream<Callback<>> _refreshNowRequests;
   rpl::event_stream<Result<std::pair<Symbol, LoadedSlice>>> _loadedResults;
+  rpl::event_stream<not_null<const QString *>> _tokenWalletDeployed;
+  rpl::event_stream<not_null<const QString *>> _dePoolAdded;
 };
 
 }  // namespace Ton

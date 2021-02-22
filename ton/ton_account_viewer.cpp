@@ -35,6 +35,14 @@ rpl::producer<Result<std::pair<Symbol, LoadedSlice>>> AccountViewer::loaded() co
   return _loadedResults.events();
 }
 
+rpl::producer<not_null<const QString *>> AccountViewer::tokenWalletDeployed() const {
+  return _tokenWalletDeployed.events();
+}
+
+rpl::producer<not_null<const QString *>> AccountViewer::dePoolAdded() const {
+  return _dePoolAdded.events();
+}
+
 void AccountViewer::refreshNow(Callback<> done) {
   _refreshNowRequests.fire(std::move(done));
 }
@@ -72,6 +80,30 @@ void AccountViewer::preloadSlice(const TransactionId &lastId) {
         return;
       }
       _preloadIds.remove(lastId);
+
+      auto addDePool = [&](const QString &address) {
+        if (_knownDePools.insert(address).second) {
+          _dePoolAdded.fire(&address);
+        }
+      };
+
+      for (const auto &transaction : result.value()) {
+        v::match(
+            transaction.additional,
+            [&](const Ton::TokenWalletDeployed &event) { _tokenWalletDeployed.fire_copy(&event.rootTokenContract); },
+            [&](const Ton::DePoolOrdinaryStakeTransaction &) {
+              for (const auto &out : transaction.outgoing) {
+                addDePool(out.destination);
+                break;
+              }
+            },
+            [&](const Ton::DePoolOnRoundCompleteTransaction &) {
+              if (!transaction.incoming.source.isEmpty()) {
+                addDePool(transaction.incoming.source);
+              }
+            },
+            [](auto &&) {});
+      }
       _loadedResults.fire(
           std::make_pair(Ton::Symbol::ton(), LoadedSlice{lastId, TransactionsSlice{std::move(*result), previousId}}));
     };

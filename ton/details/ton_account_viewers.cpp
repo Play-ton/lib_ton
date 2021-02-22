@@ -89,6 +89,9 @@ void AccountViewers::saveNewState(Viewers &viewers, WalletState &&state, Refresh
   if (!weak) {
     return;
   }
+
+  auto address = state.address;
+
   if (viewers.state.current() != state) {
     if (source != RefreshSource::Database) {
       SaveWalletState(_db, state, nullptr);
@@ -98,8 +101,9 @@ void AccountViewers::saveNewState(Viewers &viewers, WalletState &&state, Refresh
       return;
     }
   }
+
   if (source == RefreshSource::Database) {
-    refreshAccount(state.address, viewers);
+    refreshAccount(address, viewers);
   } else {
     checkNextRefresh();
   }
@@ -115,6 +119,7 @@ void AccountViewers::checkPendingForSameState(const QString &address, Viewers &v
       currentState.pendingTransactions != pending) {
     // Some pending transactions were discarded by the sync time.
 
+    //  TODO: check why asset list items disappear
     currentState.assetsList.erase(  //
         ranges::remove_if(          //
             currentState.assetsList,
@@ -156,7 +161,8 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
   struct StateContext {
     using Done = Callback<ContextData>;
 
-    explicit StateContext(const Done &done) : done{done} {
+    explicit StateContext(WalletState &&previousState, const Done &done)
+        : previousState{std::forward<WalletState>(previousState)}, done{done} {
     }
 
     void setAccount(AccountState &&state, AccountViewers::Viewers *viewers) {
@@ -184,6 +190,8 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
       }
     }
 
+    WalletState previousState;
+
     std::optional<StateWithViewer> account;
     std::optional<TokensMap> tokenStates;
     std::optional<DePoolStatesMap> dePoolParticipantStates;
@@ -192,50 +200,52 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
     std::shared_mutex mutex;
   };
 
-  std::shared_ptr<StateContext> ctx{new StateContext{[=](Result<ContextData> result) {
-    const auto [state, tokenStates, dePoolParticipantStates] = std::move(result.value());
-    const auto [account, viewers] = std::move(state);
+  std::shared_ptr<StateContext> ctx{new StateContext{
+      viewers.state.current(), [=](Result<ContextData> result) {
+        const auto [state, tokenStates, dePoolParticipantStates] = std::move(result.value());
+        const auto [account, viewers] = std::move(state);
 
-    auto currentState = viewers->state.current();
-    if (account == currentState.account) {
-      checkPendingForSameState(address, *viewers, tokenStates, dePoolParticipantStates, account);
-      return;
-    }
+        auto currentState = viewers->state.current();
+        if (account == currentState.account) {
+          checkPendingForSameState(address, *viewers, tokenStates, dePoolParticipantStates, account);
+          return;
+        }
 
-    const auto lastTransactionId = account.lastTransactionId;
+        const auto lastTransactionId = account.lastTransactionId;
 
-    const auto received = [=, currentState = std::move(currentState), account = std::move(account),
-                           tokenStates = std::move(tokenStates),
-                           dePoolParticipantStates =
-                               std::move(dePoolParticipantStates)](Result<TransactionsSlice> result) mutable {
-      const auto viewers = findRefreshingViewers(address);
-      if (viewers == nullptr || reportError(*viewers, result)) {
-        return;
-      }
-      currentState.account = std::move(account);
-      currentState.tokenStates = std::move(tokenStates);
-      currentState.dePoolParticipantStates = std::move(dePoolParticipantStates);
-      currentState.lastTransactions = std::move(*result);
-      currentState.assetsList.erase(  //
-          ranges::remove_if(currentState.assetsList,
-                            [&](const AssetListItem &item) {
-                              return v::match(
-                                  item,
-                                  [&](const AssetListItemToken &token) {
-                                    return currentState.tokenStates.find(token.symbol) == end(currentState.tokenStates);
-                                  },
-                                  [&](const AssetListItemDePool &dePool) {
-                                    return currentState.dePoolParticipantStates.find(dePool.address) ==
-                                           end(currentState.dePoolParticipantStates);
-                                  },
-                                  [](const auto &) { return false; });
-                            }),
-          end(currentState.assetsList));
+        const auto received = [=, currentState = std::move(currentState), account = std::move(account),
+                               tokenStates = std::move(tokenStates),
+                               dePoolParticipantStates =
+                                   std::move(dePoolParticipantStates)](Result<TransactionsSlice> result) mutable {
+          const auto viewers = findRefreshingViewers(address);
+          if (viewers == nullptr || reportError(*viewers, result)) {
+            return;
+          }
+          currentState.account = std::move(account);
+          currentState.tokenStates = std::move(tokenStates);
+          currentState.dePoolParticipantStates = std::move(dePoolParticipantStates);
+          currentState.lastTransactions = std::move(*result);
+          currentState.assetsList.erase(  //
+              ranges::remove_if(currentState.assetsList,
+                                [&](const AssetListItem &item) {
+                                  return v::match(
+                                      item,
+                                      [&](const AssetListItemToken &token) {
+                                        return currentState.tokenStates.find(token.symbol) ==
+                                               end(currentState.tokenStates);
+                                      },
+                                      [&](const AssetListItemDePool &dePool) {
+                                        return currentState.dePoolParticipantStates.find(dePool.address) ==
+                                               end(currentState.dePoolParticipantStates);
+                                      },
+                                      [](const auto &) { return false; });
+                                }),
+              end(currentState.assetsList));
 
-      saveNewStateEncrypted(address, *viewers, std::move(currentState), RefreshSource::Remote);
-    };
-    _owner->requestTransactions(address, lastTransactionId, received);
-  }}};
+          saveNewStateEncrypted(address, *viewers, std::move(currentState), RefreshSource::Remote);
+        };
+        _owner->requestTransactions(address, lastTransactionId, received);
+      }}};
 
   _owner->requestState(address, [=](Result<AccountState> result) {
     const auto viewers = findRefreshingViewers(address);
@@ -251,23 +261,21 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
   });
 
   _owner->requestTokenStates(  //
-      viewers.state.current().tokenStates, [=](Result<CurrencyMap<TokenStateValue>> tokenStates) {
-        if (tokenStates.has_value()) {
-          ctx->setTokenStates(std::move(tokenStates.value()));
-        } else {
+      ctx->previousState.tokenStates, [=](Result<CurrencyMap<TokenStateValue>> tokenStates) {
+        if (!tokenStates.has_value()) {
           std::cout << tokenStates.error().details.toStdString() << std::endl;
-          ctx->setTokenStates(CurrencyMap<TokenStateValue>{});
+          tokenStates = ctx->previousState.tokenStates;
         }
+        ctx->setTokenStates(std::move(tokenStates.value()));
       });
 
   _owner->requestDePoolParticipantInfo(  //
-      viewers.publicKey, viewers.state.current().dePoolParticipantStates, [=](Result<DePoolStatesMap> dePoolStates) {
-        if (dePoolStates.has_value()) {
-          ctx->setDePoolParticipantStates(std::move(dePoolStates.value()));
-        } else {
+      viewers.publicKey, ctx->previousState.dePoolParticipantStates, [=](Result<DePoolStatesMap> dePoolStates) {
+        if (!dePoolStates.has_value()) {
           std::cout << dePoolStates.error().details.toStdString() << std::endl;
-          ctx->setDePoolParticipantStates(DePoolStatesMap{});
+          dePoolStates = ctx->previousState.dePoolParticipantStates;
         }
+        ctx->setDePoolParticipantStates(std::move(dePoolStates.value()));
       });
 }
 

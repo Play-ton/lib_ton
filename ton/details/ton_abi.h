@@ -40,6 +40,7 @@ class TLftabi_namedParam;
 class TLDftabi_valueMap;
 class TLftabi_function;
 class TLftabi_decodedOutput;
+class TLftabi_tvmOutput;
 
 template <typename T>
 using TLVector = tl::boxed<TLvector<T>>;
@@ -126,12 +127,12 @@ bool IsCell(const TLftabi_Value &value);
 [[nodiscard]] std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const QByteArray &body);
 
 [[nodiscard]] std::optional<DePoolParticipantState> ParseDePoolParticipantState(int32 dePoolVersion,
-                                                                                const TLftabi_decodedOutput &result);
+                                                                                const TLftabi_tvmOutput &result);
 
 [[nodiscard]] std::optional<RootTokenContractDetails> ParseRootTokenContractDetails(
-    const TLftabi_decodedOutput &result);
+    const TLVector<TLftabi_Value> &values);
 [[nodiscard]] std::optional<TokenWalletContractDetails> ParseTokenWalletContractDetails(
-    const TLftabi_decodedOutput &result);
+    const TLVector<TLftabi_Value> &values);
 
 [[nodiscard]] Result<QByteArray> CreateTokenMessage(const QString &recipient, const int128 &amount);
 [[nodiscard]] Result<QByteArray> CreateTokenTransferToOwnerMessage(const QString &recipient, const int128 &amount,

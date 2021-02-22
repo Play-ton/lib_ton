@@ -64,7 +64,7 @@ void SaveKnownTokenContracts(not_null<Storage::Cache::Database *> db, bool useTe
 void LoadKnownTokenContracts(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
                              const Fn<void(KnownTokenContracts &&)> &done);
 
-void SaveWalletState(not_null<Storage::Cache::Database *> db, const WalletState &state, const Callback<> &done);
+void SaveWalletState(not_null<Storage::Cache::Database *> db, const WalletState &state, Callback<> &&done);
 void LoadWalletState(not_null<Storage::Cache::Database *> db, const QString &address,
                      const Fn<void(WalletState &&)> &done);
 

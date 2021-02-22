@@ -98,12 +98,12 @@ bool IsCell(const TLftabi_Value &value) {
     const auto values = item.c_ftabi_valueMapItem().vvalue().c_ftabi_valueTuple().vvalues().v;
 
     result.emplace(std::make_pair(key, InvestParams{
-        .remainingAmount = UnpackUint(values[0]),
-        .lastWithdrawalTime = UnpackUint(values[1]),
-        .withdrawalPeriod = static_cast<int32>(UnpackUint(values[2])),
-        .withdrawalValue = UnpackUint(values[3]),
-        .owner = UnpackAddress(values[4]),
-    }));
+                                           .remainingAmount = UnpackUint(values[0]),
+                                           .lastWithdrawalTime = UnpackUint(values[1]),
+                                           .withdrawalPeriod = static_cast<int32>(UnpackUint(values[2])),
+                                           .withdrawalValue = UnpackUint(values[3]),
+                                           .owner = UnpackAddress(values[4]),
+                                       }));
   }
   return result;
 }
@@ -796,8 +796,13 @@ std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const
 }
 
 std::optional<DePoolParticipantState> ParseDePoolParticipantState(int32 dePoolVersion,
-                                                                  const TLftabi_decodedOutput &result) {
-  const auto &results = result.c_ftabi_decodedOutput().vvalues().v;
+                                                                  const TLftabi_tvmOutput &result) {
+  const auto &output = result.c_ftabi_tvmOutput();
+  if (output.vexit_code().v != 0) {
+    return DePoolParticipantState{.version = dePoolVersion};
+  }
+
+  const auto &results = output.vvalues().v;
   if (results.size() < 4) {
     return std::nullopt;
   }
@@ -821,8 +826,8 @@ std::optional<DePoolParticipantState> ParseDePoolParticipantState(int32 dePoolVe
   };
 }
 
-std::optional<RootTokenContractDetails> ParseRootTokenContractDetails(const TLftabi_decodedOutput &result) {
-  const auto &tokens = result.c_ftabi_decodedOutput().vvalues().v;
+std::optional<RootTokenContractDetails> ParseRootTokenContractDetails(const TLVector<TLftabi_Value> &values) {
+  const auto &tokens = values.v;
   if (tokens.empty() || tokens[0].type() != id_ftabi_valueTuple) {
     return std::nullopt;
   }
@@ -841,8 +846,8 @@ std::optional<RootTokenContractDetails> ParseRootTokenContractDetails(const TLft
   };
 }
 
-std::optional<TokenWalletContractDetails> ParseTokenWalletContractDetails(const TLftabi_decodedOutput &result) {
-  const auto &tokens = result.c_ftabi_decodedOutput().vvalues().v;
+std::optional<TokenWalletContractDetails> ParseTokenWalletContractDetails(const TLVector<TLftabi_Value> &values) {
+  const auto &tokens = values.v;
   if (tokens.empty() || tokens[0].type() != id_ftabi_valueTuple) {
     return std::nullopt;
   }
@@ -861,10 +866,10 @@ std::optional<TokenWalletContractDetails> ParseTokenWalletContractDetails(const 
 Result<QByteArray> CreateTokenMessage(const QString &recipient, const int128 &amount) {
   const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
       TokenTransferFunction(), tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-          PackAddress(recipient),  // to
-          PackUint128(amount),     // amount
-          PackUint128(),           // grams
-      }))));
+                                                                     PackAddress(recipient),  // to
+                                                                     PackUint128(amount),     // amount
+                                                                     PackUint128(),           // grams
+                                                                 }))));
   if (!encodedBody.has_value()) {
     return encodedBody.error();
   }
@@ -877,12 +882,12 @@ Result<QByteArray> CreateTokenTransferToOwnerMessage(const QString &recipient, c
   const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(  //
       TokenTransferToOwnerFunction(),
       tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-          PackPubKey(),              // recipient_public_key
-          PackAddress(recipient),    // recipient_address
-          PackUint128(amount),       // tokens
-          PackUint128(deployGrams),  // deploy_grams
-          PackUint128(),             // transfer_grams
-      }))));
+                                            PackPubKey(),              // recipient_public_key
+                                            PackAddress(recipient),    // recipient_address
+                                            PackUint128(amount),       // tokens
+                                            PackUint128(deployGrams),  // deploy_grams
+                                            PackUint128(),             // transfer_grams
+                                        }))));
   if (!encodedBody.has_value()) {
     return encodedBody.error();
   }
@@ -916,11 +921,11 @@ Result<QByteArray> CreateSwapBackMessage(QByteArray ethereumAddress, const QStri
   const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
       TokenSwapBackFunction(),  //
       tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-          PackUint128(amount),                 // tokens
-          PackUint128(),                       // grams
-          PackAddress(callback_address),       // callback_address
-          PackCell(callback_payload.value()),  // callback_payload
-      }))));
+                                            PackUint128(amount),                 // tokens
+                                            PackUint128(),                       // grams
+                                            PackAddress(callback_address),       // callback_address
+                                            PackCell(callback_payload.value()),  // callback_payload
+                                        }))));
   if (!encodedBody.has_value()) {
     return encodedBody.error();
   }
@@ -931,9 +936,9 @@ Result<QByteArray> CreateSwapBackMessage(QByteArray ethereumAddress, const QStri
 Result<QByteArray> CreateStakeMessage(int64 stake) {
   const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
       OrdinaryStakeFunction(), tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-          tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(64)),
-                            tl_int64(stake)),  // stake
-      }))));
+                                                                     tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(64)),
+                                                                                       tl_int64(stake)),  // stake
+                                                                 }))));
   if (!encodedBody.has_value()) {
     return encodedBody.error();
   }
@@ -950,9 +955,9 @@ Result<QByteArray> CreateWithdrawalMessage(int64 amount, bool all) {
   } else {
     function = DePoolWithdrawPartFunction();
     functionCall = tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-        tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(64)),
-                          tl_int64(amount)),  // withdrawValue
-    }));
+                                                         tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(64)),
+                                                                           tl_int64(amount)),  // withdrawValue
+                                                     }));
   }
   const auto encodedBody =
       RequestSender::Execute(TLftabi_CreateMessageBody(std::move(function), std::move(functionCall)));
@@ -977,11 +982,11 @@ Result<QByteArray> CreateTokenWalletDeployMessage(int64 grams, const QString &ow
   const auto encodedBody = RequestSender::Execute(
       TLftabi_CreateMessageBody(RootTokenDeployWalletFunction(),  //
                                 tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-                                    PackUint128(grams),
-                                    PackPubKey(),
-                                    PackAddress(owner),
-                                    PackAddress(owner),
-                                }))));
+                                                                      PackUint128(grams),
+                                                                      PackPubKey(),
+                                                                      PackAddress(owner),
+                                                                      PackAddress(owner),
+                                                                  }))));
   if (!encodedBody.has_value()) {
     return encodedBody.error();
   }

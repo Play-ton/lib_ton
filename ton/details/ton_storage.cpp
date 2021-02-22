@@ -699,13 +699,13 @@ void LoadKnownTokenContracts(not_null<Storage::Cache::Database *> db, bool useTe
   });
 }
 
-void SaveWalletState(not_null<Storage::Cache::Database *> db, const WalletState &state, const Callback<> &done) {
+void SaveWalletState(not_null<Storage::Cache::Database *> db, const WalletState &state, Callback<> &&done) {
   if (state == WalletState{.address = state.address, .assetsList = {Ton::AssetListItemWallet{}}}) {
     InvokeCallback(done);
     return;
   }
-  auto saved = [=](const Storage::Cache::Error &error) {
-    crl::on_main([=] {
+  auto saved = [=, done = std::move(done)](const Storage::Cache::Error &error) mutable {
+    crl::on_main([=, done = std::move(done)] {
       if (const auto bad = ErrorFromStorage(error)) {
         InvokeCallback(done, *bad);
       } else {

@@ -255,15 +255,18 @@ struct DecryptedText {
 
 struct RegularTransaction {};
 
-using TransactionAdditionalInfo =                 //
-    std::variant<RegularTransaction,              //
-                 TokenWalletDeployed,             //
-                 EthEventStatusChanged,           //
-                 TonEventStatusChanged,           //
-                 TokenTransfer,                   //
-                 TokenSwapBack,                   //
-                 TokenMint,                       //
-                 TokensBounced,                   //
+using TransactionAdditionalInfo =     //
+    std::variant<RegularTransaction,  //
+                 // Events
+                 TokenWalletDeployed,    //
+                 EthEventStatusChanged,  //
+                 TonEventStatusChanged,  //
+                 // Token transaction
+                 TokenTransfer,  //
+                 TokenSwapBack,  //
+                 TokenMint,      //
+                 TokensBounced,  //
+                 // DePool transaction
                  DePoolOrdinaryStakeTransaction,  //
                  DePoolOnRoundCompleteTransaction>;
 

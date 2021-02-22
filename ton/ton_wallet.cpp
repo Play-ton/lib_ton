@@ -53,6 +53,14 @@ constexpr auto kDefaultMessageFlags = 3;
   return tl_error(tl_int32(500), tl_string("INVALID_ABI"));
 }
 
+[[nodiscard]] TLError GenerateVmError(int32 exitCode) {
+  return tl_error(tl_int32(500), tl_string(QString{"VM terminated with exit code: {}"}.arg(exitCode)));
+}
+
+[[nodiscard]] TLError GenerateVmError(const TLint32 &exitCode) {
+  return tl_error(tl_int32(500), tl_string(QString{"VM terminated with exit code: {}"}.arg(exitCode.v)));
+}
+
 std::optional<int32> GuessDePoolVersion(const QByteArray &codeHash) {
   static const std::vector<QByteArray> codeHashes = {
       QByteArray::fromHex("b4ad6c42427a12a65d9a0bffb0c2730dd9cdf830a086d94636dab7784e13eb38"),
@@ -459,7 +467,7 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
                 TokenTransactionToSend::realAmount, transaction.timeout, false,
                 [=](Result<TransactionCheckResult> result) {
                   if (result.has_value()) {
-                    done(std::make_pair(std::move(result.value()), std::move(transferCheckResult)));
+                    done(std::make_pair(std::move(result.value()), transferCheckResult));
                   } else {
                     done(result.error());
                   }
@@ -480,8 +488,13 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
                                                   PackAddress(transaction.recipient),  //
                                               }))))
         .done([=, rootContractAddress = transaction.rootContractAddress,
-               ownerAddress = transaction.recipient](const TLftabi_decodedOutput &decodedOutput) {
-          const auto &tokens = decodedOutput.c_ftabi_decodedOutput().vvalues().v;
+               ownerAddress = transaction.recipient](const TLftabi_tvmOutput &result) {
+          const auto &output = result.c_ftabi_tvmOutput();
+          if (output.vsuccess().type() != id_boolTrue) {
+            return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+          }
+
+          const auto &tokens = output.vvalues().v;
           const auto walletAddress = UnpackAddress(tokens[0]);
 
           _external->updateTokenOwnersCache(rootContractAddress, walletAddress, ownerAddress,
@@ -763,8 +776,8 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
                     tl_vector(QVector<TLftabi_Value>{
                         PackAddress(account),  // account
                     }))))
-            .done([=](const TLftabi_decodedOutput &decodedOutput) {
-              auto state = ParseDePoolParticipantState(*dePoolVersion, decodedOutput);
+            .done([=](const TLftabi_tvmOutput &result) {
+              auto state = ParseDePoolParticipantState(*dePoolVersion, result);
               if (state.has_value()) {
                 _accountViewers->addDePool(account, packedDePoolAddress, std::move(*state));
                 InvokeCallback(done);
@@ -809,16 +822,49 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
                                                   PackPubKey(),          //
                                                   PackAddress(account),  //
                                               }))))
-        .done([=](const TLftabi_decodedOutput &decodedOutput) {
-          const auto &tokens = decodedOutput.c_ftabi_decodedOutput().vvalues().v;
+        .done([=](const TLftabi_tvmOutput &result) {
+          const auto &output = result.c_ftabi_tvmOutput();
+          if (output.vsuccess().type() != id_boolTrue) {
+            return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+          }
+
+          const auto &tokens = output.vvalues().v;
           const auto walletAddress = UnpackAddress(tokens[0]);
 
-          _accountViewers->addToken(
-              account, TokenState{.token = Symbol::tip3(details.symbol, details.decimals, packedRootContractAddress),
-                                  .walletContractAddress = walletAddress,
-                                  .rootOwnerAddress = details.ownerAddress,
-                                  .balance = 0});
-          InvokeCallback(done);
+          auto getBalance = [=](TokenState tokenState) mutable {
+            _external->lib()
+                .request(TLftabi_RunLocal(                        //
+                    tl_accountAddress(tl_string(walletAddress)),  //
+                    TokenGetBalanceFunction(),                    //
+                    tl_ftabi_functionCallExternal({}, {})))
+                .done([=](const TLftabi_tvmOutput &tvmResult) mutable {
+                  const auto &output = tvmResult.c_ftabi_tvmOutput();
+                  if (output.vsuccess().type() != id_boolTrue) {
+                    std::cout << "failed to get balance: " << output.vexit_code().v << std::endl;
+                    return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+                  }
+
+                  const auto &results = output.vvalues().v;
+                  if (results.empty() || !IsBigInt(results[0])) {
+                    std::cout << "failed to parse results: " << results.size() << std::endl;
+                    return InvokeCallback(done, Error{Error::Type::TonLib, "failed to parse results"});
+                  }
+
+                  tokenState.balance = UnpackUint128(results[0]);
+                  _accountViewers->addToken(account, std::move(tokenState));
+                  InvokeCallback(done);
+                })
+                .fail([=](const TLError &error) mutable {
+                  _accountViewers->addToken(account, std::move(tokenState));
+                  InvokeCallback(done);
+                })
+                .send();
+          };
+
+          getBalance(TokenState{.token = Symbol::tip3(details.symbol, details.decimals, packedRootContractAddress),
+                                .walletContractAddress = walletAddress,
+                                .rootOwnerAddress = details.ownerAddress,
+                                .balance = 0});
         })
         .fail([=](const TLError &error) {
           std::cout << "error in RootTokenContract.getWalletAddress: " << error.c_error().vmessage().v.toStdString()
@@ -848,8 +894,13 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
                 accountState.vcode(),                                                           //
                 RootTokenGetDetailsFunction(),                                                  //
                 tl_ftabi_functionCallExternal({}, {})))
-            .done([=, result = std::move(result)](const TLftabi_decodedOutput &decodedDetailsOutput) mutable {
-              auto details = ParseRootTokenContractDetails(decodedDetailsOutput);
+            .done([=, result = std::forward<TLFullAccountState>(result)](const TLftabi_tvmOutput &tvmResult) mutable {
+              const auto &output = tvmResult.c_ftabi_tvmOutput();
+              if (output.vsuccess().type() != id_boolTrue) {
+                return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+              }
+
+              auto details = ParseRootTokenContractDetails(output.vvalues());
               if (details.has_value()) {
                 getWalletAddress(std::move(result), *details);
               } else {
@@ -954,7 +1005,8 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
 
           const auto lastId = Parse(result.c_fullAccountState().vlast_transaction_id());
 
-          auto getBalance = [=, result = std::move(result)](TransactionsSlice &&lastTransactions) {
+          auto getBalance = [=, result = std::forward<TLfullAccountState>(result)](
+                                TransactionsSlice &&lastTransactions) mutable {
             const auto &info = result.c_fullAccountState();
             const auto &accountState = result.c_fullAccountState().vaccount_state().c_raw_accountState();
 
@@ -968,8 +1020,13 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
                     accountState.vcode(),                                                           //
                     TokenGetBalanceFunction(),                                                      //
                     tl_ftabi_functionCallExternal({}, {})))
-                .done([=, result = std::move(result)](const TLftabi_decodedOutput &balanceOutput) mutable {
-                  const auto &results = balanceOutput.c_ftabi_decodedOutput().vvalues().v;
+                .done([=, result = std::move(result)](const TLftabi_tvmOutput &tvmResult) mutable {
+                  const auto &output = tvmResult.c_ftabi_tvmOutput();
+                  if (output.vsuccess().type() != id_boolTrue) {
+                    return ctx->notifyError(symbol);
+                  }
+
+                  const auto &results = output.vvalues().v;
                   if (results.empty() || !IsBigInt(results[0])) {
                     //InvokeCallback(done, Error { Error::Type::TonLib, "failed to parse results" });
                     std::cout << "failed to parse results: " << results.size() << std::endl;
@@ -999,8 +1056,9 @@ void Wallet::requestTokenStates(const CurrencyMap<TokenStateValue> &previousStat
               .request(TLraw_GetTransactions(tl_inputKeyFake(),
                                              tl_accountAddress(tl_string(token.walletContractAddress)),
                                              tl_internal_transactionId(tl_int64(lastId.lt), tl_bytes(lastId.hash))))
-              .done(
-                  [getBalance = std::move(getBalance)](const TLraw_Transactions &result) { getBalance(Parse(result)); })
+              .done([getBalance = std::move(getBalance)](const TLraw_Transactions &result) mutable {
+                getBalance(Parse(result));
+              })
               .fail([=](const TLError &error) {
                 // InvokeCallback(done, ErrorFromLib(error));
                 std::cout << "Get last transactions: " << error.c_error().vmessage().v.toStdString() << std::endl;
@@ -1068,8 +1126,8 @@ void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const DeP
                                           tl_vector(QVector<TLftabi_Value>{
                                               PackAddress(walletAddress),  // account
                                           }))))
-        .done([=, address = address, previousState = previousState](const TLftabi_decodedOutput &result) {
-          auto state = ParseDePoolParticipantState(previousState.version, result);
+        .done([=, address = address, previousState = previousState](const TLftabi_tvmOutput &tvmResult) {
+          auto state = ParseDePoolParticipantState(previousState.version, tvmResult);
           if (state.has_value()) {
             ctx->notifySuccess(address, std::move(*state));
           } else {
@@ -1151,8 +1209,13 @@ void Wallet::getWalletOwner(const QString &rootTokenContract, const QString &wal
           tl_accountAddress(tl_string(walletAddress)),  //
           TokenWalletGetDetailsFunction(),              //
           tl_ftabi_functionCallExternal({}, {})))
-      .done([=](const TLftabi_decodedOutput &decodedOutput) {
-        const auto details = ParseTokenWalletContractDetails(decodedOutput);
+      .done([=](const TLftabi_tvmOutput &tvmResult) {
+        const auto &output = tvmResult.c_ftabi_tvmOutput();
+        if (output.vsuccess().type() != id_boolTrue) {
+          return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+        }
+
+        const auto details = ParseTokenWalletContractDetails(output.vvalues());
         if (!details.has_value()) {
           return InvokeCallback(done, Ton::Error{Ton::Error::Type::TonLib, "Invalid TokenWallet.getDetails ABI"});
         }
@@ -1249,8 +1312,13 @@ void Wallet::getWalletOwners(const QString &rootTokenContract, const QSet<QStrin
             tl_accountAddress(tl_string(walletAddress)),  //
             TokenWalletGetDetailsFunction(),              //
             tl_ftabi_functionCallExternal({}, {})))
-        .done([=](const TLftabi_decodedOutput &decodedOutput) {
-          auto details = ParseTokenWalletContractDetails(decodedOutput);
+        .done([=](const TLftabi_tvmOutput &tvmResult) {
+          const auto &output = tvmResult.c_ftabi_tvmOutput();
+          if (output.vsuccess().type() != id_boolTrue) {
+            return context->notifyNotFound();
+          }
+
+          auto details = ParseTokenWalletContractDetails(output.vvalues());
 
           auto success = true;
           if (!details.has_value()) {
@@ -1308,8 +1376,13 @@ void Wallet::getEthEventDetails(const QString &ethEventContract, const Callback<
                   code,                                            //
                   EthEventGetDecodedDataFunction(),                //
                   tl_ftabi_functionCallExternal({}, {})))
-              .done([=](const TLftabi_decodedOutput &balanceOutput) mutable {
-                const auto &results = balanceOutput.c_ftabi_decodedOutput().vvalues().v;
+              .done([=](const TLftabi_tvmOutput &tvmResult) mutable {
+                const auto &output = tvmResult.c_ftabi_tvmOutput();
+                if (output.vsuccess().type() != id_boolTrue) {
+                  return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+                }
+
+                const auto &results = output.vvalues().v;
                 if (results.size() > 1 && IsAddress(results[0])) {
                   ethEventDetails.rootTokenContract = UnpackAddress(results[0]);
                 }
@@ -1333,8 +1406,13 @@ void Wallet::getEthEventDetails(const QString &ethEventContract, const Callback<
                 code,                                            //
                 EthEventGetDetailsFunction(),                    //
                 tl_ftabi_functionCallExternal({}, {})))
-            .done([=](const TLftabi_decodedOutput &output) mutable {
-              const auto &results = output.c_ftabi_decodedOutput().vvalues().v;
+            .done([=](const TLftabi_tvmOutput &tvmResult) mutable {
+              const auto &output = tvmResult.c_ftabi_tvmOutput();
+              if (output.vsuccess().type() != id_boolTrue) {
+                return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+              }
+
+              const auto &results = output.vvalues().v;
               const auto invalidAbiError = Error{Error::Type::TonLib, "Invalid EthEvent.getDetails abi"};
               if (results.size() != 4) {
                 return InvokeCallback(done, invalidAbiError);
@@ -1374,8 +1452,13 @@ void Wallet::getRootTokenContractDetails(const QString &rootTokenContract,
           tl_accountAddress(tl_string(rootTokenContract)),  //
           RootTokenGetDetailsFunction(),                    //
           tl_ftabi_functionCallExternal({}, {})))
-      .done([=](const TLftabi_decodedOutput &decodedOutput) {
-        auto details = ParseRootTokenContractDetails(decodedOutput);
+      .done([=](const TLftabi_tvmOutput &tvmResult) {
+        const auto &output = tvmResult.c_ftabi_tvmOutput();
+        if (output.vsuccess().type() != id_boolTrue) {
+          return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+        }
+
+        auto details = ParseRootTokenContractDetails(output.vvalues());
         if (details.has_value()) {
           InvokeCallback(done, *details);
         } else {
