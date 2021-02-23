@@ -375,7 +375,7 @@ struct DeployTokenWalletTransactionToSend {
 };
 
 struct CollectTokensTransactionToSend {
-  constexpr static int64 realAmount = 1'000'000'001;  // >1 TON
+  constexpr static int64 realAmount = 1'000'000'000;  // 1 TON
 
   QString eventContractAddress;
   int timeout = 0;
