@@ -413,7 +413,7 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
   if (transaction.tokenTransferType == TokenTransferType::SwapBack) {
     const auto ethereumAddress = ParseEthereumAddress(transaction.recipient);
     if (!ethereumAddress.has_value()) {
-      return done(std::make_pair(TransactionCheckResult{}, InvalidEthAddress{}));
+      return InvokeCallback(done, std::make_pair(TransactionCheckResult{}, InvalidEthAddress{}));
     }
     auto body = CreateSwapBackMessage(*ethereumAddress, transaction.callbackAddress, transaction.amount);
     if (!body.has_value()) {
@@ -423,9 +423,9 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
         sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
         TokenTransactionToSend::realAmount, transaction.timeout, false, [=](Result<TransactionCheckResult> &&result) {
           if (result.has_value()) {
-            done(std::make_pair(std::move(result.value()), TokenTransferUnchanged{}));
+            InvokeCallback(done, std::make_pair(std::move(result.value()), TokenTransferUnchanged{}));
           } else {
-            done(result.error());
+            InvokeCallback(done, result.error());
           }
         });
   }
@@ -437,7 +437,7 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
           const auto isUninit = result.c_fullAccountState().vaccount_state().type() == id_uninited_accountState;
 
           if (isUninit && transaction.tokenTransferType == TokenTransferType::Direct) {
-            done(std::make_pair(TransactionCheckResult{}, DirectAccountNotFound{}));
+            InvokeCallback(done, std::make_pair(TransactionCheckResult{}, DirectAccountNotFound{}));
           } else if (isUninit) {
             auto body = CreateTokenTransferToOwnerMessage(transaction.recipient, transaction.amount,
                                                           TokenTransactionToSend::initialBalance);
@@ -449,9 +449,9 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
                 TokenTransactionToSend::realAmount, transaction.timeout, false,
                 [=](Result<TransactionCheckResult> result) {
                   if (result.has_value()) {
-                    done(std::make_pair(std::move(result.value()), TokenTransferUnchanged{}));
+                    InvokeCallback(done, std::make_pair(std::move(result.value()), TokenTransferUnchanged{}));
                   } else {
-                    done(result.error());
+                    InvokeCallback(done, result.error());
                   }
                 });
           } else {
@@ -467,9 +467,9 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
                 TokenTransactionToSend::realAmount, transaction.timeout, false,
                 [=](Result<TransactionCheckResult> result) {
                   if (result.has_value()) {
-                    done(std::make_pair(std::move(result.value()), transferCheckResult));
+                    InvokeCallback(done, std::make_pair(std::move(result.value()), transferCheckResult));
                   } else {
-                    done(result.error());
+                    InvokeCallback(done, result.error());
                   }
                 });
           }
