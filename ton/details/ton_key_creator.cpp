@@ -166,7 +166,7 @@ void KeyCreator::changePassword(const QByteArray &password, Callback<> done) {
                     TLsecureBytes{password}))
       .done(crl::guard(this,
                        [=](const TLKey &result) {
-                         DeletePublicKey(_lib, _key, _secret, crl::guard(this, [=](Result<>) {
+                         DeletePublicKey(_lib, _key, _secret, crl::guard(this, [=](const Result<>&) {
                                            result.match([&](const TLDkey &data) {
                                              _password = password;
                                              _secret = data.vsecret().v;
