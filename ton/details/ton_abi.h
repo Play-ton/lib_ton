@@ -149,4 +149,11 @@ bool IsCell(const TLftabi_Value &value);
 [[nodiscard]] Result<QByteArray> CreateTokenWalletDeployMessage(int64 grams, const QString &owner);
 [[nodiscard]] Result<QByteArray> CreateExecuteProxyCallbackMessage();
 
+struct GeneratedInitData {
+  QByteArray hash;
+  QByteArray initState;
+};
+
+[[nodiscard]] Result<GeneratedInitData> CreateMultisigInitData(QByteArray publicKey);
+
 }  // namespace Ton::details

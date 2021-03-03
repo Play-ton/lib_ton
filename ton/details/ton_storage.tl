@@ -74,6 +74,11 @@ storage.dePoolState
 storage.assetsListMain = storage.AssetsListItem;
 storage.assetsListToken name:bytes decimals:int32 rootContractAddress:bytes = storage.AssetsListItem;
 storage.assetsListDePool address:string = storage.AssetsListItem;
+storage.assetsListMultisig address:string = storage.AssetsListItem;
+storage.multisig
+    address:string
+    state:storage.AccountState
+    lastTransactions:storage.TransactionsSlice = storage.Multisig;
 storage.walletState
     address:string
     account:storage.AccountState
@@ -81,6 +86,7 @@ storage.walletState
     pendingTransactions:vector<storage.PendingTransaction>
     tokenStates:vector<storage.TokenState>
     dePoolStates:vector<storage.DePoolState>
+    multisigStates:vector<storage.Multisig>
     assetsList:vector<storage.AssetsListItem> = storage.WalletState;
 
 storage.tokenOwnersCacheItem wallet:bytes owner:bytes = storage.TokenOwnersCacheItem;

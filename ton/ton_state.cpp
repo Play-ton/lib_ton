@@ -60,6 +60,14 @@ bool operator!=(const TokenStateValue &a, const TokenStateValue &b) {
   return !(a == b);
 }
 
+bool operator==(const MultisigState &a, const MultisigState &b) {
+  return (a.accountState == b.accountState) && (a.lastTransactions == b.lastTransactions);
+}
+
+bool operator!=(const MultisigState &a, const MultisigState &b) {
+  return !(a == b);
+}
+
 bool operator==(const InvestParams &a, const InvestParams &b) {
   return (a.remainingAmount == b.remainingAmount) && (a.lastWithdrawalTime == b.lastWithdrawalTime) &&
          (a.withdrawalPeriod == b.withdrawalPeriod) && (a.withdrawalValue == b.withdrawalValue) && (a.owner == b.owner);

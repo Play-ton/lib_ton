@@ -584,6 +584,28 @@ void Wallet::checkCollectTokens(const QByteArray &publicKey, const CollectTokens
                        CollectTokensTransactionToSend::realAmount, transaction.timeout, true, done);
 }
 
+void Wallet::checkDeployMultisig(const QByteArray &publicKey, const DeployMultisigTransactionToSend &transaction,
+                                 const Callback<TransactionCheckResult> &done) {
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
+}
+
+void Wallet::checkSubmitTransaction(const QByteArray &publicKey, const SubmitTransactionToSend &transaction,
+                                    const Callback<TransactionCheckResult> &done) {
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
+
+
+}
+
+void Wallet::checkConfirmTransaction(const QByteArray &publicKey, const ConfirmTransactionToSend &transaction,
+                                     const Callback<TransactionCheckResult> &done) {
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
+
+
+}
+
 void Wallet::sendGrams(const QByteArray &publicKey, const QByteArray &password, const TransactionToSend &transaction,
                        const Callback<PendingTransaction> &ready, const Callback<> &done) {
   Expects(transaction.amount >= 0);

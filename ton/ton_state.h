@@ -313,7 +313,6 @@ struct TokenState {
 };
 
 bool operator==(const TokenState &a, const TokenState &b);
-
 bool operator!=(const TokenState &a, const TokenState &b);
 
 struct TokenStateValue {
@@ -332,8 +331,15 @@ struct TokenStateValue {
 };
 
 bool operator==(const TokenStateValue &a, const TokenStateValue &b);
-
 bool operator!=(const TokenStateValue &a, const TokenStateValue &b);
+
+struct MultisigState {
+  AccountState accountState;
+  TransactionsSlice lastTransactions;
+};
+
+bool operator==(const MultisigState &a, const MultisigState &b);
+bool operator!=(const MultisigState &a, const MultisigState &b);
 
 struct TransactionToSend {
   int64 amount = 0;
@@ -402,6 +408,27 @@ struct CancelWithdrawalTransactionToSend {
   int timeout = 0;
 };
 
+struct DeployMultisigTransactionToSend {
+  constexpr static int64 initialBalance = 1'000'000'000;  // 1 TON
+  uint8 requiredConfirmations = 1;
+  std::vector<QByteArray> publicKeys;
+};
+
+struct SubmitTransactionToSend {
+  QString multisigAddress;
+  QString dest;
+  int64 value;
+  bool bounce;
+  QByteArray payload;
+  int timeout = 0;
+};
+
+struct ConfirmTransactionToSend {
+  QString multisigAddress;
+  int64 transactionId;
+  int timeout = 0;
+};
+
 struct TransactionFees {
   int64 inForward = 0;
   int64 storage = 0;
@@ -441,8 +468,11 @@ struct AssetListItemToken {
 struct AssetListItemDePool {
   QString address;
 };
+struct AssetListItemMultisig {
+  QString address;
+};
 
-using AssetListItem = std::variant<AssetListItemWallet, AssetListItemToken, AssetListItemDePool>;
+using AssetListItem = std::variant<AssetListItemWallet, AssetListItemToken, AssetListItemDePool, AssetListItemMultisig>;
 
 bool operator==(const AssetListItem &a, const AssetListItem &b);
 bool operator!=(const AssetListItem &a, const AssetListItem &b);
@@ -454,6 +484,7 @@ struct WalletState {
   std::vector<PendingTransaction> pendingTransactions;
   std::map<Symbol, TokenStateValue> tokenStates;
   std::map<QString, DePoolParticipantState> dePoolParticipantStates;
+  std::map<QString, AccountState>;
   std::vector<AssetListItem> assetsList;
 };
 

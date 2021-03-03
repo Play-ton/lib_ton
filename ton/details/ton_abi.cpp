@@ -2,6 +2,7 @@
 
 #include "ton/details/ton_request_sender.h"
 #include "ton/ton_state.h"
+#include "contracts/safe_multisig_wallet_tvc.h"
 
 namespace Ton::details {
 
@@ -1002,6 +1003,22 @@ Result<QByteArray> CreateExecuteProxyCallbackMessage() {
   }
 
   return encodedBody.value().c_ftabi_messageBody().vdata().v;
+}
+
+template <typename T, size_t N>
+static auto loadSlice(T (&data)[N]) -> QByteArray {
+  return QByteArray(reinterpret_cast<const char *>(data), N * sizeof(T));
+}
+
+Result<QByteArray> CreateMultisigInitData(const QByteArray &publicKey) {
+  static auto tvc = loadSlice(SAFE_MULTISIG_WALLET_TVC);
+
+  const auto initData = RequestSender::Execute(TLftabi_GenerateStateInit(tl_bytes(tvc), tl_bytes(publicKey)));
+  if (!initData.has_value()) {
+    return initData.error();
+  }
+
+  const auto &initData = initData.value().c_ftabi_stateInit();
 }
 
 }  // namespace Ton::details

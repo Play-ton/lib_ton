@@ -91,6 +91,15 @@ class Wallet final : public base::has_weak_ptr {
   void checkCollectTokens(const QByteArray &publicKey, const CollectTokensTransactionToSend &transaction,
                           const Callback<TransactionCheckResult> &done);
 
+  void checkDeployMultisig(const QByteArray &publicKey, const DeployMultisigTransactionToSend &transaction,
+                           const Callback<TransactionCheckResult> &done);
+
+  void checkSubmitTransaction(const QByteArray &publicKey, const SubmitTransactionToSend &transaction,
+                              const Callback<TransactionCheckResult> &done);
+
+  void checkConfirmTransaction(const QByteArray &publicKye, const ConfirmTransactionToSend &transaction,
+                               const Callback<TransactionCheckResult> &done);
+
   void sendGrams(const QByteArray &publicKey, const QByteArray &password, const TransactionToSend &transaction,
                  const Callback<PendingTransaction> &ready, const Callback<> &done);
 
@@ -114,6 +123,18 @@ class Wallet final : public base::has_weak_ptr {
   void collectTokens(const QByteArray &publicKey, const QByteArray &password,
                      const CollectTokensTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
                      const Callback<> &done);
+
+  void deployMultisig(const QByteArray &publicKey, const QByteArray &password,
+                      const DeployMultisigTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                      const Callback<> &done);
+
+  void submitTransaction(const QByteArray &publicKyy, const QByteArray &password,
+                         const SubmitTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                         const Callback<> &done);
+
+  void confirmTransaction(const QByteArray &publicKey, const QByteArray &password,
+                          const ConfirmTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                          const Callback<> &done);
 
   void openGate(const QString &rawAddress, const std::optional<Symbol> &token = {});
   void openGateExecuteSwapBack(const QString &eventAddress);

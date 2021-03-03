@@ -10,11 +10,14 @@ init_target(lib_ton)
 
 include(cmake/generate_ton_tl.cmake)
 include(cmake/generate_ton_storage_tl.cmake)
+include(cmake/helpers.cmake)
 
 get_filename_component(src_loc . REALPATH)
 
 generate_ton_tl(lib_ton ${src_loc}/ton/details/ton_tl_generate.py ${libs_loc}/ton/tl/generate/scheme/tonlib_api.tl)
 generate_ton_storage_tl(lib_ton ${src_loc}/ton/details/ton_storage_tl_generate.py ${src_loc}/ton/details/ton_storage.tl)
+
+embed_resource("${src_loc}/contracts/SafeMultisigWallet.tvc" "${src_loc}/contracts/safe_multisig_wallet_tvc.h" SAFE_MULTISIG_WALLET_TVC UNSIGNED)
 
 nice_target_sources(lib_ton ${libs_loc}/ton/tl/generate
 PRIVATE
@@ -24,6 +27,8 @@ PRIVATE
 target_precompile_headers(lib_ton PRIVATE ${src_loc}/ton/details/ton_pch.h)
 nice_target_sources(lib_ton ${src_loc}
 PRIVATE
+    contracts/safe_multisig_wallet_tvc.h
+
     ton/details/ton_abi.cpp
     ton/details/ton_abi.h
     ton/details/ton_account_viewers.cpp
