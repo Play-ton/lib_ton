@@ -95,7 +95,8 @@ bool operator!=(const RestrictionLimit &a, const RestrictionLimit &b) {
 
 bool operator==(const AccountState &a, const AccountState &b) {
   return (a.fullBalance == b.fullBalance) && (a.lockedBalance == b.lockedBalance) &&
-         (a.lastTransactionId == b.lastTransactionId) && (a.restrictionLimits == b.restrictionLimits);
+         (a.lastTransactionId == b.lastTransactionId) && (a.restrictionLimits == b.restrictionLimits) &&
+         (a.isDeployed == b.isDeployed);
 }
 
 bool operator!=(const AccountState &a, const AccountState &b) {
@@ -139,6 +140,10 @@ bool operator==(const AssetListItem &a, const AssetListItem &b) {
       [&](const AssetListItemDePool &itemA) {
         const auto *itemB = std::get_if<AssetListItemDePool>(&b);
         return itemA.address == itemB->address;
+      },
+      [&](const AssetListItemMultisig &itemA) {
+        const auto *itemB = std::get_if<AssetListItemMultisig>(&b);
+        return itemA.address == itemB->address;
       });
 }
 
@@ -149,7 +154,8 @@ bool operator!=(const AssetListItem &a, const AssetListItem &b) {
 bool operator==(const WalletState &a, const WalletState &b) {
   return (a.address == b.address) && (a.account == b.account) && (a.lastTransactions == b.lastTransactions) &&
          (a.pendingTransactions == b.pendingTransactions) && (a.tokenStates == b.tokenStates) &&
-         (a.dePoolParticipantStates == b.dePoolParticipantStates) && (a.assetsList == b.assetsList);
+         (a.dePoolParticipantStates == b.dePoolParticipantStates) && (a.multisigStates == b.multisigStates) &&
+         (a.assetsList == b.assetsList);
 }
 
 bool operator!=(const WalletState &a, const WalletState &b) {

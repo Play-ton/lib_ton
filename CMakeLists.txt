@@ -43,6 +43,8 @@ PRIVATE
     ton/details/ton_key_destroyer.h
     ton/details/ton_local_time_syncer.cpp
     ton/details/ton_local_time_syncer.h
+    ton/details/ton_mnemonic.cpp
+    ton/details/ton_mnemonic.h
     ton/details/ton_parse_state.cpp
     ton/details/ton_parse_state.h
     ton/details/ton_password_changer.cpp

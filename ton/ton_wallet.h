@@ -144,6 +144,10 @@ class Wallet final : public base::has_weak_ptr {
 
   void addToken(const QByteArray &publicKey, const QString &rootContractAddress, const Callback<> &done);
   void removeToken(const QByteArray &publicKey, const Symbol &token);
+
+  void addMultisig(const QByteArray &publicKey, const QString &multisigAddress, const Callback<> &done);
+  void removeMultisig(const QByteArray &publicKey, const QString &multisigAddress);
+
   void reorderAssets(const QByteArray &publicKey, int oldPosition, int newPosition);
 
   static void EnableLogging(bool enabled, const QString &basePath);
@@ -180,6 +184,7 @@ class Wallet final : public base::has_weak_ptr {
                           const Callback<CurrencyMap<TokenStateValue>> &done) const;
   void requestDePoolParticipantInfo(const QByteArray &publicKey, const DePoolStatesMap &previousStates,
                                     const Callback<DePoolStatesMap> &done) const;
+  void requestMultisigStates(const MultisigStatesMap &previousStates, const Callback<MultisigStatesMap> &done);
 
  private:
   struct ViewersPassword {

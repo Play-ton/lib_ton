@@ -586,6 +586,22 @@ TLftabi_Function DePoolParticipantInfoFunction(int32 dePoolVersion) {
   return *function[withVesting];
 }
 
+TLftabi_Function MultisigConstructorFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("constructor"), ExtendedHeaders(),
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramArray(tl_ftabi_paramUint(tl_int32(256))),  // owners
+            tl_ftabi_paramUint(tl_int32(8)),                         // reqConfirms
+        }),
+        {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
 std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
   const auto decodedTransferInput =
       RequestSender::Execute(TLftabi_DecodeInput(TokenTransferFunction(), tl_bytes(body), tl_boolTrue()));
@@ -1010,15 +1026,49 @@ static auto loadSlice(T (&data)[N]) -> QByteArray {
   return QByteArray(reinterpret_cast<const char *>(data), N * sizeof(T));
 }
 
-Result<QByteArray> CreateMultisigInitData(const QByteArray &publicKey) {
+Result<GeneratedInitData> CreateMultisigInitData(const QByteArray &publicKey) {
   static auto tvc = loadSlice(SAFE_MULTISIG_WALLET_TVC);
 
-  const auto initData = RequestSender::Execute(TLftabi_GenerateStateInit(tl_bytes(tvc), tl_bytes(publicKey)));
-  if (!initData.has_value()) {
-    return initData.error();
+  const auto result = RequestSender::Execute(TLftabi_GenerateStateInit(tl_bytes(tvc), tl_bytes(publicKey)));
+  if (!result.has_value()) {
+    return result.error();
   }
 
-  const auto &initData = initData.value().c_ftabi_stateInit();
+  const auto &initData = result.value().c_ftabi_stateInit();
+  return GeneratedInitData{
+      .hash = initData.vhash().v,
+      .data = initData.vdata().v,
+  };
+}
+
+Result<QByteArray> CreateMultisigConstructorMessage(const QByteArray &deployerPublicKey,
+                                                    const QByteArray &deployerPrivateKey, uint8 requiredConfirmations,
+                                                    const std::vector<QByteArray> &owners) {
+  QVector<TLftabi_Value> packedOwners;
+  packedOwners.reserve(owners.size());
+  for (const auto &owner : owners) {
+    packedOwners.push_back(tl_ftabi_valueBigInt(tl_ftabi_paramUint(tl_int32(256)), tl_bytes(owner)));
+  }
+
+  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
+      MultisigConstructorFunction(),  //
+      tl_ftabi_functionCallExternalSigned(
+          tl_vector(QVector<TLftabi_namedValue>{
+              tl_ftabi_namedValue(tl_string("pubkey"), tl_ftabi_valuePublicKey(tl_ftabi_paramPublicKey(),
+                                                                               TLsecureString{
+                                                                                   .v = deployerPublicKey,
+                                                                               }))}),
+          tl_vector(QVector<TLftabi_Value>{
+              tl_ftabi_valueArray(tl_ftabi_paramArray(tl_ftabi_paramUint(tl_int32(256))),
+                                  tl_vector(packedOwners)),                                         // owners
+              tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(8)), tl_int64(requiredConfirmations)),  // reqConfirms
+          }),
+          TLsecureString{.v = deployerPrivateKey})));
+  if (!encodedBody.has_value()) {
+    return encodedBody.error();
+  }
+
+  return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
 }  // namespace Ton::details

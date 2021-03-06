@@ -118,10 +118,10 @@ struct AccountState {
   int64 restrictionStartAt = 0;
   TransactionId lastTransactionId;
   std::vector<RestrictionLimit> restrictionLimits;
+  bool isDeployed = false;
 };
 
 bool operator==(const AccountState &a, const AccountState &b);
-
 bool operator!=(const AccountState &a, const AccountState &b);
 
 struct RootTokenContractDetails {
@@ -235,6 +235,17 @@ struct DePoolOnRoundCompleteTransaction {
   uint8 reason{};
 };
 
+struct MultisigSubmitTransaction {
+  QString dest;
+  int64 amount;
+  int64 transactionId;
+  bool bounce;
+};
+
+struct MultisigConfirmTransaction {
+  int64 transactionId;
+};
+
 struct MessageData {
   QString text;
   QByteArray data;
@@ -340,6 +351,8 @@ struct MultisigState {
 
 bool operator==(const MultisigState &a, const MultisigState &b);
 bool operator!=(const MultisigState &a, const MultisigState &b);
+
+using MultisigStatesMap = std::map<QString, MultisigState>;
 
 struct TransactionToSend {
   int64 amount = 0;
@@ -484,7 +497,7 @@ struct WalletState {
   std::vector<PendingTransaction> pendingTransactions;
   std::map<Symbol, TokenStateValue> tokenStates;
   std::map<QString, DePoolParticipantState> dePoolParticipantStates;
-  std::map<QString, AccountState>;
+  std::map<QString, MultisigState> multisigStates;
   std::vector<AssetListItem> assetsList;
 };
 

@@ -40,6 +40,9 @@ class AccountViewers final : public base::has_weak_ptr {
   void addToken(const QString &account, TokenState &&tokenState);
   void removeToken(const QString &account, const Ton::Symbol &token);
 
+  void addMultisig(const QString &account, const QString &multisigAddress, MultisigState &&multisigState);
+  void removeMultisig(const QString &account, const QString &multisigAddress);
+
   void reorderAssets(const QString &account, int oldPosition, int newPosition);
 
   [[nodiscard]] rpl::producer<BlockchainTime> blockchainTime() const;
@@ -66,9 +69,8 @@ class AccountViewers final : public base::has_weak_ptr {
   void refreshFromDatabase(const QString &address, Viewers &viewers);
   void refreshAccount(const QString &address, Viewers &viewers);
   void checkPendingForSameState(const QString &address, Viewers &viewers,
-                                const CurrencyMap<TokenStateValue> &tokenStates,
-                                const std::map<QString, DePoolParticipantState> &dePoolStates,
-                                const AccountState &state);
+                                const CurrencyMap<TokenStateValue> &tokenStates, const DePoolStatesMap &dePoolStates,
+                                const MultisigStatesMap &multisigStates, const AccountState &state);
   void checkNextRefresh();
   Viewers *findRefreshingViewers(const QString &address);
   void finishRefreshing(Viewers &viewers, Result<> result = {});

@@ -31,7 +31,7 @@ rpl::producer<WalletViewerState> AccountViewer::state() const {
   return rpl::duplicate(_state);
 }
 
-rpl::producer<Result<std::pair<Symbol, LoadedSlice>>> AccountViewer::loaded() const {
+rpl::producer<Result<std::pair<LoadedSliceKey, LoadedSlice>>> AccountViewer::loaded() const {
   return _loadedResults.events();
 }
 
@@ -72,12 +72,29 @@ void AccountViewer::preloadSlice(const TransactionId &lastId) {
         return;
       }
       _preloadIds.remove(lastId);
-      _loadedResults.fire(
-          std::make_pair(Ton::Symbol::ton(), LoadedSlice{lastId, TransactionsSlice{std::move(*result), previousId}}));
+      _loadedResults.fire(std::make_pair(std::make_pair(Ton::Symbol::ton(), QString{}),
+                                         LoadedSlice{lastId, TransactionsSlice{std::move(*result), previousId}}));
     };
     _wallet->trySilentDecrypt(_publicKey, std::move(result->list), done);
   };
   _wallet->requestTransactions(_address, lastId, crl::guard(this, done));
+}
+
+void AccountViewer::preloadAccountSlice(const QString &address, const TransactionId &lastId) {
+  if (_preloadIds.contains(lastId)) {
+    return;
+  }
+  _preloadIds.emplace(lastId);
+  const auto done = [=](Result<TransactionsSlice> result) {
+    if (!result) {
+      _loadedResults.fire(std::move(result.error()));
+      return;
+    }
+    _preloadIds.remove(lastId);
+    _loadedResults.fire(
+        std::make_pair(std::make_pair(Ton::Symbol::ton(), address), LoadedSlice{lastId, std::move(result.value())}));
+  };
+  _wallet->requestTransactions(address, lastId, crl::guard(this, done));
 }
 
 void AccountViewer::preloadTokenSlice(const Symbol &symbol, const QString &tokenWalletAddress,
@@ -92,7 +109,8 @@ void AccountViewer::preloadTokenSlice(const Symbol &symbol, const QString &token
       return;
     }
     _preloadIds.remove(lastId);
-    _loadedResults.fire(std::make_pair(symbol, LoadedSlice{lastId, std::move(result.value())}));
+    _loadedResults.fire(
+        std::make_pair(std::make_pair(symbol, QString{}), LoadedSlice{lastId, std::move(result.value())}));
   };
   _wallet->requestTransactions(tokenWalletAddress, lastId, crl::guard(this, done));
 }

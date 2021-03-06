@@ -57,6 +57,11 @@ struct NamedDePoolState {
   DePoolParticipantState state;
 };
 
+struct NamedMultisigState {
+  QString address;
+  MultisigState state;
+};
+
 TLstorage_Bool Serialize(const bool &data);
 bool Deserialize(const TLstorage_Bool &data);
 TLstorage_WalletEntry Serialize(const WalletList::Entry &data);
@@ -83,6 +88,8 @@ TLstorage_TokenState Serialize(const TokenState &data);
 TokenState Deserialize(const TLstorage_TokenState &data);
 TLstorage_DePoolState Serialize(const NamedDePoolState &data);
 NamedDePoolState Deserialize(const TLstorage_DePoolState &data);
+TLstorage_MultisigState Serialize(const NamedMultisigState &data);
+NamedMultisigState Deserialize(const TLstorage_MultisigState &data);
 TLstorage_AssetsListItem Serialize(const AssetListItem &data);
 AssetListItem Deserialize(const TLstorage_AssetsListItem &data);
 TLstorage_WalletState Serialize(const WalletState &data);
@@ -421,6 +428,22 @@ NamedDePoolState Deserialize(const TLstorage_DePoolState &data) {
   });
 }
 
+TLstorage_MultisigState Serialize(const NamedMultisigState &data) {
+  return make_storage_multisigState(tl_string(data.address), Serialize(data.state.accountState),
+                                    Serialize(data.state.lastTransactions));
+}
+
+NamedMultisigState Deserialize(const TLstorage_MultisigState &data) {
+  return data.match([&](const TLDstorage_multisigState &data) {
+    auto address = QString::fromUtf8(data.vaddress().v);
+    auto state = MultisigState{
+        .accountState = Deserialize(data.vstate()),
+        .lastTransactions = Deserialize(data.vlastTransactions()),
+    };
+    return NamedMultisigState{std::move(address), std::move(state)};
+  });
+}
+
 TLstorage_AssetsListItem Serialize(const AssetListItem &data) {
   return v::match(
       data, [](const AssetListItemWallet &) { return make_storage_assetsListMain(); },
@@ -428,7 +451,8 @@ TLstorage_AssetsListItem Serialize(const AssetListItem &data) {
         return make_storage_assetsListToken(tl_string(item.symbol.name()), tl_int32(item.symbol.decimals()),
                                             tl_string(item.symbol.rootContractAddress()));
       },
-      [](const AssetListItemDePool &item) { return make_storage_assetsListDePool(tl_string(item.address)); });
+      [](const AssetListItemDePool &item) { return make_storage_assetsListDePool(tl_string(item.address)); },
+      [](const AssetListItemMultisig &item) { return make_storage_assetsListMultisig(tl_string(item.address)); });
 }
 
 AssetListItem Deserialize(const TLstorage_AssetsListItem &data) {
@@ -439,6 +463,9 @@ AssetListItem Deserialize(const TLstorage_AssetsListItem &data) {
                     },
                     [](const TLDstorage_assetsListDePool &data) -> AssetListItem {
                       return AssetListItemDePool{.address = tl::utf8(data.vaddress().v)};
+                    },
+                    [](const TLDstorage_assetsListMultisig &data) -> AssetListItem {
+                      return AssetListItemMultisig{.address = tl::utf8(data.vaddress().v)};
                     });
 }
 
@@ -455,9 +482,15 @@ TLstorage_WalletState Serialize(const WalletState &data) {
     depoolStates.emplace_back(NamedDePoolState{address, state});
   }
 
+  std::vector<NamedMultisigState> multisigStates;
+  multisigStates.reserve(data.multisigStates.size());
+  for (const auto &[address, state] : data.multisigStates) {
+    multisigStates.emplace_back(NamedMultisigState{address, state});
+  }
+
   return make_storage_walletState(tl_string(data.address), Serialize(data.account), Serialize(data.lastTransactions),
                                   Serialize(data.pendingTransactions), Serialize(tokenStates), Serialize(depoolStates),
-                                  Serialize(data.assetsList));
+                                  Serialize(multisigStates), Serialize(data.assetsList));
 }
 
 WalletState Deserialize(const TLstorage_WalletState &data) {
@@ -472,9 +505,17 @@ WalletState Deserialize(const TLstorage_WalletState &data) {
     }
 
     auto storedDePoolStates = Deserialize(data.vdePoolStates());
-    std::map<QString, DePoolParticipantState> depoolStates;
-    for (auto &item : storedDePoolStates) {
-      depoolStates.emplace(item.address, item.state);
+    DePoolStatesMap depoolStates;
+    for (auto &&[address, state] : storedDePoolStates) {
+      depoolStates.emplace(std::piecewise_construct, std::forward_as_tuple(std::move(address)),
+                           std::forward_as_tuple(std::move(state)));
+    }
+
+    auto storedMultisigStates = Deserialize(data.vmultisigStates());
+    MultisigStatesMap multisigStates;
+    for (auto &&[address, state] : storedMultisigStates) {
+      multisigStates.emplace(std::piecewise_construct, std::forward_as_tuple(std::move(address)),
+                             std::forward_as_tuple(std::move(state)));
     }
 
     auto assetsList = Deserialize(data.vassetsList());
@@ -488,6 +529,7 @@ WalletState Deserialize(const TLstorage_WalletState &data) {
                        .pendingTransactions = Deserialize(data.vpendingTransactions()),
                        .tokenStates = std::move(tokenStates),
                        .dePoolParticipantStates = std::move(depoolStates),
+                       .multisigStates = std::move(multisigStates),
                        .assetsList = std::move(assetsList)};
   });
 }

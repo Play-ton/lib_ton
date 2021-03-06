@@ -80,6 +80,9 @@ AccountState Parse(const TLFullAccountState &data) {
           });
         },
         [](const auto &data) {});
+
+    result.isDeployed = data.vaccount_state().type() != id_uninited_accountState;
+
     return result;
   });
 }

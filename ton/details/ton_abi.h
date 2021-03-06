@@ -112,6 +112,8 @@ bool IsCell(const TLftabi_Value &value);
 [[nodiscard]] TLftabi_Function DePoolOnRoundCompleteFunction();
 [[nodiscard]] TLftabi_Function DePoolParticipantInfoFunction(int32 dePoolVersion);
 
+[[nodiscard]] TLftabi_Function MultisigConstructorFunction();
+
 [[nodiscard]] std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body);
 [[nodiscard]] std::optional<TokenTransfer> ParseTokenTransferToOwner(const QByteArray &body);
 [[nodiscard]] std::optional<TokenTransfer> ParseInternalTokenTransfer(const QByteArray &body);
@@ -151,9 +153,13 @@ bool IsCell(const TLftabi_Value &value);
 
 struct GeneratedInitData {
   QByteArray hash;
-  QByteArray initState;
+  QByteArray data;
 };
 
 [[nodiscard]] Result<GeneratedInitData> CreateMultisigInitData(QByteArray publicKey);
+[[nodiscard]] Result<QByteArray> CreateMultisigConstructorMessage(const QByteArray &deployerPublicKey,
+                                                                  const QByteArray &deployerPrivateKey,
+                                                                  uint8 requiredConfirmations,
+                                                                  const std::vector<QByteArray> &owners);
 
 }  // namespace Ton::details

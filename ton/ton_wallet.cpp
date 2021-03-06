@@ -76,6 +76,31 @@ std::optional<int32> GuessDePoolVersion(const QByteArray &codeHash) {
   return std::nullopt;
 }
 
+enum class MultisigVersion {
+  SafeMultisig,
+  SafeMultisig24h,
+  SetcodeMultisig,
+  Surf,
+};
+
+std::optional<MultisigVersion> GuessMultisigVersion(const QByteArray &codeHash) {
+  static const std::map<QByteArray, MultisigVersion> codeHashes = {
+      {QByteArray::fromHex("80d6c47c4a25543c9b397b71716f3fae1e2c5d247174c52e2c19bd896442b105"),  //
+       MultisigVersion::SafeMultisig},
+      {QByteArray::fromHex("7d0996943406f7d62a4ff291b1228bf06ebd3e048b58436c5b70fb77ff8b4bf2"),  //
+       MultisigVersion::SafeMultisig24h},
+      {QByteArray::fromHex("e2b60b6b602c10ced7ea8ede4bdf96342c97570a3798066f3fb50a4b2b27a208"),  //
+       MultisigVersion::SetcodeMultisig},
+      {QByteArray::fromHex("207dc560c5956de1a2c1479356f8f3ee70a59767db2bf4788b1d61ad42cdad82"),  //
+       MultisigVersion::Surf},
+  };
+  const auto it = codeHashes.find(codeHash);
+  if (it == codeHashes.end()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
 }  // namespace
 
 namespace details {
@@ -594,16 +619,12 @@ void Wallet::checkSubmitTransaction(const QByteArray &publicKey, const SubmitTra
                                     const Callback<TransactionCheckResult> &done) {
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
-
-
 }
 
 void Wallet::checkConfirmTransaction(const QByteArray &publicKey, const ConfirmTransactionToSend &transaction,
                                      const Callback<TransactionCheckResult> &done) {
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
-
-
 }
 
 void Wallet::sendGrams(const QByteArray &publicKey, const QByteArray &password, const TransactionToSend &transaction,
@@ -944,6 +965,47 @@ void Wallet::removeToken(const QByteArray &publicKey, const Symbol &token) {
   _accountViewers->removeToken(getUsedAddress(publicKey), token);
 }
 
+void Wallet::addMultisig(const QByteArray &publicKey, const QString &multisigAddress, const Callback<> &done) {
+  const auto account = getUsedAddress(publicKey);
+  const auto packedMultisigAddress = ConvertIntoPacked(multisigAddress);
+
+  _external->lib()
+      .request(TLGetAccountState(tl_accountAddress(tl_string(packedMultisigAddress))))
+      .done([this, done, account, packedMultisigAddress](const TLFullAccountState &result) {
+        const auto &codeHash = result.c_fullAccountState().vcode_hash().v;
+        const auto multisigVersion = GuessMultisigVersion(codeHash);
+
+        if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState ||
+            !multisigVersion.has_value()) {
+          return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a multisig"});
+        }
+
+        auto accountState = Parse(result);
+        const auto lastTransactionId = accountState.lastTransactionId;
+
+        requestTransactions(        //
+            packedMultisigAddress,  //
+            lastTransactionId,      //
+            [=, accountState = std::move(accountState)](Result<TransactionsSlice> lastTransactions) mutable {
+              if (!lastTransactions.has_value()) {
+                return InvokeCallback(done, lastTransactions.error());
+              }
+              _accountViewers->addMultisig(account, packedMultisigAddress,
+                                           MultisigState{
+                                               .accountState = std::move(accountState),
+                                               .lastTransactions = std::move(*lastTransactions),
+                                           });
+              InvokeCallback(done);
+            });
+      })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
+}
+
+void Wallet::removeMultisig(const QByteArray &publicKey, const QString &multisigAddress) {
+  _accountViewers->removeMultisig(getUsedAddress(publicKey), multisigAddress);
+}
+
 void Wallet::reorderAssets(const QByteArray &publicKey, int oldPosition, int newPosition) {
   _accountViewers->reorderAssets(getUsedAddress(publicKey), oldPosition, newPosition);
 }
@@ -1161,6 +1223,73 @@ void Wallet::requestDePoolParticipantInfo(const QByteArray &publicKey, const DeP
           ctx->notifySuccess(address, std::move(previousState));
         })
         .send();
+  }
+}
+
+void Wallet::requestMultisigStates(const MultisigStatesMap &previousStates, const Callback<MultisigStatesMap> &done) {
+  if (previousStates.empty()) {
+    return InvokeCallback(done, MultisigStatesMap{});
+  }
+
+  struct StateContext {
+    explicit StateContext(const MultisigStatesMap &multisigs, const Callback<MultisigStatesMap> &done) : done{done} {
+      for (const auto &item : multisigs) {
+        requestedMultisigs.emplace(item.first);
+      }
+    }
+
+    void notifySuccess(const QString &address, MultisigState &&state) {
+      std::unique_lock lock{mutex};
+      result.insert(std::make_pair(address, state));
+      checkComplete(address);
+    }
+
+    void notifyError(const QString &address) {
+      std::unique_lock lock{mutex};
+      checkComplete(address);
+    }
+
+    void checkComplete(const QString &address) {
+      requestedMultisigs.erase(address);
+      if (requestedMultisigs.empty()) {
+        InvokeCallback(done, std::move(result));
+      }
+    }
+
+    std::unordered_set<QString> requestedMultisigs{};
+    MultisigStatesMap result;
+    Callback<MultisigStatesMap> done;
+    std::shared_mutex mutex;
+  };
+
+  std::shared_ptr<StateContext> ctx{new StateContext{previousStates, done}};
+
+  for (const auto &[address, previousState] : previousStates) {
+    requestState(
+        address, [=, address = address, previousState = previousState](Result<AccountState> accountState) mutable {
+          if (!accountState.has_value()) {
+            return ctx->notifySuccess(address, std::move(previousState));
+          }
+
+          if (previousState.accountState.lastTransactionId == accountState->lastTransactionId) {
+            ctx->notifySuccess(address, MultisigState{
+                                            .accountState = std::move(accountState.value()),
+                                            .lastTransactions = previousState.lastTransactions,
+                                        });
+          } else {
+            requestTransactions(
+                address, accountState->lastTransactionId,
+                [=, accountState = std::move(*accountState)](Result<TransactionsSlice> lastTransactions) mutable {
+                  if (!lastTransactions.has_value()) {
+                    return ctx->notifySuccess(address, std::move(previousState));
+                  }
+                  ctx->notifySuccess(address, MultisigState{
+                                                  .accountState = std::move(accountState),
+                                                  .lastTransactions = std::move(lastTransactions.value()),
+                                              });
+                });
+          }
+        });
   }
 }
 
