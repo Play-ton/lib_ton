@@ -602,6 +602,91 @@ TLftabi_Function MultisigConstructorFunction() {
   return *function;
 }
 
+TLftabi_Function MultisigSubmitTransactionFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("submitTransaction"), ExtendedHeaders(),
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramAddress(),            // dest,
+            tl_ftabi_paramUint(tl_int32(128)),  // value
+            tl_ftabi_paramBool(),               // bounce
+            tl_ftabi_paramBool(),               // allBalance
+            tl_ftabi_paramCell(),               // payload
+        }),
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(64)),  // transactionId
+        })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function MultisigConfirmTransactionFunction() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("confirmTransaction"), ExtendedHeaders(),
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(64)),  // transactionId
+        }),
+        {}));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function MultisigGetParameters() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("getParameters"), ExtendedHeaders(), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramUint(tl_int32(8)),    // maxQueuedTransactions
+            tl_ftabi_paramUint(tl_int32(8)),    // maxCustodianCount
+            tl_ftabi_paramUint(tl_int32(64)),   // expirationTime
+            tl_ftabi_paramUint(tl_int32(128)),  // minValue
+            tl_ftabi_paramUint(tl_int32(8)),    // requiredTxnConfirms
+        })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function MultisigGetTransactionIds() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("getTransactionIds"), ExtendedHeaders(), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramArray(tl_ftabi_paramUint(tl_int32(64))),  // ids
+        })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
+TLftabi_Function MultisigGetCustodians() {
+  static std::optional<TLftabi_function> function;
+  if (!function.has_value()) {
+    const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
+        tl_string("getCustodians"), ExtendedHeaders(), {},
+        tl_vector(QVector<TLftabi_Param>{
+            tl_ftabi_paramArray(tl_ftabi_paramTuple(tl_vector(QVector<TLftabi_Param>{
+                tl_ftabi_paramUint(tl_int32(8)),    // index
+                tl_ftabi_paramUint(tl_int32(256)),  // pubkey
+            }))),
+        })));
+    Expects(createdFunction.has_value());
+    function = createdFunction.value();
+  }
+  return *function;
+}
+
 std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
   const auto decodedTransferInput =
       RequestSender::Execute(TLftabi_DecodeInput(TokenTransferFunction(), tl_bytes(body), tl_boolTrue()));

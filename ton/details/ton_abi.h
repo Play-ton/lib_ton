@@ -113,6 +113,11 @@ bool IsCell(const TLftabi_Value &value);
 [[nodiscard]] TLftabi_Function DePoolParticipantInfoFunction(int32 dePoolVersion);
 
 [[nodiscard]] TLftabi_Function MultisigConstructorFunction();
+[[nodiscard]] TLftabi_Function MultisigSubmitTransactionFunction();
+[[nodiscard]] TLftabi_Function MultisigConfirmTransactionFunction();
+[[nodiscard]] TLftabi_Function MultisigGetParameters();
+[[nodiscard]] TLftabi_Function MultisigGetTransactionIds();
+[[nodiscard]] TLftabi_Function MultisigGetCustodians();
 
 [[nodiscard]] std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body);
 [[nodiscard]] std::optional<TokenTransfer> ParseTokenTransferToOwner(const QByteArray &body);
@@ -161,5 +166,12 @@ struct GeneratedInitData {
                                                                   const QByteArray &deployerPrivateKey,
                                                                   uint8 requiredConfirmations,
                                                                   const std::vector<QByteArray> &owners);
+[[nodiscard]] TLftabi_Function CreateMultisigSubmitTransactionMessage(const QByteArray &publicKey,
+                                                                      const QByteArray &privateKey, const QString &dest,
+                                                                      int64 value, bool bounce,
+                                                                      const QByteArray &payload);
+[[nodiscard]] TLftabi_Function CreateMultisigConfirmTransactionMessage(const QByteArray &publicKey,
+                                                                       const QByteArray &privateKey,
+                                                                       int64 transactionId);
 
 }  // namespace Ton::details
