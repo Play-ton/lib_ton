@@ -32,7 +32,7 @@ class RequestSender final : public base::has_weak_ptr {
     RequestBuilder(RequestBuilder &&other) = default;
 
     void setDoneOnMainHandler(FnMut<void()> &&handler) noexcept;
-    void setFailOnMainHandler(FnMut<void(const TLError &)> &&handler) noexcept;
+    void setFailOnMainHandler(FnMut<void(TLError &&)> &&handler) noexcept;
     void setFailOnMainHandler(FnMut<void()> &&handler) noexcept;
     void setDoneHandler(FnMut<void()> &&handler) noexcept;
     void setFailHandler(FnMut<void(const TLError &)> &&handler) noexcept;
@@ -69,8 +69,10 @@ class RequestSender final : public base::has_weak_ptr {
         using Function = typename FPointer::element_type;
         using RPointer = typename Function::ReturnType;
         using ReturnType = typename RPointer::element_type;
-        crl::on_main(guard, [callback = std::move(callback), result = tl_from(tonlib_api::move_object_as<ReturnType>(
-                                                                 std::move(result)))]() mutable { callback(std::move(result)); });
+        crl::on_main(guard, [callback = std::move(callback),
+                             result = tl_from(tonlib_api::move_object_as<ReturnType>(std::move(result)))]() mutable {
+          callback(std::move(result));
+        });
       });
       return *this;
     }
@@ -78,7 +80,7 @@ class RequestSender final : public base::has_weak_ptr {
       setFailOnMainHandler(std::move(callback));
       return *this;
     }
-    [[nodiscard]] SpecificRequestBuilder &fail(FnMut<void(const TLError &error)> callback) noexcept {
+    [[nodiscard]] SpecificRequestBuilder &fail(FnMut<void(TLError &&error)> callback) noexcept {
       setFailOnMainHandler(std::move(callback));
       return *this;
     }

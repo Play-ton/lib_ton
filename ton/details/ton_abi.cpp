@@ -8,6 +8,26 @@ namespace Ton::details {
 
 constexpr auto kEthereumAddressByteCount = 20;
 
+void CreateInternalMessageBody(RequestSender &lib, const TLftabi_Function &function, QVector<TLftabi_Value> &&inputs,
+                               const MessageBodyCallback &done) {
+  lib.request(TLftabi_CreateMessageBody(function, tl_ftabi_functionCallInternal(
+                                                      tl_vector(std::forward<std::decay_t<decltype(inputs)>>(inputs)))))
+      .done([done](TLftabi_MessageBody &&response) { InvokeCallback(done, response.c_ftabi_messageBody().vdata().v); })
+      .fail([done](TLError &&error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
+}
+
+void CreateExternalSignedMessageBody(RequestSender &lib, const TLftabi_Function &function,
+                                     QVector<TLftabi_Value> &&inputs, const TLInputKey &inputKey,
+                                     const MessageBodyCallback &done) {
+  lib.request(TLftabi_CreateMessageBody(
+                  function, tl_ftabi_functionCallExternalSigned(
+                                {}, tl_vector(std::forward<std::decay_t<decltype(inputs)>>(inputs)), inputKey)))
+      .done([done](TLftabi_MessageBody &&response) { InvokeCallback(done, response.c_ftabi_messageBody().vdata().v); })
+      .fail([done](TLError &&error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
+}
+
 [[nodiscard]] TLftabi_Value PackPubKey() {
   return tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0));
 }
@@ -33,6 +53,10 @@ constexpr auto kEthereumAddressByteCount = 20;
   return tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(128)), tl_int64(0));
 }
 
+[[nodiscard]] TLftabi_Value PackUint64(int64 value) {
+  return tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(64)), tl_int64(value));
+}
+
 [[nodiscard]] int64 UnpackUint(const TLftabi_Value &value) {
   return value.c_ftabi_valueInt().vvalue().v;
 }
@@ -47,6 +71,10 @@ constexpr auto kEthereumAddressByteCount = 20;
 
 [[nodiscard]] TLftabi_Value PackCell(const TLtvm_Cell &value) {
   return tl_ftabi_valueCell(tl_ftabi_paramCell(), value);
+}
+
+[[nodiscard]] TLftabi_Value PackBool(bool value) {
+  return tl_ftabi_valueBool(tl_ftabi_paramBool(), value ? tl_boolTrue() : tl_boolFalse());
 }
 
 [[nodiscard]] bool UnpackBool(const TLftabi_Value &value) {
@@ -965,36 +993,30 @@ std::optional<TokenWalletContractDetails> ParseTokenWalletContractDetails(const 
   };
 }
 
-Result<QByteArray> CreateTokenMessage(const QString &recipient, const int128 &amount) {
-  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-      TokenTransferFunction(), tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-                                                                     PackAddress(recipient),  // to
-                                                                     PackUint128(amount),     // amount
-                                                                     PackUint128(),           // grams
-                                                                 }))));
-  if (!encodedBody.has_value()) {
-    return encodedBody.error();
-  }
-
-  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+void CreateTokenMessage(RequestSender &lib, const QString &recipient, const int128 &amount,
+                        const MessageBodyCallback &done) {
+  CreateInternalMessageBody(  //
+      lib, TokenTransferFunction(),
+      {
+          PackAddress(recipient),  // to
+          PackUint128(amount),     // amount
+          PackUint128(),           // grams
+      },
+      done);
 }
 
-Result<QByteArray> CreateTokenTransferToOwnerMessage(const QString &recipient, const int128 &amount,
-                                                     int64 deployGrams) {
-  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(  //
-      TokenTransferToOwnerFunction(),
-      tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-                                            PackPubKey(),              // recipient_public_key
-                                            PackAddress(recipient),    // recipient_address
-                                            PackUint128(amount),       // tokens
-                                            PackUint128(deployGrams),  // deploy_grams
-                                            PackUint128(),             // transfer_grams
-                                        }))));
-  if (!encodedBody.has_value()) {
-    return encodedBody.error();
-  }
-
-  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+void CreateTokenTransferToOwnerMessage(RequestSender &lib, const QString &recipient, const int128 &amount,
+                                       int64 deployGrams, const MessageBodyCallback &done) {
+  CreateInternalMessageBody(  //
+      lib, TokenTransferToOwnerFunction(),
+      {
+          PackPubKey(),              // recipient_public_key
+          PackAddress(recipient),    // recipient_address
+          PackUint128(amount),       // tokens
+          PackUint128(deployGrams),  // deploy_grams
+          PackUint128(),             // transfer_grams
+      },
+      done);
 }
 
 std::optional<QByteArray> ParseEthereumAddress(const QString &ethereumAddress) {
@@ -1009,101 +1031,71 @@ std::optional<QByteArray> ParseEthereumAddress(const QString &ethereumAddress) {
   return targetBytes;
 }
 
-Result<QByteArray> CreateSwapBackMessage(QByteArray ethereumAddress, const QString &callback_address,
-                                         const int128 &amount) {
+void CreateSwapBackMessage(RequestSender &lib, QByteArray ethereumAddress, const QString &callback_address,
+                           const int128 &amount, const MessageBodyCallback &done) {
   Expects(ethereumAddress.size() == kEthereumAddressByteCount);
   ethereumAddress.prepend(32 - kEthereumAddressByteCount, 0);
 
   auto callback_payload = RequestSender::Execute(TLftabi_PackIntoCell(tl_vector(
       QVector<TLftabi_Value>{tl_ftabi_valueBigInt(tl_ftabi_paramUint(tl_int32(160)), tl_bytes(ethereumAddress))})));
   if (!callback_payload.has_value()) {
-    return callback_payload.error();
+    return InvokeCallback(done, callback_payload.error());
   }
 
-  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-      TokenSwapBackFunction(),  //
-      tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-                                            PackUint128(amount),                 // tokens
-                                            PackUint128(),                       // grams
-                                            PackAddress(callback_address),       // callback_address
-                                            PackCell(callback_payload.value()),  // callback_payload
-                                        }))));
-  if (!encodedBody.has_value()) {
-    return encodedBody.error();
-  }
-
-  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+  CreateInternalMessageBody(  //
+      lib, TokenSwapBackFunction(),
+      {
+          PackUint128(amount),                 // tokens
+          PackUint128(),                       // grams
+          PackAddress(callback_address),       // callback_address
+          PackCell(callback_payload.value()),  // callback_payload
+      },
+      done);
 }
 
-Result<QByteArray> CreateStakeMessage(int64 stake) {
-  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-      OrdinaryStakeFunction(), tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-                                                                     tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(64)),
-                                                                                       tl_int64(stake)),  // stake
-                                                                 }))));
-  if (!encodedBody.has_value()) {
-    return encodedBody.error();
-  }
-
-  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+void CreateStakeMessage(RequestSender &lib, int64 stake, const MessageBodyCallback &done) {
+  CreateInternalMessageBody(  //
+      lib, OrdinaryStakeFunction(),
+      {
+          tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(64)),
+                            tl_int64(stake)),  // stake
+      },
+      done);
 }
 
-Result<QByteArray> CreateWithdrawalMessage(int64 amount, bool all) {
-  TLftabi_Function function{};
-  TLftabi_FunctionCall functionCall{};
+void CreateWithdrawalMessage(RequestSender &lib, int64 amount, bool all, const MessageBodyCallback &done) {
   if (all) {
-    function = DePoolWithdrawAllFunction();
-    functionCall = tl_ftabi_functionCallInternal({}, {});
+    CreateInternalMessageBody(lib, DePoolWithdrawAllFunction(), {}, done);
   } else {
-    function = DePoolWithdrawPartFunction();
-    functionCall = tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-                                                         tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(64)),
-                                                                           tl_int64(amount)),  // withdrawValue
-                                                     }));
+    CreateInternalMessageBody(  //
+        lib, DePoolWithdrawPartFunction(),
+        {
+            tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(64)),
+                              tl_int64(amount)),  // withdrawValue
+        },
+        done);
   }
-  const auto encodedBody =
-      RequestSender::Execute(TLftabi_CreateMessageBody(std::move(function), std::move(functionCall)));
-  if (!encodedBody.has_value()) {
-    return encodedBody.error();
-  }
-
-  return encodedBody.value().c_ftabi_messageBody().vdata().v;
 }
 
-Result<QByteArray> CreateCancelWithdrawalMessage() {
-  const auto encodedBody = RequestSender::Execute(
-      TLftabi_CreateMessageBody(DePoolCancelWithdrawalFunction(), tl_ftabi_functionCallInternal({}, {})));
-  if (!encodedBody.has_value()) {
-    return encodedBody.error();
-  }
-
-  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+void CreateCancelWithdrawalMessage(RequestSender &lib, const MessageBodyCallback &done) {
+  CreateInternalMessageBody(lib, DePoolCancelWithdrawalFunction(), {}, done);
 }
 
-Result<QByteArray> CreateTokenWalletDeployMessage(int64 grams, const QString &owner) {
-  const auto encodedBody = RequestSender::Execute(
-      TLftabi_CreateMessageBody(RootTokenDeployWalletFunction(),  //
-                                tl_ftabi_functionCallInternal({}, tl_vector(QVector<TLftabi_Value>{
-                                                                      PackUint128(grams),
-                                                                      PackPubKey(),
-                                                                      PackAddress(owner),
-                                                                      PackAddress(owner),
-                                                                  }))));
-  if (!encodedBody.has_value()) {
-    return encodedBody.error();
-  }
-
-  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+void CreateTokenWalletDeployMessage(RequestSender &lib, int64 grams, const QString &owner,
+                                    const MessageBodyCallback &done) {
+  CreateInternalMessageBody(  //
+      lib, RootTokenDeployWalletFunction(),
+      {
+          PackUint128(grams),
+          PackPubKey(),
+          PackAddress(owner),
+          PackAddress(owner),
+      },
+      done);
 }
 
-Result<QByteArray> CreateExecuteProxyCallbackMessage() {
-  static auto encodedBody = RequestSender::Execute(
-      TLftabi_CreateMessageBody(ExecuteProxyCallbackFunction(), tl_ftabi_functionCallInternal({}, {})));
-  if (!encodedBody.has_value()) {
-    return encodedBody.error();
-  }
-
-  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+void CreateExecuteProxyCallbackMessage(RequestSender &lib, const MessageBodyCallback &done) {
+  CreateInternalMessageBody(lib, ExecuteProxyCallbackFunction(), {}, done);
 }
 
 template <typename T, size_t N>
@@ -1126,34 +1118,46 @@ Result<GeneratedInitData> CreateMultisigInitData(const QByteArray &publicKey) {
   };
 }
 
-Result<QByteArray> CreateMultisigConstructorMessage(const QByteArray &deployerPublicKey,
-                                                    const QByteArray &deployerPrivateKey, uint8 requiredConfirmations,
-                                                    const std::vector<QByteArray> &owners) {
+void CreateMultisigConstructorMessage(RequestSender &lib, const TLInputKey &deployerKey, uint8 requiredConfirmations,
+                                      const std::vector<QByteArray> &owners, const MessageBodyCallback &done) {
   QVector<TLftabi_Value> packedOwners;
   packedOwners.reserve(owners.size());
   for (const auto &owner : owners) {
     packedOwners.push_back(tl_ftabi_valueBigInt(tl_ftabi_paramUint(tl_int32(256)), tl_bytes(owner)));
   }
 
-  const auto encodedBody = RequestSender::Execute(TLftabi_CreateMessageBody(
-      MultisigConstructorFunction(),  //
-      tl_ftabi_functionCallExternalSigned(
-          tl_vector(QVector<TLftabi_namedValue>{
-              tl_ftabi_namedValue(tl_string("pubkey"), tl_ftabi_valuePublicKey(tl_ftabi_paramPublicKey(),
-                                                                               TLsecureString{
-                                                                                   .v = deployerPublicKey,
-                                                                               }))}),
-          tl_vector(QVector<TLftabi_Value>{
-              tl_ftabi_valueArray(tl_ftabi_paramArray(tl_ftabi_paramUint(tl_int32(256))),
-                                  tl_vector(packedOwners)),                                         // owners
-              tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(8)), tl_int64(requiredConfirmations)),  // reqConfirms
-          }),
-          TLsecureString{.v = deployerPrivateKey})));
-  if (!encodedBody.has_value()) {
-    return encodedBody.error();
-  }
+  CreateExternalSignedMessageBody(  //
+      lib, MultisigConstructorFunction(),
+      {
+          tl_ftabi_valueArray(tl_ftabi_paramArray(tl_ftabi_paramUint(tl_int32(256))),
+                              tl_vector(packedOwners)),                                         // owners
+          tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(8)), tl_int64(requiredConfirmations)),  // reqConfirms
+      },
+      deployerKey, done);
+}
 
-  return encodedBody.value().c_ftabi_messageBody().vdata().v;
+void CreateMultisigSubmitTransactionMessage(RequestSender &lib, const TLInputKey &key, const QString &dest, int64 value,
+                                            bool bounce, const QByteArray &payload, const MessageBodyCallback &done) {
+  CreateExternalSignedMessageBody(  //
+      lib, MultisigSubmitTransactionFunction(),
+      {
+          PackAddress(dest),                         // dest
+          PackUint128(value),                        // value
+          PackBool(bounce),                          // bounce
+          PackBool(false),                           // allBalance
+          PackCell(tl_tvm_cell(tl_bytes(payload))),  // payload
+      },
+      key, done);
+}
+
+void CreateMultisigConfirmTransactionMessage(RequestSender &lib, const TLInputKey &key, int64 transactionId,
+                                             const MessageBodyCallback &done) {
+  CreateExternalSignedMessageBody(  //
+      lib, MultisigConfirmTransactionFunction(),
+      {
+          PackUint64(transactionId),  // transactionId
+      },
+      key, done);
 }
 
 }  // namespace Ton::details

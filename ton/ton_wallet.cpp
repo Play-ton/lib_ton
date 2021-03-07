@@ -440,18 +440,23 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
     if (!ethereumAddress.has_value()) {
       return InvokeCallback(done, std::make_pair(TransactionCheckResult{}, InvalidEthAddress{}));
     }
-    auto body = CreateSwapBackMessage(*ethereumAddress, transaction.callbackAddress, transaction.amount);
-    if (!body.has_value()) {
-      return InvokeCallback(done, body.error());
-    }
-    return checkTransactionFees(  //
-        sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-        TokenTransactionToSend::realAmount, transaction.timeout, false, [=](Result<TransactionCheckResult> &&result) {
-          if (result.has_value()) {
-            InvokeCallback(done, std::make_pair(std::move(result.value()), TokenTransferUnchanged{}));
-          } else {
-            InvokeCallback(done, result.error());
+
+    return CreateSwapBackMessage(
+        _external->lib(), *ethereumAddress, transaction.callbackAddress, transaction.amount,
+        [=](Result<QByteArray> &&body) {
+          if (!body.has_value()) {
+            return InvokeCallback(done, body.error());
           }
+          return checkTransactionFees(  //
+              sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+              TokenTransactionToSend::realAmount, transaction.timeout, false,
+              [=](Result<TransactionCheckResult> &&result) {
+                if (result.has_value()) {
+                  InvokeCallback(done, std::make_pair(std::move(result.value()), TokenTransferUnchanged{}));
+                } else {
+                  InvokeCallback(done, result.error());
+                }
+              });
         });
   }
 
@@ -464,38 +469,42 @@ void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransaction
           if (isUninit && transaction.tokenTransferType == TokenTransferType::Direct) {
             InvokeCallback(done, std::make_pair(TransactionCheckResult{}, DirectAccountNotFound{}));
           } else if (isUninit) {
-            auto body = CreateTokenTransferToOwnerMessage(transaction.recipient, transaction.amount,
-                                                          TokenTransactionToSend::initialBalance);
-            if (!body.has_value()) {
-              return InvokeCallback(done, body.error());
-            }
-            checkTransactionFees(  //
-                sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                TokenTransactionToSend::realAmount, transaction.timeout, false,
-                [=](Result<TransactionCheckResult> result) {
-                  if (result.has_value()) {
-                    InvokeCallback(done, std::make_pair(std::move(result.value()), TokenTransferUnchanged{}));
-                  } else {
-                    InvokeCallback(done, result.error());
+            CreateTokenTransferToOwnerMessage(
+                _external->lib(), transaction.recipient, transaction.amount, TokenTransactionToSend::initialBalance,
+                [=](const Result<QByteArray> &body) {
+                  if (!body.has_value()) {
+                    return InvokeCallback(done, body.error());
                   }
+                  checkTransactionFees(  //
+                      sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                      TokenTransactionToSend::realAmount, transaction.timeout, false,
+                      [=](Result<TransactionCheckResult> result) {
+                        if (result.has_value()) {
+                          InvokeCallback(done, std::make_pair(std::move(result.value()), TokenTransferUnchanged{}));
+                        } else {
+                          InvokeCallback(done, result.error());
+                        }
+                      });
                 });
           } else {
-            auto body = CreateTokenMessage(recipientTokenWallet, transaction.amount);
-            if (!body.has_value()) {
-              return InvokeCallback(done, body.error());
-            }
-            auto transferCheckResult = transaction.tokenTransferType == TokenTransferType::ToOwner
-                                           ? TokenTransferCheckResult{DirectRecipient{recipientTokenWallet}}
-                                           : TokenTransferCheckResult{TokenTransferUnchanged{}};
-            checkTransactionFees(  //
-                sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                TokenTransactionToSend::realAmount, transaction.timeout, false,
-                [=](Result<TransactionCheckResult> result) {
-                  if (result.has_value()) {
-                    InvokeCallback(done, std::make_pair(std::move(result.value()), transferCheckResult));
-                  } else {
-                    InvokeCallback(done, result.error());
+            CreateTokenMessage(
+                _external->lib(), recipientTokenWallet, transaction.amount, [=](Result<QByteArray> &&body) {
+                  if (!body.has_value()) {
+                    return InvokeCallback(done, body.error());
                   }
+                  auto transferCheckResult = transaction.tokenTransferType == TokenTransferType::ToOwner
+                                                 ? TokenTransferCheckResult{DirectRecipient{recipientTokenWallet}}
+                                                 : TokenTransferCheckResult{TokenTransferUnchanged{}};
+                  checkTransactionFees(  //
+                      sender, transaction.walletContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                      TokenTransactionToSend::realAmount, transaction.timeout, false,
+                      [=](Result<TransactionCheckResult> result) {
+                        if (result.has_value()) {
+                          InvokeCallback(done, std::make_pair(std::move(result.value()), transferCheckResult));
+                        } else {
+                          InvokeCallback(done, result.error());
+                        }
+                      });
                 });
           }
         })
@@ -541,14 +550,15 @@ void Wallet::checkSendStake(const QByteArray &publicKey, const StakeTransactionT
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateStakeMessage(transaction.stake);
-  if (!body.has_value()) {
-    return InvokeCallback(done, body.error());
-  }
+  CreateStakeMessage(_external->lib(), transaction.stake, [=](Result<QByteArray> &&body) {
+    if (!body.has_value()) {
+      return InvokeCallback(done, body.error());
+    }
 
-  const auto realAmount = StakeTransactionToSend::depoolFee + transaction.stake;
-  checkTransactionFees(sender, transaction.depoolAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                       realAmount, transaction.timeout, false, done);
+    const auto realAmount = StakeTransactionToSend::depoolFee + transaction.stake;
+    checkTransactionFees(sender, transaction.depoolAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                         realAmount, transaction.timeout, false, done);
+  });
 }
 
 void Wallet::checkWithdraw(const QByteArray &publicKey, const WithdrawalTransactionToSend &transaction,
@@ -558,13 +568,14 @@ void Wallet::checkWithdraw(const QByteArray &publicKey, const WithdrawalTransact
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateWithdrawalMessage(transaction.amount, transaction.all);
-  if (!body.has_value()) {
-    return InvokeCallback(done, body.error());
-  }
+  CreateWithdrawalMessage(_external->lib(), transaction.amount, transaction.all, [=](Result<QByteArray> &&body) {
+    if (!body.has_value()) {
+      return InvokeCallback(done, body.error());
+    }
 
-  checkTransactionFees(sender, transaction.depoolAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                       WithdrawalTransactionToSend::depoolFee, transaction.timeout, false, done);
+    checkTransactionFees(sender, transaction.depoolAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                         WithdrawalTransactionToSend::depoolFee, transaction.timeout, false, done);
+  });
 }
 
 void Wallet::checkCancelWithdraw(const QByteArray &publicKey, const CancelWithdrawalTransactionToSend &transaction,
@@ -572,13 +583,14 @@ void Wallet::checkCancelWithdraw(const QByteArray &publicKey, const CancelWithdr
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateCancelWithdrawalMessage();
-  if (!body.has_value()) {
-    return InvokeCallback(done, body.error());
-  }
+  CreateCancelWithdrawalMessage(_external->lib(), [=](Result<QByteArray> &&body) {
+    if (!body.has_value()) {
+      return InvokeCallback(done, body.error());
+    }
 
-  checkTransactionFees(sender, transaction.depoolAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                       CancelWithdrawalTransactionToSend::depoolFee, transaction.timeout, false, done);
+    checkTransactionFees(sender, transaction.depoolAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                         CancelWithdrawalTransactionToSend::depoolFee, transaction.timeout, false, done);
+  });
 }
 
 void Wallet::checkDeployTokenWallet(const QByteArray &publicKey, const DeployTokenWalletTransactionToSend &transaction,
@@ -586,13 +598,16 @@ void Wallet::checkDeployTokenWallet(const QByteArray &publicKey, const DeployTok
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateTokenWalletDeployMessage(DeployTokenWalletTransactionToSend::initialBalance, sender);
-  if (!body.has_value()) {
-    return InvokeCallback(done, body.error());
-  }
+  CreateTokenWalletDeployMessage(
+      _external->lib(), DeployTokenWalletTransactionToSend::initialBalance, sender, [=](Result<QByteArray> &&body) {
+        if (!body.has_value()) {
+          return InvokeCallback(done, body.error());
+        }
 
-  checkTransactionFees(sender, transaction.rootContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                       DeployTokenWalletTransactionToSend::realAmount, transaction.timeout, false, done);
+        checkTransactionFees(sender, transaction.rootContractAddress,
+                             tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                             DeployTokenWalletTransactionToSend::realAmount, transaction.timeout, false, done);
+      });
 }
 
 void Wallet::checkCollectTokens(const QByteArray &publicKey, const CollectTokensTransactionToSend &transaction,
@@ -600,13 +615,14 @@ void Wallet::checkCollectTokens(const QByteArray &publicKey, const CollectTokens
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateExecuteProxyCallbackMessage();
-  if (!body.has_value()) {
-    return InvokeCallback(done, body.error());
-  }
+  CreateExecuteProxyCallbackMessage(_external->lib(), [=](Result<QByteArray> &&body) {
+    if (!body.has_value()) {
+      return InvokeCallback(done, body.error());
+    }
 
-  checkTransactionFees(sender, transaction.eventContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
-                       CollectTokensTransactionToSend::realAmount, transaction.timeout, true, done);
+    checkTransactionFees(sender, transaction.eventContractAddress, tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()),
+                         CollectTokensTransactionToSend::realAmount, transaction.timeout, true, done);
+  });
 }
 
 void Wallet::checkDeployMultisig(const QByteArray &publicKey, const DeployMultisigTransactionToSend &transaction,
@@ -649,34 +665,35 @@ void Wallet::sendTokens(const QByteArray &publicKey, const QByteArray &password,
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  Result<QByteArray> body{};
+  const auto bodyCreated = [=](Result<QByteArray> &&body) {
+    if (!body.has_value()) {
+      return InvokeCallback(done, body.error());
+    }
+
+    const auto realAmount = TokenTransactionToSend::realAmount;
+
+    sendMessage(publicKey, password, sender, transaction.walletContractAddress,
+                tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready,
+                done);
+  };
+
   switch (transaction.tokenTransferType) {
-    case TokenTransferType::Direct: {
-      body = CreateTokenMessage(transaction.recipient, transaction.amount);
-      break;
-    }
-    case TokenTransferType::ToOwner: {
-      body = CreateTokenTransferToOwnerMessage(transaction.recipient, transaction.amount,
-                                               TokenTransactionToSend::initialBalance);
-      break;
-    }
+    case TokenTransferType::Direct:
+      return CreateTokenMessage(_external->lib(), transaction.recipient, transaction.amount, bodyCreated);
+    case TokenTransferType::ToOwner:
+      return CreateTokenTransferToOwnerMessage(_external->lib(), transaction.recipient, transaction.amount,
+                                               TokenTransactionToSend::initialBalance, bodyCreated);
     case TokenTransferType::SwapBack: {
       const auto ethereumAddress = ParseEthereumAddress(transaction.recipient);
       if (!ethereumAddress.has_value()) {
         return InvokeCallback(done, Error{Error::Type::Web, "Invalid ethereum address"});
       }
-      body = CreateSwapBackMessage(*ethereumAddress, transaction.callbackAddress, transaction.amount);
-      break;
+      return CreateSwapBackMessage(_external->lib(), *ethereumAddress, transaction.callbackAddress, transaction.amount,
+                                   bodyCreated);
     }
+    default:
+      Unexpected("Token transfer type");
   }
-  if (!body.has_value()) {
-    return InvokeCallback(done, body.error());
-  }
-
-  const auto realAmount = TokenTransactionToSend::realAmount;
-
-  sendMessage(publicKey, password, sender, transaction.walletContractAddress,
-              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready, done);
 }
 
 void Wallet::withdraw(const QByteArray &publicKey, const QByteArray &password,
@@ -687,15 +704,17 @@ void Wallet::withdraw(const QByteArray &publicKey, const QByteArray &password,
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateWithdrawalMessage(transaction.amount, transaction.all);
-  if (!body.has_value()) {
-    return InvokeCallback(done, body.error());
-  }
+  CreateWithdrawalMessage(_external->lib(), transaction.amount, transaction.all, [=](Result<QByteArray> &&body) {
+    if (!body.has_value()) {
+      return InvokeCallback(done, body.error());
+    }
 
-  const auto realAmount = WithdrawalTransactionToSend::depoolFee;
+    const auto realAmount = WithdrawalTransactionToSend::depoolFee;
 
-  sendMessage(publicKey, password, sender, transaction.depoolAddress,
-              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready, done);
+    sendMessage(publicKey, password, sender, transaction.depoolAddress,
+                tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready,
+                done);
+  });
 }
 
 void Wallet::cancelWithdrawal(const QByteArray &publicKey, const QByteArray &password,
@@ -704,15 +723,17 @@ void Wallet::cancelWithdrawal(const QByteArray &publicKey, const QByteArray &pas
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateCancelWithdrawalMessage();
-  if (!body.has_value()) {
-    return InvokeCallback(done, body.error());
-  }
+  CreateCancelWithdrawalMessage(_external->lib(), [=](Result<QByteArray> &&body) {
+    if (!body.has_value()) {
+      return InvokeCallback(done, body.error());
+    }
 
-  const auto realAmount = CancelWithdrawalTransactionToSend::depoolFee;
+    const auto realAmount = CancelWithdrawalTransactionToSend::depoolFee;
 
-  sendMessage(publicKey, password, sender, transaction.depoolAddress,
-              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready, done);
+    sendMessage(publicKey, password, sender, transaction.depoolAddress,
+                tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready,
+                done);
+  });
 }
 
 void Wallet::deployTokenWallet(const QByteArray &publicKey, const QByteArray &password,
@@ -721,15 +742,18 @@ void Wallet::deployTokenWallet(const QByteArray &publicKey, const QByteArray &pa
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateTokenWalletDeployMessage(DeployTokenWalletTransactionToSend::initialBalance, sender);
-  if (!body.has_value()) {
-    return InvokeCallback(done, body.error());
-  }
+  CreateTokenWalletDeployMessage(  //
+      _external->lib(), DeployTokenWalletTransactionToSend::initialBalance, sender, [=](Result<QByteArray> &&body) {
+        if (!body.has_value()) {
+          return InvokeCallback(done, body.error());
+        }
 
-  const auto realAmount = DeployTokenWalletTransactionToSend::realAmount;
+        const auto realAmount = DeployTokenWalletTransactionToSend::realAmount;
 
-  sendMessage(publicKey, password, sender, transaction.rootContractAddress,
-              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready, done);
+        sendMessage(publicKey, password, sender, transaction.rootContractAddress,
+                    tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready,
+                    done);
+      });
 }
 
 void Wallet::collectTokens(const QByteArray &publicKey, const QByteArray &password,
@@ -738,15 +762,16 @@ void Wallet::collectTokens(const QByteArray &publicKey, const QByteArray &passwo
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateExecuteProxyCallbackMessage();
-  if (!body.has_value()) {
-    return InvokeCallback(done, body.error());
-  }
+  CreateExecuteProxyCallbackMessage(_external->lib(), [=](Result<QByteArray> &&body) {
+    if (!body.has_value()) {
+      return InvokeCallback(done, body.error());
+    }
 
-  const auto realAmount = CollectTokensTransactionToSend::realAmount;
+    const auto realAmount = CollectTokensTransactionToSend::realAmount;
 
-  sendMessage(publicKey, password, sender, transaction.eventContractAddress,
-              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, true, ready, done);
+    sendMessage(publicKey, password, sender, transaction.eventContractAddress,
+                tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, true, ready, done);
+  });
 }
 
 void Wallet::sendStake(const QByteArray &publicKey, const QByteArray &password,
@@ -757,15 +782,17 @@ void Wallet::sendStake(const QByteArray &publicKey, const QByteArray &password,
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  const auto body = CreateStakeMessage(transaction.stake);
-  if (!body.has_value()) {
-    return InvokeCallback(done, body.error());
-  }
+  CreateStakeMessage(_external->lib(), transaction.stake, [=](Result<QByteArray> &&body) {
+    if (!body.has_value()) {
+      return InvokeCallback(done, body.error());
+    }
 
-  const auto realAmount = StakeTransactionToSend::depoolFee + transaction.stake;
+    const auto realAmount = StakeTransactionToSend::depoolFee + transaction.stake;
 
-  sendMessage(publicKey, password, sender, transaction.depoolAddress,
-              tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready, done);
+    sendMessage(publicKey, password, sender, transaction.depoolAddress,
+                tl_msg_dataRaw(tl_bytes(body.value()), tl_bytes()), realAmount, transaction.timeout, false, ready,
+                done);
+  });
 }
 
 void Wallet::openGate(const QString &rawAddress, const std::optional<Symbol> &token) {

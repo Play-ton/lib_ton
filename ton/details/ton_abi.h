@@ -41,12 +41,16 @@ class TLDftabi_valueMap;
 class TLftabi_function;
 class TLftabi_decodedOutput;
 class TLftabi_tvmOutput;
+class TLinputKey;
 
 template <typename T>
 using TLVector = tl::boxed<TLvector<T>>;
-using TLftabi_Value = tl::boxed<TLftabi_value>;
 using TLtvm_Cell = tl::boxed<TLtvm_cell>;
+using TLftabi_Value = tl::boxed<TLftabi_value>;
 using TLftabi_Function = tl::boxed<TLftabi_function>;
+using TLInputKey = tl::boxed<TLinputKey>;
+
+class RequestSender;
 
 [[nodiscard]] TLftabi_Value PackPubKey();
 
@@ -141,20 +145,24 @@ bool IsCell(const TLftabi_Value &value);
 [[nodiscard]] std::optional<TokenWalletContractDetails> ParseTokenWalletContractDetails(
     const TLVector<TLftabi_Value> &values);
 
-[[nodiscard]] Result<QByteArray> CreateTokenMessage(const QString &recipient, const int128 &amount);
-[[nodiscard]] Result<QByteArray> CreateTokenTransferToOwnerMessage(const QString &recipient, const int128 &amount,
-                                                                   int64 deployGrams);
+using MessageBodyCallback = Callback<QByteArray>;
+
+void CreateTokenMessage(RequestSender &lib, const QString &recipient, const int128 &amount,
+                        const MessageBodyCallback &done);
+void CreateTokenTransferToOwnerMessage(RequestSender &lib, const QString &recipient, const int128 &amount,
+                                       int64 deployGrams, const MessageBodyCallback &done);
 
 [[nodiscard]] std::optional<QByteArray> ParseEthereumAddress(const QString &ethereumAddress);
-[[nodiscard]] Result<QByteArray> CreateSwapBackMessage(QByteArray ethereumAddress, const QString &callback_address,
-                                                       const int128 &amount);
+void CreateSwapBackMessage(RequestSender &lib, QByteArray ethereumAddress, const QString &callback_address,
+                           const int128 &amount, const MessageBodyCallback &done);
 
-[[nodiscard]] Result<QByteArray> CreateStakeMessage(int64 stake);
-[[nodiscard]] Result<QByteArray> CreateWithdrawalMessage(int64 amount, bool all);
-[[nodiscard]] Result<QByteArray> CreateCancelWithdrawalMessage();
+void CreateStakeMessage(RequestSender &lib, int64 stake, const MessageBodyCallback &done);
+void CreateWithdrawalMessage(RequestSender &lib, int64 amount, bool all, const MessageBodyCallback &done);
+void CreateCancelWithdrawalMessage(RequestSender &lib, const MessageBodyCallback &done);
 
-[[nodiscard]] Result<QByteArray> CreateTokenWalletDeployMessage(int64 grams, const QString &owner);
-[[nodiscard]] Result<QByteArray> CreateExecuteProxyCallbackMessage();
+void CreateTokenWalletDeployMessage(RequestSender &lib, int64 grams, const QString &owner,
+                                    const MessageBodyCallback &done);
+void CreateExecuteProxyCallbackMessage(RequestSender &lib, const MessageBodyCallback &done);
 
 struct GeneratedInitData {
   QByteArray hash;
@@ -162,16 +170,11 @@ struct GeneratedInitData {
 };
 
 [[nodiscard]] Result<GeneratedInitData> CreateMultisigInitData(QByteArray publicKey);
-[[nodiscard]] Result<QByteArray> CreateMultisigConstructorMessage(const QByteArray &deployerPublicKey,
-                                                                  const QByteArray &deployerPrivateKey,
-                                                                  uint8 requiredConfirmations,
-                                                                  const std::vector<QByteArray> &owners);
-[[nodiscard]] TLftabi_Function CreateMultisigSubmitTransactionMessage(const QByteArray &publicKey,
-                                                                      const QByteArray &privateKey, const QString &dest,
-                                                                      int64 value, bool bounce,
-                                                                      const QByteArray &payload);
-[[nodiscard]] TLftabi_Function CreateMultisigConfirmTransactionMessage(const QByteArray &publicKey,
-                                                                       const QByteArray &privateKey,
-                                                                       int64 transactionId);
+void CreateMultisigConstructorMessage(RequestSender &lib, const TLInputKey &deployerKey, uint8 requiredConfirmations,
+                                      const std::vector<QByteArray> &owners, const MessageBodyCallback &done);
+void CreateMultisigSubmitTransactionMessage(RequestSender &lib, const TLInputKey &key, const QString &dest, int64 value,
+                                            bool bounce, const QByteArray &payload, const MessageBodyCallback &done);
+void CreateMultisigConfirmTransactionMessage(RequestSender &lib, const TLInputKey &key, int64 transactionId,
+                                             const MessageBodyCallback &done);
 
 }  // namespace Ton::details

@@ -36,13 +36,15 @@ void RequestSender::RequestBuilder::setDoneOnMainHandler(FnMut<void()> &&handler
   });
 }
 
-void RequestSender::RequestBuilder::setFailOnMainHandler(FnMut<void(const TLError &)> &&handler) noexcept {
-  setFailHandler([callback = std::move(handler), guard = on_main_guard()](LibError error) mutable {
+void RequestSender::RequestBuilder::setFailOnMainHandler(FnMut<void(TLError &&)> &&handler) noexcept {
+  setFailHandler([callback = std::forward<std::decay_t<decltype(handler)>>(handler),
+                  guard = on_main_guard()](LibError error) mutable {
     if (IsAutoResendError(error)) {
       return false;
     }
-    crl::on_main(guard,
-                 [callback = std::move(callback), error = tl_from(std::move(error))]() mutable { callback(error); });
+    crl::on_main(guard, [callback = std::move(callback), error = tl_from(std::move(error))]() mutable {
+      callback(std::move(error));
+    });
     return true;
   });
 }
