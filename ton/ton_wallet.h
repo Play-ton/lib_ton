@@ -30,6 +30,7 @@ class KeyCreator;
 class FtabiKeyCreator;
 class KeyDestroyer;
 class PasswordChanger;
+class FtabiPasswordChanger;
 class AccountViewers;
 class WebLoader;
 class LocalTimeSyncer;
@@ -75,6 +76,8 @@ class Wallet final : public base::has_weak_ptr {
   void deleteKey(KeyType keyType, const QByteArray &publicKey, const Callback<> &done);
   void deleteAllKeys(const Callback<> &done);
   void changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, const Callback<> &done);
+  void changeFtabiPassword(const QByteArray &publicKey, const QByteArray &oldPassword, const QByteArray &newPassword,
+                           const Callback<> &done);
 
   void checkSendGrams(const QByteArray &publicKey, const TransactionToSend &transaction,
                       const Callback<TransactionCheckResult> &done);
@@ -235,6 +238,7 @@ class Wallet final : public base::has_weak_ptr {
   std::unique_ptr<details::FtabiKeyCreator> _ftabiKeyCreator;
   std::unique_ptr<details::KeyDestroyer> _keyDestroyer;
   std::unique_ptr<details::PasswordChanger> _passwordChanger;
+  std::unique_ptr<details::FtabiPasswordChanger> _ftabiPasswordChanger;
   std::unique_ptr<details::LocalTimeSyncer> _localTimeSyncer;
 
   base::flat_map<QByteArray, ViewersPassword> _viewersPasswords;

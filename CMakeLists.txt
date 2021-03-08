@@ -39,6 +39,8 @@ PRIVATE
     ton/details/ton_client.h
     ton/details/ton_ftabi_key_creator.cpp
     ton/details/ton_ftabi_key_creator.h
+    ton/details/ton_ftabi_password_changer.cpp
+    ton/details/ton_ftabi_password_changer.h
     ton/details/ton_key_creator.cpp
     ton/details/ton_key_creator.h
     ton/details/ton_key_destroyer.cpp

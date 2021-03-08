@@ -11,12 +11,12 @@
 namespace Ton::details {
 
 PasswordChanger::PasswordChanger(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db,
-                                 const QByteArray &oldPassword, const QByteArray &newPassword, WalletList existing,
-                                 bool useTestNetwork, Callback<std::vector<QByteArray>> done)
+                                 QByteArray oldPassword, QByteArray newPassword, WalletList existing,
+                                 bool useTestNetwork, const Callback<std::vector<QByteArray>> &done)
     : _lib(lib)
     , _db(db)
-    , _oldPassword(oldPassword)
-    , _newPassword(newPassword)
+    , _oldPassword(std::move(oldPassword))
+    , _newPassword(std::move(newPassword))
     , _done(std::move(done))
     , _useTestNetwork(useTestNetwork)
     , _list(std::move(existing)) {
@@ -56,7 +56,7 @@ void PasswordChanger::savedNext(const QByteArray &newSecret) {
   }
 }
 
-void PasswordChanger::rollback(Error error) {
+void PasswordChanger::rollback(const Error &error) {
   if (_newSecrets.empty()) {
     InvokeCallback(_done, error);
     return;
@@ -64,7 +64,7 @@ void PasswordChanger::rollback(Error error) {
   const auto newSecret = _newSecrets.back();
   _newSecrets.pop_back();
   const auto key = _list.entries[_newSecrets.size()].publicKey;
-  DeletePublicKey(_lib, key, newSecret, crl::guard(this, [=](Result<>) { rollback(error); }));
+  DeletePublicKey(_lib, key, newSecret, crl::guard(this, [=](const Result<> &) { rollback(error); }));
 }
 
 void PasswordChanger::rollforward() {
@@ -74,7 +74,8 @@ void PasswordChanger::rollforward() {
   }
   const auto oldEntry = _list.entries.back();
   _list.entries.pop_back();
-  DeletePublicKey(_lib, oldEntry.publicKey, oldEntry.secret, crl::guard(this, [=](Result<>) { rollforward(); }));
+  DeletePublicKey(_lib, oldEntry.publicKey, oldEntry.secret,
+                  crl::guard(this, [=](const Result<> &) { rollforward(); }));
 }
 
 }  // namespace Ton::details

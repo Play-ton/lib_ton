@@ -26,14 +26,14 @@ struct WalletList;
 
 class PasswordChanger final : public base::has_weak_ptr {
  public:
-  PasswordChanger(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, const QByteArray &oldPassword,
-                  const QByteArray &newPassword, WalletList existing, bool useTestNetwork,
-                  Callback<std::vector<QByteArray>> done);
+  PasswordChanger(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, QByteArray oldPassword,
+                  QByteArray newPassword, WalletList existing, bool useTestNetwork,
+                  const Callback<std::vector<QByteArray>>& done);
 
  private:
   void changeNext();
   void savedNext(const QByteArray &newSecret);
-  void rollback(Error error);
+  void rollback(const Error& error);
   void rollforward();
 
   const not_null<RequestSender *> _lib;

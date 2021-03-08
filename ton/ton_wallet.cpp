@@ -9,6 +9,7 @@
 #include "ton/details/ton_account_viewers.h"
 #include "ton/details/ton_request_sender.h"
 #include "ton/details/ton_ftabi_key_creator.h"
+#include "ton/details/ton_ftabi_password_changer.h"
 #include "ton/details/ton_key_creator.h"
 #include "ton/details/ton_key_destroyer.h"
 #include "ton/details/ton_password_changer.h"
@@ -473,6 +474,28 @@ void Wallet::changePassword(const QByteArray &oldPassword, const QByteArray &new
   };
   _passwordChanger = std::make_unique<PasswordChanger>(&_external->lib(), &_external->db(), oldPassword, newPassword,
                                                        *_list, settings().useTestNetwork, std::move(changed));
+}
+
+void Wallet::changeFtabiPassword(const QByteArray &publicKey, const QByteArray &oldPassword,
+                                 const QByteArray &newPassword, const Callback<> &done) {
+  Expects(_ftabiKeyCreator == nullptr);
+  Expects(_keyDestroyer == nullptr);
+  Expects(_ftabiPasswordChanger == nullptr);
+
+  auto changed = [=](const Result<QByteArray> &result) {
+    const auto destroyed = base::take(_ftabiPasswordChanger);
+    if (!result) {
+      return InvokeCallback(done, result.error());
+    }
+    auto it = std::find_if(_list->ftabiEntries.begin(), _list->ftabiEntries.end(),
+                           [&](const auto &entry) { return entry.publicKey == publicKey; });
+    Assert(it != _list->ftabiEntries.end());
+    it->secret = result.value();
+    InvokeCallback(done);
+  };
+  _ftabiPasswordChanger = std::make_unique<FtabiPasswordChanger>(  //
+      &_external->lib(), &_external->db(), oldPassword, newPassword, *_list, publicKey, settings().useTestNetwork,
+      std::move(changed));
 }
 
 void Wallet::checkSendGrams(const QByteArray &publicKey, const TransactionToSend &transaction,
