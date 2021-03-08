@@ -16,8 +16,9 @@ constexpr auto kLocalPasswordSize = size_type(32);
 }  // namespace
 
 FtabiKeyCreator::FtabiKeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db,
-                                 const QString &derivationPath, const Fn<void(Result<std::vector<QString>>)> &done)
-    : _lib(lib), _db(db), _password(GenerateLocalPassword()) {
+                                 const QString &name, const QString &derivationPath,
+                                 const Fn<void(Result<std::vector<QString>>)> &done)
+    : _lib(lib), _db(db), _name(name), _password(GenerateLocalPassword()) {
   _lib->request(TLftabi_CreateNewKey(TLsecureString{_password}, tl_string(derivationPath)))
       .done(crl::guard(this,
                        [=](const TLKey &key) {
@@ -32,9 +33,9 @@ FtabiKeyCreator::FtabiKeyCreator(not_null<RequestSender *> lib, not_null<Storage
 }
 
 FtabiKeyCreator::FtabiKeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db,
-                                 const QString &derivationPath, const std::vector<QString> &words,
+                                 const QString &name, const QString &derivationPath, const std::vector<QString> &words,
                                  const Fn<void(Result<>)> &done)
-    : _lib(lib), _db(db), _password(GenerateLocalPassword()) {
+    : _lib(lib), _db(db), _name(name), _password(GenerateLocalPassword()) {
   auto list = QVector<TLsecureString>();
   list.reserve(words.size());
   for (const auto &word : words) {
@@ -129,6 +130,7 @@ void FtabiKeyCreator::saveToDatabase(WalletList existing, bool useTestNetwork, C
 
   _state = State::Saving;
   const auto added = WalletList::FtabiEntry{
+      .name = _name,
       .publicKey = _key,
       .secret = _secret,
   };

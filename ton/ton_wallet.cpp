@@ -282,6 +282,17 @@ std::vector<QByteArray> Wallet::publicKeys() const {
   return _list->entries | ranges::views::transform(&WalletList::Entry::publicKey) | ranges::to_vector;
 }
 
+std::vector<FtabiKey> Wallet::ftabiKeys() const {
+  return _list->ftabiEntries  //
+         | ranges::views::transform([](const WalletList::FtabiEntry &entry) {
+             return FtabiKey{
+                 .name = entry.name,
+                 .publicKey = entry.publicKey,
+             };
+           })  //
+         | ranges::to_vector;
+}
+
 void Wallet::createKey(const Callback<std::vector<QString>> &done) {
   Expects(_originalKeyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
@@ -294,7 +305,8 @@ void Wallet::createKey(const Callback<std::vector<QString>> &done) {
   _originalKeyCreator = std::make_unique<KeyCreator>(&_external->lib(), &_external->db(), created);
 }
 
-void Wallet::createFtabiKey(const QString &derivationPath, const Callback<std::vector<QString>> &done) {
+void Wallet::createFtabiKey(const QString &name, const QString &derivationPath,
+                            const Callback<std::vector<QString>> &done) {
   Expects(_ftabiKeyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
@@ -303,7 +315,8 @@ void Wallet::createFtabiKey(const QString &derivationPath, const Callback<std::v
     const auto destroyed = result ? std::unique_ptr<FtabiKeyCreator>() : base::take(_ftabiKeyCreator);
     InvokeCallback(done, result);
   };
-  _ftabiKeyCreator = std::make_unique<FtabiKeyCreator>(&_external->lib(), &_external->db(), derivationPath, created);
+  _ftabiKeyCreator =
+      std::make_unique<FtabiKeyCreator>(&_external->lib(), &_external->db(), name, derivationPath, created);
 }
 
 void Wallet::importKey(const std::vector<QString> &words, const Callback<> &done) {
@@ -318,7 +331,8 @@ void Wallet::importKey(const std::vector<QString> &words, const Callback<> &done
   _originalKeyCreator = std::make_unique<KeyCreator>(&_external->lib(), &_external->db(), words, std::move(created));
 }
 
-void Wallet::importFtabiKey(const QString &derivationPath, const std::vector<QString> &words, const Callback<> &done) {
+void Wallet::importFtabiKey(const QString &name, const QString &derivationPath, const std::vector<QString> &words,
+                            const Callback<> &done) {
   Expects(_ftabiKeyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
@@ -327,15 +341,15 @@ void Wallet::importFtabiKey(const QString &derivationPath, const std::vector<QSt
     const auto destroyed = result ? std::unique_ptr<FtabiKeyCreator>() : base::take(_ftabiKeyCreator);
     InvokeCallback(done, result);
   };
-  _ftabiKeyCreator =
-      std::make_unique<FtabiKeyCreator>(&_external->lib(), &_external->db(), derivationPath, words, std::move(created));
+  _ftabiKeyCreator = std::make_unique<FtabiKeyCreator>(&_external->lib(), &_external->db(), name, derivationPath, words,
+                                                       std::move(created));
 }
 
 void Wallet::queryWalletAddress(const Callback<QString> &done) {
   Expects(_originalKeyCreator != nullptr);
   Expects(_configInfo.has_value());
 
-  _originalKeyCreator->queryWalletAddress(_configInfo->restrictedInitPublicKey, std::move(done));
+  _originalKeyCreator->queryWalletAddress(_configInfo->restrictedInitPublicKey, done);
 }
 
 void Wallet::saveOriginalKey(const QByteArray &password, const QString &address, const Callback<QByteArray> &done) {

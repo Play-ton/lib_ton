@@ -35,6 +35,11 @@ enum class KeyType {
   Ftabi,
 };
 
+struct FtabiKey {
+  QString name;
+  QByteArray publicKey;
+};
+
 struct TransactionId {
   int64 lt = 0;
   QByteArray hash;

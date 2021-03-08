@@ -36,6 +36,7 @@ struct WalletList {
   };
 
   struct FtabiEntry {
+    QString name;
     QByteArray publicKey;
     QByteArray secret;
   };
@@ -55,11 +56,11 @@ struct KnownTokenContracts {
 [[nodiscard]] std::optional<Error> ErrorFromStorage(const Storage::Cache::Error &error);
 
 void DeletePublicKey(not_null<RequestSender *> lib, const QByteArray &publicKey, const QByteArray &secret,
-                     Callback<> done);
+                     const Callback<>& done);
 
 void SaveWalletList(not_null<Storage::Cache::Database *> db, const WalletList &list, bool useTestNetwork,
-                    Callback<> done);
-void LoadWalletList(not_null<Storage::Cache::Database *> db, bool useTestNetwork, Fn<void(WalletList &&)> done);
+                    const Callback<>& done);
+void LoadWalletList(not_null<Storage::Cache::Database *> db, bool useTestNetwork, const Fn<void(WalletList &&)>& done);
 
 void SaveTokenOwnersCache(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
                           const QString &rootContractAddress, const TokenOwnersCache &owners, const Callback<> &done);

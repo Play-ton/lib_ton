@@ -62,11 +62,13 @@ class Wallet final : public base::has_weak_ptr {
   [[nodiscard]] rpl::producer<Update> updates() const;
 
   [[nodiscard]] std::vector<QByteArray> publicKeys() const;
+  [[nodiscard]] std::vector<FtabiKey> ftabiKeys() const;
 
   void createKey(const Callback<std::vector<QString>> &done);
-  void createFtabiKey(const QString &derivationPath, const Callback<std::vector<QString>> &done);
+  void createFtabiKey(const QString &name, const QString &derivationPath, const Callback<std::vector<QString>> &done);
   void importKey(const std::vector<QString> &words, const Callback<> &done);
-  void importFtabiKey(const QString &derivationPath, const std::vector<QString> &words, const Callback<> &done);
+  void importFtabiKey(const QString &name, const QString &derivationPath, const std::vector<QString> &words,
+                      const Callback<> &done);
   void queryWalletAddress(const Callback<QString> &done);
   void saveOriginalKey(const QByteArray &password, const QString &address, const Callback<QByteArray> &done);
   void saveFtabiKey(const QByteArray &password, const Callback<QByteArray> &done);

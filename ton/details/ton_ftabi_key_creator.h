@@ -14,10 +14,10 @@ class RequestSender;
 
 class FtabiKeyCreator final : public base::has_weak_ptr {
  public:
-  FtabiKeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, const QString &derivationPath,
-                  const Fn<void(Result<std::vector<QString>>)> &done);
-  FtabiKeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, const QString &derivationPath,
-                  const std::vector<QString> &words, const Fn<void(Result<>)> &done);
+  FtabiKeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, const QString &name,
+                  const QString &derivationPath, const Fn<void(Result<std::vector<QString>>)> &done);
+  FtabiKeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, const QString &name,
+                  const QString &derivationPath, const std::vector<QString> &words, const Fn<void(Result<>)> &done);
 
   [[nodiscard]] QByteArray key() const;
   void save(const QByteArray &password, const WalletList &existing, bool useTestNetwork,
@@ -39,6 +39,7 @@ class FtabiKeyCreator final : public base::has_weak_ptr {
   const not_null<Storage::Cache::Database *> _db;
 
   State _state = State::Creating;
+  QString _name;
   QByteArray _key;
   QByteArray _secret;
   QByteArray _password;

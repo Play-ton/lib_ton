@@ -138,7 +138,7 @@ TLstorage_WalletEntry Serialize(const WalletList::Entry &data) {
 }
 
 TLstorage_WalletEntry Serialize(const WalletList::FtabiEntry &data) {
-  return make_storage_walletEntryFtabi(tl_string(data.publicKey), tl_bytes(data.secret));
+  return make_storage_walletEntryFtabi(tl_string(data.name), tl_string(data.publicKey), tl_bytes(data.secret));
 }
 
 WalletListEntry Deserialize(const TLstorage_WalletEntry &data) {
@@ -158,6 +158,7 @@ WalletListEntry Deserialize(const TLstorage_WalletEntry &data) {
       },
       [&](const TLDstorage_walletEntryFtabi &data) -> WalletListEntry {
         return WalletList::FtabiEntry{
+            .name = data.vname().v,
             .publicKey = data.vpublicKey().v,
             .secret = data.vsecret().v,
         };
@@ -674,7 +675,7 @@ std::optional<Error> ErrorFromStorage(const Storage::Cache::Error &error) {
 }
 
 void DeletePublicKey(not_null<RequestSender *> lib, const QByteArray &publicKey, const QByteArray &secret,
-                     Callback<> done) {
+                     const Callback<>& done) {
   lib->request(TLDeleteKey(tl_key(tl_string(publicKey), TLsecureBytes{secret})))
       .done([=] { InvokeCallback(done); })
       .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
@@ -682,7 +683,7 @@ void DeletePublicKey(not_null<RequestSender *> lib, const QByteArray &publicKey,
 }
 
 void SaveWalletList(not_null<Storage::Cache::Database *> db, const WalletList &list, bool useTestNetwork,
-                    Callback<> done) {
+                    const Callback<>& done) {
   auto saved = [=](const Storage::Cache::Error &error) {
     crl::on_main([=] {
       if (const auto bad = ErrorFromStorage(error)) {
@@ -699,10 +700,10 @@ void SaveWalletList(not_null<Storage::Cache::Database *> db, const WalletList &l
   }
 }
 
-void LoadWalletList(not_null<Storage::Cache::Database *> db, bool useTestNetwork, Fn<void(WalletList &&)> done) {
+void LoadWalletList(not_null<Storage::Cache::Database *> db, bool useTestNetwork, const Fn<void(WalletList &&)>& done) {
   Expects(done != nullptr);
 
-  db->get(WalletListKey(useTestNetwork), [=](QByteArray value) {
+  db->get(WalletListKey(useTestNetwork), [=](const QByteArray& value) {
     crl::on_main([done, result = Unpack<WalletList>(value)]() mutable { done(std::move(result)); });
   });
 }
