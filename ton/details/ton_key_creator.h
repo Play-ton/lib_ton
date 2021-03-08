@@ -21,14 +21,14 @@ class RequestSender;
 class KeyCreator final : public base::has_weak_ptr {
  public:
   KeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db,
-             Fn<void(Result<std::vector<QString>>)> done);
+             const Fn<void(Result<std::vector<QString>>)>& done);
   KeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, const std::vector<QString> &words,
-             Fn<void(Result<>)> done);
+             const Fn<void(Result<>)>& done);
 
   [[nodiscard]] QByteArray key() const;
-  void queryWalletAddress(const QByteArray &restrictedInitPublicKey, Callback<QString> done);
+  void queryWalletAddress(const QByteArray &restrictedInitPublicKey, const Callback<QString>& done);
   void save(const QByteArray &password, const WalletList &existing, const QString &address, bool useTestNetwork,
-            Callback<WalletList::Entry> done);
+            const Callback<WalletList::Entry>& done);
 
  private:
   enum class State {
@@ -38,9 +38,9 @@ class KeyCreator final : public base::has_weak_ptr {
     Saving,
   };
 
-  void exportWords(Fn<void(Result<std::vector<QString>>)> done);
+  void exportWords(const Fn<void(Result<std::vector<QString>>)>& done);
   void changePassword(const QByteArray &password, Callback<> done);
-  void saveToDatabase(WalletList existing, bool useTestNetwork, Callback<WalletList::Entry> done);
+  void saveToDatabase(WalletList existing, bool useTestNetwork, const Callback<WalletList::Entry>& done);
 
   const not_null<RequestSender *> _lib;
   const not_null<Storage::Cache::Database *> _db;

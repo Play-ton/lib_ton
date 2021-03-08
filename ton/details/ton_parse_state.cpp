@@ -25,9 +25,7 @@ namespace {
   auto &outgoing = result.fake.outgoing.emplace_back();
   outgoing.source = sender;
   outgoing.destination = transaction.recipient;
-  outgoing.message =
-      MessageData{transaction.comment.toUtf8(), QByteArray(),
-                  transaction.sendUnencryptedText ? MessageDataType::PlainText : MessageDataType::DecryptedText};
+  outgoing.message = MessageData{transaction.comment.toUtf8(), QByteArray(), MessageDataType::PlainText};
   outgoing.value = transaction.amount;
   return result;
 }
@@ -253,6 +251,13 @@ TransactionCheckResult Parse(const TLquery_Fees &data) {
 
 std::vector<QString> Parse(const TLExportedKey &data) {
   return data.match([&](const TLDexportedKey &data) {
+    return ranges::views::all(data.vword_list().v) |
+           ranges::views::transform([](const TLsecureString &data) { return tl::utf16(data.v); }) | ranges::to_vector;
+  });
+}
+
+[[nodiscard]] std::vector<QString> Parse(const TLftabi_ExportedKey &data) {
+  return data.match([&](const TLDftabi_exportedKey &data) {
     return ranges::views::all(data.vword_list().v) |
            ranges::views::transform([](const TLsecureString &data) { return tl::utf16(data.v); }) | ranges::to_vector;
   });

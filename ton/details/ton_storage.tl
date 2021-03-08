@@ -3,6 +3,7 @@ storage.false = storage.Bool;
 
 storage.walletEntry publicKey:string secret:bytes = storage.WalletEntry; // old
 storage.walletEntryGeneric publicKey:string secret:bytes address:string = storage.WalletEntry;
+storage.walletEntryFtabi publicKey:string secret:bytes = storage.WalletEntry;
 storage.walletList entries:vector<storage.WalletEntry> = storage.WalletList;
 storage.transactionId lt:int64 hash:bytes = storage.TransactionId;
 storage.restrictionLimit seconds:int32 lockedAmount:int64 = storage.RestrictionLimit;

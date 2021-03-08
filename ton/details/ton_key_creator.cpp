@@ -27,7 +27,7 @@ constexpr auto kRestrictedWalletRevision = 1;
 }  // namespace
 
 KeyCreator::KeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db,
-                       Fn<void(Result<std::vector<QString>>)> done)
+                       const Fn<void(Result<std::vector<QString>>)> &done)
     : _lib(lib), _db(db), _password(GenerateLocalPassword()) {
   _lib->request(TLCreateNewKey(TLsecureString{_password}, TLsecureString(), TLsecureString()))
       .done(crl::guard(this,
@@ -43,7 +43,7 @@ KeyCreator::KeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::D
 }
 
 KeyCreator::KeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db,
-                       const std::vector<QString> &words, Fn<void(Result<>)> done)
+                       const std::vector<QString> &words, const Fn<void(Result<>)> &done)
     : _lib(lib), _db(db), _password(GenerateLocalPassword()) {
   auto list = QVector<TLsecureString>();
   list.reserve(words.size());
@@ -65,7 +65,7 @@ KeyCreator::KeyCreator(not_null<RequestSender *> lib, not_null<Storage::Cache::D
       .send();
 }
 
-void KeyCreator::exportWords(Fn<void(Result<std::vector<QString>>)> done) {
+void KeyCreator::exportWords(const Fn<void(Result<std::vector<QString>>)> &done) {
   Expects(_state == State::Creating);
   Expects(!_key.isEmpty());
   Expects(!_secret.isEmpty());
@@ -79,7 +79,7 @@ void KeyCreator::exportWords(Fn<void(Result<std::vector<QString>>)> done) {
                        }))
       .fail(crl::guard(this,
                        [=](const TLError &error) {
-                         DeletePublicKey(_lib, _key, _secret, crl::guard(this, [=](Result<>) {
+                         DeletePublicKey(_lib, _key, _secret, crl::guard(this, [=](const Result<> &) {
                                            InvokeCallback(done, ErrorFromLib(error));
                                          }));
                        }))
@@ -92,7 +92,7 @@ QByteArray KeyCreator::key() const {
   return _key;
 }
 
-void KeyCreator::queryWalletAddress(const QByteArray &restrictedInitPublicKey, Callback<QString> done) {
+void KeyCreator::queryWalletAddress(const QByteArray &restrictedInitPublicKey, const Callback<QString> &done) {
   Expects(!_key.isEmpty());
 
   _lib->request(TLGuessAccount(tl_string(_key), tl_string(restrictedInitPublicKey)))
@@ -115,7 +115,7 @@ void KeyCreator::queryWalletAddress(const QByteArray &restrictedInitPublicKey, C
 }
 
 void KeyCreator::save(const QByteArray &password, const WalletList &existing, const QString &address,
-                      bool useTestNetwork, Callback<WalletList::Entry> done) {
+                      bool useTestNetwork, const Callback<WalletList::Entry> &done) {
   _address = address;
   if (_password != password) {
     changePassword(password, [=](Result<> result) {
@@ -131,7 +131,7 @@ void KeyCreator::save(const QByteArray &password, const WalletList &existing, co
   }
 }
 
-void KeyCreator::saveToDatabase(WalletList existing, bool useTestNetwork, Callback<WalletList::Entry> done) {
+void KeyCreator::saveToDatabase(WalletList existing, bool useTestNetwork, const Callback<WalletList::Entry> &done) {
   Expects(_state == State::Created);
   Expects(!_key.isEmpty());
   Expects(!_secret.isEmpty());
@@ -166,7 +166,7 @@ void KeyCreator::changePassword(const QByteArray &password, Callback<> done) {
                     TLsecureBytes{password}))
       .done(crl::guard(this,
                        [=](const TLKey &result) {
-                         DeletePublicKey(_lib, _key, _secret, crl::guard(this, [=](const Result<>&) {
+                         DeletePublicKey(_lib, _key, _secret, crl::guard(this, [=](const Result<> &) {
                                            result.match([&](const TLDkey &data) {
                                              _password = password;
                                              _secret = data.vsecret().v;

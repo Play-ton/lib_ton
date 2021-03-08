@@ -37,6 +37,8 @@ PRIVATE
     ton/details/ton_external.h
     ton/details/ton_client.cpp
     ton/details/ton_client.h
+    ton/details/ton_ftabi_key_creator.cpp
+    ton/details/ton_ftabi_key_creator.h
     ton/details/ton_key_creator.cpp
     ton/details/ton_key_creator.h
     ton/details/ton_key_destroyer.cpp

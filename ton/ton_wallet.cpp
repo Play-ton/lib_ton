@@ -8,6 +8,7 @@
 
 #include "ton/details/ton_account_viewers.h"
 #include "ton/details/ton_request_sender.h"
+#include "ton/details/ton_ftabi_key_creator.h"
 #include "ton/details/ton_key_creator.h"
 #include "ton/details/ton_key_destroyer.h"
 #include "ton/details/ton_password_changer.h"
@@ -281,50 +282,90 @@ std::vector<QByteArray> Wallet::publicKeys() const {
 }
 
 void Wallet::createKey(const Callback<std::vector<QString>> &done) {
-  Expects(_keyCreator == nullptr);
+  Expects(_originalKeyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
 
   auto created = [=](const Result<std::vector<QString>> &result) {
-    const auto destroyed = result ? std::unique_ptr<KeyCreator>() : base::take(_keyCreator);
+    const auto destroyed = result ? std::unique_ptr<KeyCreator>() : base::take(_originalKeyCreator);
     InvokeCallback(done, result);
   };
-  _keyCreator = std::make_unique<KeyCreator>(&_external->lib(), &_external->db(), std::move(created));
+  _originalKeyCreator = std::make_unique<KeyCreator>(&_external->lib(), &_external->db(), created);
+}
+
+void Wallet::createFtabiKey(const QString &derivationPath, const Callback<std::vector<QString>> &done) {
+  Expects(_ftabiKeyCreator == nullptr);
+  Expects(_keyDestroyer == nullptr);
+  Expects(_passwordChanger == nullptr);
+
+  auto created = [=](const Result<std::vector<QString>> &result) {
+    const auto destroyed = result ? std::unique_ptr<FtabiKeyCreator>() : base::take(_ftabiKeyCreator);
+    InvokeCallback(done, result);
+  };
+  _ftabiKeyCreator = std::make_unique<FtabiKeyCreator>(&_external->lib(), &_external->db(), derivationPath, created);
 }
 
 void Wallet::importKey(const std::vector<QString> &words, const Callback<> &done) {
-  Expects(_keyCreator == nullptr);
+  Expects(_originalKeyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
 
   auto created = [=](Result<> result) {
-    const auto destroyed = result ? std::unique_ptr<KeyCreator>() : base::take(_keyCreator);
+    const auto destroyed = result ? std::unique_ptr<KeyCreator>() : base::take(_originalKeyCreator);
     InvokeCallback(done, result);
   };
-  _keyCreator = std::make_unique<KeyCreator>(&_external->lib(), &_external->db(), words, std::move(created));
+  _originalKeyCreator = std::make_unique<KeyCreator>(&_external->lib(), &_external->db(), words, std::move(created));
+}
+
+void Wallet::importFtabiKey(const QString &derivationPath, const std::vector<QString> &words, const Callback<> &done) {
+  Expects(_ftabiKeyCreator == nullptr);
+  Expects(_keyDestroyer == nullptr);
+  Expects(_passwordChanger == nullptr);
+
+  auto created = [=](Result<> result) {
+    const auto destroyed = result ? std::unique_ptr<FtabiKeyCreator>() : base::take(_ftabiKeyCreator);
+    InvokeCallback(done, result);
+  };
+  _ftabiKeyCreator =
+      std::make_unique<FtabiKeyCreator>(&_external->lib(), &_external->db(), derivationPath, words, std::move(created));
 }
 
 void Wallet::queryWalletAddress(const Callback<QString> &done) {
-  Expects(_keyCreator != nullptr);
+  Expects(_originalKeyCreator != nullptr);
   Expects(_configInfo.has_value());
 
-  _keyCreator->queryWalletAddress(_configInfo->restrictedInitPublicKey, std::move(done));
+  _originalKeyCreator->queryWalletAddress(_configInfo->restrictedInitPublicKey, std::move(done));
 }
 
-void Wallet::saveKey(const QByteArray &password, const QString &address, const Callback<QByteArray> &done) {
-  Expects(_keyCreator != nullptr);
+void Wallet::saveOriginalKey(const QByteArray &password, const QString &address, const Callback<QByteArray> &done) {
+  Expects(_originalKeyCreator != nullptr);
 
   auto saved = [=](Result<WalletList::Entry> result) {
     if (!result) {
       return InvokeCallback(done, result.error());
     }
-    const auto destroyed = base::take(_keyCreator);
+    const auto destroyed = base::take(_originalKeyCreator);
     _list->entries.push_back(*result);
     InvokeCallback(done, result->publicKey);
   };
-  _keyCreator->save(password, *_list,
-                    (address.isEmpty() ? getDefaultAddress(_keyCreator->key(), kDefaultWorkchainId) : address),
-                    settings().useTestNetwork, std::move(saved));
+  _originalKeyCreator->save(
+      password, *_list,
+      (address.isEmpty() ? getDefaultAddress(_originalKeyCreator->key(), kDefaultWorkchainId) : address),
+      settings().useTestNetwork, std::move(saved));
+}
+
+void Wallet::saveFtabiKey(const QByteArray &password, const Callback<QByteArray> &done) {
+  Expects(_ftabiKeyCreator != nullptr);
+
+  auto saved = [=](Result<WalletList::FtabiEntry> result) {
+    if (!result) {
+      return InvokeCallback(done, result.error());
+    }
+    const auto destroyed = base::take(_ftabiKeyCreator);
+    _list->ftabiEntries.push_back(*result);
+    InvokeCallback(done, result->publicKey);
+  };
+  _ftabiKeyCreator->save(password, *_list, settings().useTestNetwork, std::move(saved));
 }
 
 void Wallet::exportKey(const QByteArray &publicKey, const QByteArray &password,
@@ -332,6 +373,24 @@ void Wallet::exportKey(const QByteArray &publicKey, const QByteArray &password,
   _external->lib()
       .request(TLExportKey(prepareInputKey(publicKey, password)))
       .done([=](const TLExportedKey &result) { InvokeCallback(done, Parse(result)); })
+      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+      .send();
+}
+
+void Wallet::exportFtabiKey(const QByteArray &publicKey, const QByteArray &password,
+                            const Callback<std::pair<QString, std::vector<QString>>> &done) {
+  _external->lib()
+      .request(TLftabi_ExportKey(prepareInputKey(publicKey, password)))
+      .done([=](const TLftabi_ExportedKey &result) {
+        result.match([&](const TLDftabi_exportedKey &result) {
+          std::vector<QString> wordsList;
+          wordsList.reserve(result.vword_list().v.size());
+          for (const auto &word : result.vword_list().v) {
+            wordsList.emplace_back(word.v);
+          }
+          InvokeCallback(done, std::make_pair(result.vderivation_path().v, std::move(wordsList)));
+        });
+      })
       .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
       .send();
 }
@@ -349,8 +408,9 @@ void Wallet::setWalletList(const WalletList &list) {
   *_list = list;
 }
 
-void Wallet::deleteKey(const QByteArray &publicKey, const Callback<> &done) {
-  Expects(_keyCreator == nullptr);
+void Wallet::deleteKey(KeyType keyType, const QByteArray &publicKey, const Callback<> &done) {
+  Expects((keyType == KeyType::Original && _originalKeyCreator == nullptr) ||
+          (keyType == KeyType::Ftabi && _ftabiKeyCreator == nullptr));
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
   Expects(ranges::contains(_list->entries, publicKey, &WalletList::Entry::publicKey));
@@ -368,12 +428,12 @@ void Wallet::deleteKey(const QByteArray &publicKey, const Callback<> &done) {
     _viewersPasswordsWaiters.erase(publicKey);
     InvokeCallback(done, result);
   };
-  _keyDestroyer = std::make_unique<KeyDestroyer>(&_external->lib(), &_external->db(), std::move(list), index,
+  _keyDestroyer = std::make_unique<KeyDestroyer>(&_external->lib(), &_external->db(), std::move(list), keyType, index,
                                                  settings().useTestNetwork, std::move(removed));
 }
 
 void Wallet::deleteAllKeys(const Callback<> &done) {
-  Expects(_keyCreator == nullptr);
+  Expects(_originalKeyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
 
@@ -392,7 +452,7 @@ void Wallet::deleteAllKeys(const Callback<> &done) {
 }
 
 void Wallet::changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, const Callback<> &done) {
-  Expects(_keyCreator == nullptr);
+  Expects(_originalKeyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
   Expects(!_list->entries.empty());
@@ -422,10 +482,8 @@ void Wallet::checkSendGrams(const QByteArray &publicKey, const TransactionToSend
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  checkTransactionFees(
-      sender, transaction.recipient,
-      (transaction.sendUnencryptedText ? tl_msg_dataText : tl_msg_dataDecryptedText)(tl_string(transaction.comment)),
-      transaction.amount, transaction.timeout, transaction.allowSendToUninited, done);
+  checkTransactionFees(sender, transaction.recipient, tl_msg_dataText(tl_string(transaction.comment)),
+                       transaction.amount, transaction.timeout, transaction.allowSendToUninited, done);
 }
 
 void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransactionToSend &transaction,
@@ -650,11 +708,9 @@ void Wallet::sendGrams(const QByteArray &publicKey, const QByteArray &password, 
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  sendMessage(
-      publicKey, password, sender, transaction.recipient,
-      (transaction.sendUnencryptedText ? tl_msg_dataText : tl_msg_dataDecryptedText)(tl_string(transaction.comment)),
-      transaction.amount, transaction.timeout, transaction.allowSendToUninited, transaction.comment,
-      transaction.sendUnencryptedText, ready, done);
+  sendMessage(publicKey, password, sender, transaction.recipient, tl_msg_dataText(tl_string(transaction.comment)),
+              transaction.amount, transaction.timeout, transaction.allowSendToUninited, transaction.comment, ready,
+              done);
 }
 
 void Wallet::sendTokens(const QByteArray &publicKey, const QByteArray &password,
@@ -1894,13 +1950,13 @@ void Wallet::sendMessage(const QByteArray &publicKey, const QByteArray &password
                          const QString &recipient, const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount,
                          int timeout, bool allowSendToUninited, const Callback<PendingTransaction> &ready,
                          const Callback<> &done) {
-  sendMessage(publicKey, password, sender, recipient, body, realAmount, timeout, allowSendToUninited, QString{}, false,
-              ready, done);
+  sendMessage(publicKey, password, sender, recipient, body, realAmount, timeout, allowSendToUninited, QString{}, ready,
+              done);
 }
 
 void Wallet::sendMessage(const QByteArray &publicKey, const QByteArray &password, const QString &sender,
                          const QString &recipient, const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount,
-                         int timeout, bool allowSendToUninited, const QString &comment, bool sendUnencryptedText,
+                         int timeout, bool allowSendToUninited, const QString &comment,
                          const Callback<PendingTransaction> &ready, const Callback<> &done) {
   const auto send = makeSendCallback(done);
 

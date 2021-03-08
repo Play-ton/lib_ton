@@ -13,6 +13,10 @@ namespace Storage::Cache {
 class Database;
 }  // namespace Storage::Cache
 
+namespace Ton {
+enum class KeyType;
+}
+
 namespace Ton::details {
 
 class RequestSender;
@@ -21,9 +25,9 @@ struct WalletList;
 class KeyDestroyer final : public base::has_weak_ptr {
  public:
   KeyDestroyer(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, const WalletList &existing,
-               index_type index, bool useTestNetwork, Callback<> done);
+               KeyType keyType, index_type index, bool useTestNetwork, const Callback<> &done);
   KeyDestroyer(not_null<RequestSender *> lib, not_null<Storage::Cache::Database *> db, bool useTestNetwork,
-               Callback<> done);
+               const Callback<> &done);
 };
 
 }  // namespace Ton::details

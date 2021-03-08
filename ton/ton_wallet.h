@@ -27,6 +27,7 @@ namespace details {
 struct WalletList;
 class External;
 class KeyCreator;
+class FtabiKeyCreator;
 class KeyDestroyer;
 class PasswordChanger;
 class AccountViewers;
@@ -62,11 +63,16 @@ class Wallet final : public base::has_weak_ptr {
   [[nodiscard]] std::vector<QByteArray> publicKeys() const;
 
   void createKey(const Callback<std::vector<QString>> &done);
+  void createFtabiKey(const QString &derivationPath, const Callback<std::vector<QString>> &done);
   void importKey(const std::vector<QString> &words, const Callback<> &done);
+  void importFtabiKey(const QString &derivationPath, const std::vector<QString> &words, const Callback<> &done);
   void queryWalletAddress(const Callback<QString> &done);
-  void saveKey(const QByteArray &password, const QString &address, const Callback<QByteArray> &done);
+  void saveOriginalKey(const QByteArray &password, const QString &address, const Callback<QByteArray> &done);
+  void saveFtabiKey(const QByteArray &password, const Callback<QByteArray> &done);
   void exportKey(const QByteArray &publicKey, const QByteArray &password, const Callback<std::vector<QString>> &done);
-  void deleteKey(const QByteArray &publicKey, const Callback<> &done);
+  void exportFtabiKey(const QByteArray &publicKey, const QByteArray &password,
+                      const Callback<std::pair<QString, std::vector<QString>>> &done);
+  void deleteKey(KeyType keyType, const QByteArray &publicKey, const Callback<> &done);
   void deleteAllKeys(const Callback<> &done);
   void changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, const Callback<> &done);
 
@@ -213,7 +219,7 @@ class Wallet final : public base::has_weak_ptr {
                    const Callback<> &done);
   void sendMessage(const QByteArray &publicKey, const QByteArray &password, const QString &sender,
                    const QString &recipient, const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount,
-                   int timeout, bool allowSendToUninited, const QString &comment, bool sendUnencryptedText,
+                   int timeout, bool allowSendToUninited, const QString &comment,
                    const Callback<PendingTransaction> &ready, const Callback<> &done);
 
   std::optional<ConfigInfo> _configInfo;
@@ -225,7 +231,8 @@ class Wallet final : public base::has_weak_ptr {
   const std::unique_ptr<details::AccountViewers> _accountViewers;
   const std::unique_ptr<details::WalletList> _list;
   std::unique_ptr<details::WebLoader> _webLoader;
-  std::unique_ptr<details::KeyCreator> _keyCreator;
+  std::unique_ptr<details::KeyCreator> _originalKeyCreator;
+  std::unique_ptr<details::FtabiKeyCreator> _ftabiKeyCreator;
   std::unique_ptr<details::KeyDestroyer> _keyDestroyer;
   std::unique_ptr<details::PasswordChanger> _passwordChanger;
   std::unique_ptr<details::LocalTimeSyncer> _localTimeSyncer;

@@ -62,10 +62,13 @@ struct NamedMultisigState {
   MultisigState state;
 };
 
+using WalletListEntry = std::variant<WalletList::Entry, WalletList::FtabiEntry>;
+
 TLstorage_Bool Serialize(const bool &data);
 bool Deserialize(const TLstorage_Bool &data);
 TLstorage_WalletEntry Serialize(const WalletList::Entry &data);
-WalletList::Entry Deserialize(const TLstorage_WalletEntry &data);
+TLstorage_WalletEntry Serialize(const WalletList::FtabiEntry &data);
+WalletListEntry Deserialize(const TLstorage_WalletEntry &data);
 TLstorage_WalletList Serialize(const WalletList &data);
 WalletList Deserialize(const TLstorage_WalletList &data);
 TLstorage_TransactionId Serialize(const TransactionId &data);
@@ -134,19 +137,29 @@ TLstorage_WalletEntry Serialize(const WalletList::Entry &data) {
   return make_storage_walletEntryGeneric(tl_string(data.publicKey), tl_bytes(data.secret), tl_string(data.address));
 }
 
-WalletList::Entry Deserialize(const TLstorage_WalletEntry &data) {
+TLstorage_WalletEntry Serialize(const WalletList::FtabiEntry &data) {
+  return make_storage_walletEntryFtabi(tl_string(data.publicKey), tl_bytes(data.secret));
+}
+
+WalletListEntry Deserialize(const TLstorage_WalletEntry &data) {
   return data.match(
-      [&](const TLDstorage_walletEntry &data) {
+      [&](const TLDstorage_walletEntry &data) -> WalletListEntry {
         return WalletList::Entry{
             .publicKey = data.vpublicKey().v,
             .secret = data.vsecret().v,
         };
       },
-      [&](const TLDstorage_walletEntryGeneric &data) {
+      [&](const TLDstorage_walletEntryGeneric &data) -> WalletListEntry {
         return WalletList::Entry{
             .publicKey = data.vpublicKey().v,
             .secret = data.vsecret().v,
             .address = tl::utf16(data.vaddress()),
+        };
+      },
+      [&](const TLDstorage_walletEntryFtabi &data) -> WalletListEntry {
+        return WalletList::FtabiEntry{
+            .publicKey = data.vpublicKey().v,
+            .secret = data.vsecret().v,
         };
       });
 }
@@ -157,7 +170,14 @@ TLstorage_WalletList Serialize(const WalletList &data) {
 
 WalletList Deserialize(const TLstorage_WalletList &data) {
   auto result = WalletList();
-  data.match([&](const TLDstorage_walletList &data) { result.entries = Deserialize(data.ventries()); });
+  data.match([&](const TLDstorage_walletList &data) {
+    auto entries = Deserialize(data.ventries());
+    for (auto &entry : entries) {
+      v::match(
+          entry, [&](WalletList::Entry &entry) { result.entries.emplace_back(std::move(entry)); },
+          [&](WalletList::FtabiEntry &entry) { result.ftabiEntries.emplace_back(std::move(entry)); });
+    }
+  });
   return result;
 }
 

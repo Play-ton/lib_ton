@@ -19,6 +19,8 @@ namespace Ton {
 
 inline constexpr auto kUnknownBalance = int64(-666);
 
+inline constexpr auto kFtabiKeyDerivationPath = "m/44'/396'/0'/0/0";
+
 extern const QString kZeroAddress;
 
 using int128 = boost::multiprecision::int128_t;
@@ -26,6 +28,11 @@ using int128 = boost::multiprecision::int128_t;
 struct ConfigInfo {
   int64 walletId = 0;
   QByteArray restrictedInitPublicKey;
+};
+
+enum class KeyType {
+  Original,
+  Ftabi,
 };
 
 struct TransactionId {
@@ -360,7 +367,6 @@ struct TransactionToSend {
   QString comment;
   int timeout = 0;
   bool allowSendToUninited = false;
-  bool sendUnencryptedText = false;
 };
 
 enum class TokenTransferType {

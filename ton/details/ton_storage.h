@@ -34,7 +34,14 @@ struct WalletList {
     QByteArray secret;
     QString address;
   };
+
+  struct FtabiEntry {
+    QByteArray publicKey;
+    QByteArray secret;
+  };
+
   std::vector<Entry> entries;
+  std::vector<FtabiEntry> ftabiEntries;
 };
 
 struct TokenOwnersCache {
