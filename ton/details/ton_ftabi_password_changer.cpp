@@ -21,7 +21,7 @@ FtabiPasswordChanger::FtabiPasswordChanger(not_null<RequestSender *> lib, not_nu
 
   _index = it - _list.ftabiEntries.begin();
 
-  _lib->request(TLChangeLocalPassword(  //
+  _lib->request(TLftabi_ChangeLocalPassword(  //
                     tl_inputKeyRegular(tl_key(tl_string(_list.ftabiEntries[_index].publicKey),
                                               TLsecureBytes{_list.ftabiEntries[_index].secret}),
                                        TLsecureBytes{_oldPassword}),
@@ -32,6 +32,7 @@ FtabiPasswordChanger::FtabiPasswordChanger(not_null<RequestSender *> lib, not_nu
 }
 
 void FtabiPasswordChanger::saved(const QByteArray &newSecret) {
+  _newSecret = newSecret;
   auto copy = _list;
   copy.ftabiEntries[_index].secret = newSecret;
   const auto saved = [=](Result<> result) {

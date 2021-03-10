@@ -519,10 +519,6 @@ void Wallet::changePassword(const QByteArray &oldPassword, const QByteArray &new
 
 void Wallet::changeFtabiPassword(const QByteArray &publicKey, const QByteArray &oldPassword,
                                  const QByteArray &newPassword, const Callback<> &done) {
-  Expects(_ftabiKeyCreator == nullptr);
-  Expects(_keyDestroyer == nullptr);
-  Expects(_ftabiPasswordChanger == nullptr);
-
   auto changed = [=](const Result<QByteArray> &result) {
     const auto destroyed = base::take(_ftabiPasswordChanger);
     if (!result) {
