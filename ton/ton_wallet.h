@@ -75,7 +75,8 @@ class Wallet final : public base::has_weak_ptr {
   void exportKey(const QByteArray &publicKey, const QByteArray &password, const Callback<std::vector<QString>> &done);
   void exportFtabiKey(const QByteArray &publicKey, const QByteArray &password,
                       const Callback<std::pair<QString, std::vector<QString>>> &done);
-  void deleteKey(KeyType keyType, const QByteArray &publicKey, const Callback<> &done);
+  void deleteKey(const QByteArray &publicKey, const Callback<> &done);
+  void deleteFtabiKey(const QByteArray &publicKey, const Callback<> &done);
   void deleteAllKeys(const Callback<> &done);
   void changePassword(const QByteArray &oldPassword, const QByteArray &newPassword, const Callback<> &done);
   void changeFtabiPassword(const QByteArray &publicKey, const QByteArray &oldPassword, const QByteArray &newPassword,
@@ -204,7 +205,7 @@ class Wallet final : public base::has_weak_ptr {
     crl::time expires = 0;
   };
   void setWalletList(const details::WalletList &list);
-  [[nodiscard]] details::TLinputKey prepareInputKey(const QByteArray &publicKey, const QByteArray &password) const;
+  [[nodiscard]] details::TLinputKey prepareInputKey(const QByteArray &entries, const QByteArray &password) const;
   [[nodiscard]] Fn<void(Update)> generateUpdatesCallback();
   void checkLocalTime(details::BlockchainTime time);
   void notifyPasswordGood(const QByteArray &publicKey, int generation);

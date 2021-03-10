@@ -19,10 +19,11 @@ KeyDestroyer::KeyDestroyer(not_null<details::RequestSender *> lib, not_null<Stor
   Expects(index >= 0 && ((keyType == KeyType::Original && index < existing.entries.size()) ||
                          (keyType == KeyType::Ftabi && index < existing.ftabiEntries.size())));
 
-  auto remove = [&](const auto &entry) {
+  auto remove = [&](const auto &entry, const auto &field) {
     auto removeFromDatabase = crl::guard(this, [=](const Result<> &) {
       auto copy = existing;
-      copy.entries.erase(begin(copy.entries) + index);
+      auto &entires = field(copy);
+      entires.erase(begin(entires) + index);
       SaveWalletList(db, copy, useTestNetwork, crl::guard(this, done));
     });
     DeletePublicKey(lib, entry.publicKey, entry.secret, std::move(removeFromDatabase));
@@ -30,11 +31,11 @@ KeyDestroyer::KeyDestroyer(not_null<details::RequestSender *> lib, not_null<Stor
 
   switch (keyType) {
     case KeyType::Original: {
-      remove(existing.entries[index]);
+      remove(existing.entries[index], SelectField(&WalletList::entries));
       return;
     }
     case KeyType::Ftabi: {
-      remove(existing.ftabiEntries[index]);
+      remove(existing.ftabiEntries[index], SelectField(&WalletList::ftabiEntries));
       return;
     }
     default:

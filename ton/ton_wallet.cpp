@@ -307,10 +307,6 @@ void Wallet::createKey(const Callback<std::vector<QString>> &done) {
 
 void Wallet::createFtabiKey(const QString &name, const QString &derivationPath,
                             const Callback<std::vector<QString>> &done) {
-  Expects(_ftabiKeyCreator == nullptr);
-  Expects(_keyDestroyer == nullptr);
-  Expects(_passwordChanger == nullptr);
-
   auto created = [=](const Result<std::vector<QString>> &result) {
     const auto destroyed = result ? std::unique_ptr<FtabiKeyCreator>() : base::take(_ftabiKeyCreator);
     InvokeCallback(done, result);
@@ -411,10 +407,21 @@ void Wallet::exportFtabiKey(const QByteArray &publicKey, const QByteArray &passw
 }
 
 TLinputKey Wallet::prepareInputKey(const QByteArray &publicKey, const QByteArray &password) const {
-  const auto i = ranges::find(_list->entries, publicKey, &WalletList::Entry::publicKey);
-  Assert(i != end(_list->entries));
+  const auto find = [&](const auto &entries, const auto &fieldSelector) -> std::optional<TLinputKey> {
+    const auto i = ranges::find(entries, publicKey, fieldSelector);
+    if (i == end(entries)) {
+      return std::nullopt;
+    }
+    return tl_inputKeyRegular(tl_key(tl_string(publicKey), TLsecureBytes{i->secret}), TLsecureBytes{password});
+  };
 
-  return tl_inputKeyRegular(tl_key(tl_string(publicKey), TLsecureBytes{i->secret}), TLsecureBytes{password});
+  if (auto entry = find(_list->entries, SelectConstField(&WalletList::Entry::publicKey))) {
+    return entry.value();
+  } else if (auto ftabiEntry = find(_list->ftabiEntries, SelectConstField(&WalletList::FtabiEntry::publicKey))) {
+    return ftabiEntry.value();
+  } else {
+    Unexpected("Key not found");
+  }
 }
 
 void Wallet::setWalletList(const WalletList &list) {
@@ -423,9 +430,8 @@ void Wallet::setWalletList(const WalletList &list) {
   *_list = list;
 }
 
-void Wallet::deleteKey(KeyType keyType, const QByteArray &publicKey, const Callback<> &done) {
-  Expects((keyType == KeyType::Original && _originalKeyCreator == nullptr) ||
-          (keyType == KeyType::Ftabi && _ftabiKeyCreator == nullptr));
+void Wallet::deleteKey(const QByteArray &publicKey, const Callback<> &done) {
+  Expects(_originalKeyCreator == nullptr);
   Expects(_keyDestroyer == nullptr);
   Expects(_passwordChanger == nullptr);
   Expects(ranges::contains(_list->entries, publicKey, &WalletList::Entry::publicKey));
@@ -443,8 +449,29 @@ void Wallet::deleteKey(KeyType keyType, const QByteArray &publicKey, const Callb
     _viewersPasswordsWaiters.erase(publicKey);
     InvokeCallback(done, result);
   };
-  _keyDestroyer = std::make_unique<KeyDestroyer>(&_external->lib(), &_external->db(), std::move(list), keyType, index,
-                                                 settings().useTestNetwork, std::move(removed));
+  _keyDestroyer =
+      std::make_unique<KeyDestroyer>(&_external->lib(), &_external->db(), std::move(list), KeyType::Original, index,
+                                     settings().useTestNetwork, std::move(removed));
+}
+
+void Wallet::deleteFtabiKey(const QByteArray &publicKey, const Callback<> &done) {
+  Expects(_keyDestroyer == nullptr);
+  Expects(ranges::contains(_list->ftabiEntries, publicKey, &WalletList::FtabiEntry::publicKey));
+
+  auto list = *_list;
+  const auto index =
+      ranges::find(list.ftabiEntries, publicKey, &WalletList::FtabiEntry::publicKey) - begin(list.ftabiEntries);
+
+  auto removed = [=](Result<> result) {
+    const auto destroyed = base::take(_keyDestroyer);
+    if (!result) {
+      return InvokeCallback(done, result);
+    }
+    _list->ftabiEntries.erase(begin(_list->ftabiEntries) + index);
+    InvokeCallback(done, result);
+  };
+  _keyDestroyer = std::make_unique<KeyDestroyer>(&_external->lib(), &_external->db(), std::move(list), KeyType::Ftabi,
+                                                 index, settings().useTestNetwork, std::move(removed));
 }
 
 void Wallet::deleteAllKeys(const Callback<> &done) {

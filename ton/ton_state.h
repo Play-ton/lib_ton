@@ -559,6 +559,16 @@ struct Update {
 QByteArray Int128ToBytesBE(const int128 &from);
 int128 BytesBEToInt128(const QByteArray &from);
 
+template <typename T, typename D>
+auto SelectField(T D::*field) -> Fn<T &(D &)> {
+  return field;
+}
+
+template <typename T, typename D>
+auto SelectConstField(T D::*field) -> Fn<const T &(const D &)> {
+  return field;
+}
+
 }  // namespace Ton
 
 namespace std {
