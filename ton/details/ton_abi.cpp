@@ -2,11 +2,20 @@
 
 #include "ton/details/ton_request_sender.h"
 #include "ton/ton_state.h"
+
 #include "contracts/safe_multisig_wallet_tvc.h"
+#include "contracts/safe_multisig_wallet_24h_tvc.h"
+#include "contracts/setcode_multisig_wallet_tvc.h"
+#include "contracts/surf_tvc.h"
 
 namespace Ton::details {
 
 constexpr auto kEthereumAddressByteCount = 20;
+
+template <typename T, size_t N>
+auto LoadSlice(T (&data)[N]) -> QByteArray {
+  return QByteArray(reinterpret_cast<const char *>(data), N * sizeof(T));
+}
 
 void CreateInternalMessageBody(RequestSender &lib, const TLftabi_Function &function, QVector<TLftabi_Value> &&inputs,
                                const MessageBodyCallback &done) {
@@ -1116,13 +1125,23 @@ void CreateExecuteProxyCallbackMessage(RequestSender &lib, const MessageBodyCall
   CreateInternalMessageBody(lib, ExecuteProxyCallbackFunction(), {}, done);
 }
 
-template <typename T, size_t N>
-static auto loadSlice(T (&data)[N]) -> QByteArray {
-  return QByteArray(reinterpret_cast<const char *>(data), N * sizeof(T));
+QByteArray GetMultisigTvc(Ton::MultisigVersion version) {
+  switch (version) {
+    case Ton::MultisigVersion::SafeMultisig:
+      return LoadSlice(SAFE_MULTISIG_WALLET_TVC);
+    case Ton::MultisigVersion::SafeMultisig24h:
+      return LoadSlice(SAFE_MULTISIG_24H_WALLET_TVC);
+    case Ton::MultisigVersion::SetcodeMultisig:
+      return LoadSlice(SETCODE_MULTISIG_WALLET_TVC);
+    case Ton::MultisigVersion::Surf:
+      return LoadSlice(SURF_TVC);
+    default:
+      Unexpected("Multisig version");
+  }
 }
 
-Result<GeneratedInitData> CreateMultisigInitData(const QByteArray &publicKey) {
-  static auto tvc = loadSlice(SAFE_MULTISIG_WALLET_TVC);
+Result<GeneratedInitData> CreateMultisigInitData(Ton::MultisigVersion version, const QByteArray &publicKey) {
+  static auto tvc = GetMultisigTvc(version);
 
   const auto result = RequestSender::Execute(TLftabi_GenerateStateInit(tl_bytes(tvc), tl_bytes(publicKey)));
   if (!result.has_value()) {

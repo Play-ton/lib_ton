@@ -30,6 +30,8 @@ struct DePoolParticipantState;
 struct RootTokenContractDetails;
 struct TokenWalletContractDetails;
 
+enum class MultisigVersion;
+
 }  // namespace Ton
 
 namespace Ton::details {
@@ -170,7 +172,7 @@ struct GeneratedInitData {
   QByteArray data;
 };
 
-[[nodiscard]] Result<GeneratedInitData> CreateMultisigInitData(QByteArray publicKey);
+[[nodiscard]] Result<GeneratedInitData> CreateMultisigInitData(Ton::MultisigVersion version, QByteArray publicKey);
 void CreateMultisigConstructorMessage(RequestSender &lib, const TLInputKey &deployerKey, uint8 requiredConfirmations,
                                       const std::vector<QByteArray> &owners, const MessageBodyCallback &done);
 void CreateMultisigSubmitTransactionMessage(RequestSender &lib, const TLInputKey &key, const QString &dest, int64 value,

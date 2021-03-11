@@ -103,13 +103,12 @@ class Wallet final : public base::has_weak_ptr {
   void checkCollectTokens(const QByteArray &publicKey, const CollectTokensTransactionToSend &transaction,
                           const Callback<TransactionCheckResult> &done);
 
-  void checkDeployMultisig(const QByteArray &publicKey, const DeployMultisigTransactionToSend &transaction,
+  void checkDeployMultisig(const DeployMultisigTransactionToSend &transaction,
                            const Callback<TransactionCheckResult> &done);
 
-  void checkSubmitTransaction(const QByteArray &publicKey, const SubmitTransactionToSend &transaction,
-                              const Callback<TransactionCheckResult> &done);
+  void checkSubmitTransaction(const SubmitTransactionToSend &transaction, const Callback<TransactionCheckResult> &done);
 
-  void checkConfirmTransaction(const QByteArray &publicKye, const ConfirmTransactionToSend &transaction,
+  void checkConfirmTransaction(const ConfirmTransactionToSend &transaction,
                                const Callback<TransactionCheckResult> &done);
 
   void sendGrams(const QByteArray &publicKey, const QByteArray &password, const TransactionToSend &transaction,
@@ -136,17 +135,14 @@ class Wallet final : public base::has_weak_ptr {
                      const CollectTokensTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
                      const Callback<> &done);
 
-  void deployMultisig(const QByteArray &publicKey, const QByteArray &password,
-                      const DeployMultisigTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
-                      const Callback<> &done);
+  void deployMultisig(const QByteArray &password, const DeployMultisigTransactionToSend &transaction,
+                      const Callback<PendingTransaction> &ready, const Callback<> &done);
 
-  void submitTransaction(const QByteArray &publicKyy, const QByteArray &password,
-                         const SubmitTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
-                         const Callback<> &done);
+  void submitTransaction(const QByteArray &password, const SubmitTransactionToSend &transaction,
+                         const Callback<PendingTransaction> &ready, const Callback<> &done);
 
-  void confirmTransaction(const QByteArray &publicKey, const QByteArray &password,
-                          const ConfirmTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
-                          const Callback<> &done);
+  void confirmTransaction(const QByteArray &password, const ConfirmTransactionToSend &transaction,
+                          const Callback<PendingTransaction> &ready, const Callback<> &done);
 
   void openGate(const QString &rawAddress, const std::optional<Symbol> &token = {});
   void openGateExecuteSwapBack(const QString &eventAddress);
@@ -200,6 +196,8 @@ class Wallet final : public base::has_weak_ptr {
                                     const Callback<DePoolStatesMap> &done) const;
   void requestMultisigStates(const MultisigStatesMap &previousStates, const Callback<MultisigStatesMap> &done);
 
+  void requestNewMultisigAddress(MultisigVersion version, const QByteArray &publicKey,
+                                 const Callback<MultisigInitialInfo> &done);
   void requestMultisigInfo(const QString &address, const Callback<MultisigInfo> &done);
 
  private:
@@ -231,6 +229,8 @@ class Wallet final : public base::has_weak_ptr {
                    const QString &recipient, const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount,
                    int timeout, bool allowSendToUninited, const QString &comment,
                    const Callback<PendingTransaction> &ready, const Callback<> &done);
+  void sendExternalMessage(const QString &address, const QByteArray &initState, const QByteArray &body,
+                           const Callback<PendingTransaction> &ready, const Callback<> &done);
 
   std::optional<ConfigInfo> _configInfo;
   rpl::event_stream<Update> _updates;

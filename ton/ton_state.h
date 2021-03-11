@@ -369,6 +369,12 @@ enum class MultisigVersion {
   Surf,
 };
 
+struct MultisigInitialInfo {
+  QString address;
+  MultisigVersion version;
+  QByteArray initState;
+};
+
 struct MultisigInfo {
   QString address;
   MultisigVersion version;
@@ -458,12 +464,15 @@ struct CancelWithdrawalTransactionToSend {
 };
 
 struct DeployMultisigTransactionToSend {
-  constexpr static int64 initialBalance = 1'000'000'000;  // 1 TON
+  QByteArray publicKey;
+  MultisigInitialInfo initialInfo;
   uint8 requiredConfirmations = 1;
-  std::vector<QByteArray> publicKeys;
+  std::vector<QByteArray> custodians;
+  int timeout = 0;
 };
 
 struct SubmitTransactionToSend {
+  QByteArray publicKey;
   QString multisigAddress;
   QString dest;
   int64 value;
@@ -473,6 +482,7 @@ struct SubmitTransactionToSend {
 };
 
 struct ConfirmTransactionToSend {
+  QByteArray publicKey;
   QString multisigAddress;
   int64 transactionId;
   int timeout = 0;

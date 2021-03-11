@@ -18,6 +18,9 @@ generate_ton_tl(lib_ton ${src_loc}/ton/details/ton_tl_generate.py ${libs_loc}/to
 generate_ton_storage_tl(lib_ton ${src_loc}/ton/details/ton_storage_tl_generate.py ${src_loc}/ton/details/ton_storage.tl)
 
 embed_resource("${src_loc}/contracts/SafeMultisigWallet.tvc" "${src_loc}/contracts/safe_multisig_wallet_tvc.h" SAFE_MULTISIG_WALLET_TVC UNSIGNED)
+embed_resource("${src_loc}/contracts/SafeMultisigWallet24h.tvc" "${src_loc}/contracts/safe_multisig_wallet_24h_tvc.h" SAFE_MULTISIG_24H_WALLET_TVC UNSIGNED)
+embed_resource("${src_loc}/contracts/SetcodeMultisigWallet.tvc" "${src_loc}/contracts/setcode_multisig_wallet_tvc.h" SETCODE_MULTISIG_WALLET_TVC UNSIGNED)
+embed_resource("${src_loc}/contracts/Surf.tvc" "${src_loc}/contracts/surf_tvc.h" SURF_TVC UNSIGNED)
 
 nice_target_sources(lib_ton ${libs_loc}/ton/tl/generate
 PRIVATE
@@ -28,6 +31,9 @@ target_precompile_headers(lib_ton PRIVATE ${src_loc}/ton/details/ton_pch.h)
 nice_target_sources(lib_ton ${src_loc}
 PRIVATE
     contracts/safe_multisig_wallet_tvc.h
+    contracts/safe_multisig_wallet_24h_tvc.h
+    contracts/setcode_multisig_wallet_tvc.h
+    contracts/surf_tvc.h
 
     ton/details/ton_abi.cpp
     ton/details/ton_abi.h
