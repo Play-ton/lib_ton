@@ -78,13 +78,6 @@ std::optional<int32> GuessDePoolVersion(const QByteArray &codeHash) {
   return std::nullopt;
 }
 
-enum class MultisigVersion {
-  SafeMultisig,
-  SafeMultisig24h,
-  SetcodeMultisig,
-  Surf,
-};
-
 std::optional<MultisigVersion> GuessMultisigVersion(const QByteArray &codeHash) {
   static const std::map<QByteArray, MultisigVersion> codeHashes = {
       {QByteArray::fromHex("80d6c47c4a25543c9b397b71716f3fae1e2c5d247174c52e2c19bd896442b105"),  //
@@ -159,6 +152,12 @@ QString Wallet::ConvertIntoPacked(const QString &address) {
   const auto result = RequestSender::Execute(TLConvertIntoPacked(tl_string(address), tl_boolTrue()));
   Expects(result.has_value());
   return result.value().c_accountAddress().vaccount_address().v;
+}
+
+QByteArray Wallet::PackPublicKey(const QByteArray &publicKey) {
+  const auto result = RequestSender::Execute(TLftabi_PackPublicKey(tl_string(publicKey)));
+  Expects(result.has_value());
+  return result.value().c_ftabi_packedPublicKey().vpublic_key().v;
 }
 
 base::flat_set<QString> Wallet::GetValidWords() {
@@ -1108,41 +1107,41 @@ void Wallet::removeToken(const QByteArray &publicKey, const Symbol &token) {
   _accountViewers->removeToken(getUsedAddress(publicKey), token);
 }
 
-void Wallet::addMultisig(const QByteArray &publicKey, const QString &multisigAddress, const Callback<> &done) {
+void Wallet::addMultisig(const QByteArray &publicKey, const MultisigInfo &info, const QByteArray &custodianPublicKey,
+                         const Callback<> &done) {
   const auto account = getUsedAddress(publicKey);
-  const auto packedMultisigAddress = ConvertIntoPacked(multisigAddress);
 
-  _external->lib()
-      .request(TLGetAccountState(tl_accountAddress(tl_string(packedMultisigAddress))))
-      .done([this, done, account, packedMultisigAddress](const TLFullAccountState &result) {
-        const auto &codeHash = result.c_fullAccountState().vcode_hash().v;
-        const auto multisigVersion = GuessMultisigVersion(codeHash);
+  std::cout << "Info.address: " << info.address.toStdString() << std::endl;
 
-        if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState ||
-            !multisigVersion.has_value()) {
-          return InvokeCallback(done, Error{Error::Type::TonLib, "Requested account is not a multisig"});
-        }
+  requestState(info.address, [=](Result<AccountState> result) {
+    if (!result.has_value()) {
+      std::cout << "STATE: " << result.error().details.toStdString() << std::endl;
+      return InvokeCallback(done, result.error());
+    }
+    auto accountState = std::move(result.value());
 
-        auto accountState = Parse(result);
-        const auto lastTransactionId = accountState.lastTransactionId;
+    const auto lastTransactionId = accountState.lastTransactionId;
 
-        requestTransactions(        //
-            packedMultisigAddress,  //
-            lastTransactionId,      //
-            [=, accountState = std::move(accountState)](Result<TransactionsSlice> lastTransactions) mutable {
-              if (!lastTransactions.has_value()) {
-                return InvokeCallback(done, lastTransactions.error());
-              }
-              _accountViewers->addMultisig(account, packedMultisigAddress,
-                                           MultisigState{
-                                               .accountState = std::move(accountState),
-                                               .lastTransactions = std::move(*lastTransactions),
-                                           });
-              InvokeCallback(done);
-            });
-      })
-      .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
-      .send();
+    requestTransactions(    //
+        info.address,       //
+        lastTransactionId,  //
+        [=, accountState = std::move(accountState)](Result<TransactionsSlice> lastTransactions) mutable {
+          if (!lastTransactions.has_value()) {
+            return InvokeCallback(done, lastTransactions.error());
+          }
+          _accountViewers->addMultisig(  //
+              account, info.address,
+              MultisigState{
+                  .version = info.version,
+                  .publicKey = custodianPublicKey,
+                  .accountState = std::move(accountState),
+                  .lastTransactions = std::move(*lastTransactions),
+                  .custodians = std::move(info.custodians),
+                  .expirationTime = info.expirationTime,
+              });
+          InvokeCallback(done);
+        });
+  });
 }
 
 void Wallet::removeMultisig(const QByteArray &publicKey, const QString &multisigAddress) {
@@ -1434,6 +1433,121 @@ void Wallet::requestMultisigStates(const MultisigStatesMap &previousStates, cons
           }
         });
   }
+}
+
+void Wallet::requestMultisigInfo(const QString &address, const Callback<MultisigInfo> &done) {
+  const auto packedMultisigAddress = ConvertIntoPacked(address);
+
+  constexpr auto error_account_not_found = "Requested account doesn't exist";
+  constexpr auto error_invalid_contract = "Requested account is not a multisig contract";
+
+  _external->lib()
+      .request(TLGetAccountState(tl_accountAddress(tl_string(packedMultisigAddress))))
+      .done([=](TLFullAccountState &&result) mutable {
+        const auto &codeHash = result.c_fullAccountState().vcode_hash().v;
+        const auto multisigVersion = GuessMultisigVersion(codeHash);
+
+        if (result.c_fullAccountState().vaccount_state().type() == id_uninited_accountState) {
+          return InvokeCallback(done, Error{Error::Type::TonLib, error_account_not_found});
+        } else if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState ||
+                   !multisigVersion.has_value()) {
+          return InvokeCallback(done, Error{Error::Type::TonLib, error_invalid_contract});
+        }
+
+        const auto &info = result.c_fullAccountState();
+        const auto &transactionLt = info.vlast_transaction_id().c_internal_transactionId().vlt().v;
+        const auto &syncUtime = static_cast<int32>(info.vsync_utime().v);
+        const auto &accountState = info.vaccount_state().c_raw_accountState();
+        const auto &balance = info.vbalance();
+        const auto &data = accountState.vdata();
+        const auto &code = accountState.vcode();
+
+        auto getCustodians = [=](MultisigInfo &&multisigInfo) {
+          const auto &info = result.c_fullAccountState();
+          const auto &accountState = result.c_fullAccountState().vaccount_state().c_raw_accountState();
+
+          _external->lib()
+              .request(TLftabi_RunLocalCachedSplit(                     //
+                  tl_accountAddress(tl_string(packedMultisigAddress)),  //
+                  tl_int64(transactionLt + 10),                         //
+                  tl_int32(syncUtime),                                  //
+                  balance,                                              //
+                  data,                                                 //
+                  code,                                                 //
+                  MultisigGetCustodians(),                              //
+                  tl_ftabi_functionCallExternal({}, {})))
+              .done([=, info = std::forward<MultisigInfo>(multisigInfo)](const TLftabi_tvmOutput &tvmResult) mutable {
+                const auto &output = tvmResult.c_ftabi_tvmOutput();
+                if (output.vsuccess().type() != id_boolTrue) {
+                  return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+                }
+
+                const auto &results = output.vvalues().v;
+                const auto invalidAbiError = Error{Error::Type::TonLib, "Invalid Multisig.getParameters abi"};
+                if (results.size() != 1 || results[0].type() != id_ftabi_valueArray) {
+                  return InvokeCallback(done, invalidAbiError);
+                }
+
+                const auto custodians = results[0].c_ftabi_valueArray().vvalues().v;
+                info.custodians.reserve(custodians.size());
+                for (const auto custodian : custodians) {
+                  if (custodian.type() != id_ftabi_valueTuple) {
+                    return InvokeCallback(done, invalidAbiError);
+                  }
+                  const auto &tuple = custodian.c_ftabi_valueTuple().vvalues().v;
+                  if (tuple.size() != 2 || !IsBigInt(tuple[1])) {
+                    return InvokeCallback(done, invalidAbiError);
+                  }
+
+                  const auto publicKey = UnpackPubkey(tuple[1]);
+                  info.custodians.push_back(PackPublicKey(publicKey));
+                }
+
+                InvokeCallback(done, info);
+              })
+              .fail([=](const TLError &error) {
+                InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get multisig custodians"});
+              })
+              .send();
+        };
+
+        _external->lib()
+            .request(TLftabi_RunLocalCachedSplit(                     //
+                tl_accountAddress(tl_string(packedMultisigAddress)),  //
+                tl_int64(transactionLt + 10),                         //
+                tl_int32(syncUtime),                                  //
+                balance,                                              //
+                data,                                                 //
+                code,                                                 //
+                MultisigGetParameters(),                              //
+                tl_ftabi_functionCallExternal({}, {})))
+            .done([=](const TLftabi_tvmOutput &tvmResult) mutable {
+              const auto &output = tvmResult.c_ftabi_tvmOutput();
+              if (output.vsuccess().type() != id_boolTrue) {
+                return InvokeCallback(done, ErrorFromLib(GenerateVmError(output.vexit_code())));
+              }
+
+              const auto &results = output.vvalues().v;
+              const auto invalidAbiError = Error{Error::Type::TonLib, "Invalid Multisig.getParameters abi"};
+              if (results.size() != 5 || results[2].type() != id_ftabi_valueInt) {
+                return InvokeCallback(done, invalidAbiError);
+              }
+
+              getCustodians(MultisigInfo{
+                  .address = packedMultisigAddress,
+                  .version = multisigVersion.value(),
+                  .expirationTime = UnpackUint(results[2]),
+              });
+            })
+            .fail([=](const TLError &error) {
+              InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get multisig parameters"});
+            })
+            .send();
+      })
+      .fail([=](const TLError &error) {
+        InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get multisig wallet state"});
+      })
+      .send();
 }
 
 void Wallet::decrypt(const QByteArray &publicKey, std::vector<Transaction> &&list,

@@ -458,18 +458,37 @@ NamedDePoolState Deserialize(const TLstorage_DePoolState &data) {
 }
 
 TLstorage_MultisigState Serialize(const NamedMultisigState &data) {
-  return make_storage_multisigState(tl_string(data.address), Serialize(data.state.accountState),
-                                    Serialize(data.state.lastTransactions));
+  TLVector<TLstring> custodians;
+  custodians.v.reserve(data.state.custodians.size());
+  for (const auto &custodian : data.state.custodians) {
+    custodians.v.push_back(tl_bytes(custodian));
+  }
+
+  return make_storage_multisigState(tl_string(data.address), tl_int32(static_cast<int32>(data.state.version)),
+                                    tl_bytes(data.state.publicKey), Serialize(data.state.accountState),
+                                    Serialize(data.state.lastTransactions), custodians,
+                                    tl_int64(data.state.expirationTime));
 }
 
 NamedMultisigState Deserialize(const TLstorage_MultisigState &data) {
   return data.match([&](const TLDstorage_multisigState &data) {
     auto address = QString::fromUtf8(data.vaddress().v);
+
+    std::vector<QByteArray> custodians;
+    custodians.reserve(data.vcustodians().v.size());
+    for (const auto &custodian : data.vcustodians().v) {
+      custodians.emplace_back(custodian.v);
+    }
+
     auto state = MultisigState{
+        .version = static_cast<Ton::MultisigVersion>(data.vversion().v),
+        .publicKey = tl::utf8(data.vpublicKey().v),
         .accountState = Deserialize(data.vstate()),
         .lastTransactions = Deserialize(data.vlastTransactions()),
+        .custodians = std::move(custodians),
+        .expirationTime = data.vexpirationTime().v,
     };
-    return NamedMultisigState{std::move(address), std::move(state)};
+    return NamedMultisigState{.address = std::move(address), .state = std::move(state)};
   });
 }
 

@@ -40,6 +40,12 @@ struct FtabiKey {
   QByteArray publicKey;
 };
 
+struct AvailableKey {
+  Ton::KeyType type;
+  QByteArray publicKey;
+  QString name;
+};
+
 struct TransactionId {
   int64 lt = 0;
   QByteArray hash;
@@ -356,9 +362,28 @@ struct TokenStateValue {
 bool operator==(const TokenStateValue &a, const TokenStateValue &b);
 bool operator!=(const TokenStateValue &a, const TokenStateValue &b);
 
+enum class MultisigVersion {
+  SafeMultisig,
+  SafeMultisig24h,
+  SetcodeMultisig,
+  Surf,
+};
+
+struct MultisigInfo {
+  QString address;
+  MultisigVersion version;
+  std::vector<QByteArray> custodians;
+  int64 expirationTime;
+};
+
 struct MultisigState {
+  MultisigVersion version;
+  QByteArray publicKey;
   AccountState accountState;
   TransactionsSlice lastTransactions;
+
+  std::vector<QByteArray> custodians;
+  int64 expirationTime;
 };
 
 bool operator==(const MultisigState &a, const MultisigState &b);

@@ -74,8 +74,12 @@ storage.dePoolState
     reward:int64 = storage.DePoolState;
 storage.multisigState
     address:string
+    version:int32
+    publicKey:bytes
     state:storage.AccountState
-    lastTransactions:storage.TransactionsSlice = storage.MultisigState;
+    lastTransactions:storage.TransactionsSlice
+    custodians:vector<bytes>
+    expirationTime:int64 = storage.MultisigState;
 storage.assetsListMain = storage.AssetsListItem;
 storage.assetsListToken name:bytes decimals:int32 rootContractAddress:bytes = storage.AssetsListItem;
 storage.assetsListDePool address:string = storage.AssetsListItem;

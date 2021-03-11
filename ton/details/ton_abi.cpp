@@ -28,6 +28,24 @@ void CreateExternalSignedMessageBody(RequestSender &lib, const TLftabi_Function 
       .send();
 }
 
+[[nodiscard]] QByteArray UnpackPubkey(const TLftabi_Value &value) {
+  return value.match(
+      [](const TLDftabi_valueInt &value) {
+        auto number = value.vvalue().v;
+        QByteArray result(32, 0);
+        for (auto i = 0; i < sizeof(number) || number != 0; --i) {
+          result[i] = static_cast<char>(number & 0xff);
+          number >>= 8;
+        }
+        return result;
+      },
+      [](const TLDftabi_valueBigInt &value) { return value.vvalue().v; },
+      [](auto &&) {
+        Unexpected("ftabi value");
+        return QByteArray{};
+      });
+}
+
 [[nodiscard]] TLftabi_Value PackPubKey() {
   return tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(256)), tl_int64(0));
 }

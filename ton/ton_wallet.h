@@ -157,7 +157,8 @@ class Wallet final : public base::has_weak_ptr {
   void addToken(const QByteArray &publicKey, const QString &rootContractAddress, const Callback<> &done);
   void removeToken(const QByteArray &publicKey, const Symbol &token);
 
-  void addMultisig(const QByteArray &publicKey, const QString &multisigAddress, const Callback<> &done);
+  void addMultisig(const QByteArray &publicKey, const MultisigInfo &info, const QByteArray &custodianPublicKey,
+                   const Callback<> &done);
   void removeMultisig(const QByteArray &publicKey, const QString &multisigAddress);
 
   void reorderAssets(const QByteArray &publicKey, int oldPosition, int newPosition);
@@ -167,6 +168,7 @@ class Wallet final : public base::has_weak_ptr {
   [[nodiscard]] static bool CheckAddress(const QString &address);
   [[nodiscard]] static QString ConvertIntoRaw(const QString &address);
   [[nodiscard]] static QString ConvertIntoPacked(const QString &address);
+  [[nodiscard]] static QByteArray PackPublicKey(const QByteArray &publicKey);
   [[nodiscard]] static base::flat_set<QString> GetValidWords();
   [[nodiscard]] static bool IsIncorrectPasswordError(const Error &error);
 
@@ -197,6 +199,8 @@ class Wallet final : public base::has_weak_ptr {
   void requestDePoolParticipantInfo(const QByteArray &publicKey, const DePoolStatesMap &previousStates,
                                     const Callback<DePoolStatesMap> &done) const;
   void requestMultisigStates(const MultisigStatesMap &previousStates, const Callback<MultisigStatesMap> &done);
+
+  void requestMultisigInfo(const QString &address, const Callback<MultisigInfo> &done);
 
  private:
   struct ViewersPassword {

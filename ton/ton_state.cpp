@@ -61,7 +61,9 @@ bool operator!=(const TokenStateValue &a, const TokenStateValue &b) {
 }
 
 bool operator==(const MultisigState &a, const MultisigState &b) {
-  return (a.accountState == b.accountState) && (a.lastTransactions == b.lastTransactions);
+  return (a.version == b.version) && (a.publicKey == b.publicKey) && (a.accountState == b.accountState) &&
+         (a.lastTransactions == b.lastTransactions) && (a.custodians == b.custodians) &&
+         (a.expirationTime == b.expirationTime);
 }
 
 bool operator!=(const MultisigState &a, const MultisigState &b) {

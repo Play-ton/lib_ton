@@ -52,6 +52,7 @@ using TLInputKey = tl::boxed<TLinputKey>;
 
 class RequestSender;
 
+[[nodiscard]] QByteArray UnpackPubkey(const TLftabi_Value &value);
 [[nodiscard]] TLftabi_Value PackPubKey();
 
 [[nodiscard]] int128 UnpackUint128(const TLftabi_Value &value);
