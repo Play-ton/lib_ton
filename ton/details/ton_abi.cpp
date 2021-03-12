@@ -693,18 +693,31 @@ TLftabi_Function MultisigConfirmTransactionFunction() {
   return *function;
 }
 
-TLftabi_Function MultisigGetParameters() {
+TLftabi_Function MultisigGetParameters(MultisigVersion version) {
   static std::optional<TLftabi_function> function;
   if (!function.has_value()) {
+    auto outputs = tl_vector(QVector<TLftabi_Param>{
+        tl_ftabi_paramUint(tl_int32(8)),    // maxQueuedTransactions
+        tl_ftabi_paramUint(tl_int32(8)),    // maxCustodianCount
+        tl_ftabi_paramUint(tl_int32(64)),   // expirationTime
+        tl_ftabi_paramUint(tl_int32(128)),  // minValue
+        tl_ftabi_paramUint(tl_int32(8)),    // requiredTxnConfirms
+    });
+
+    switch (version) {
+      case MultisigVersion::SetcodeMultisig:
+      case MultisigVersion::Surf: {
+        outputs.v.push_back(tl_ftabi_paramUint(tl_int32(8)));  // requiredUpdConfirms
+        break;
+      }
+      default:
+        break;
+    }
+
+    std::cout << "Version: " << static_cast<int>(version) << ", " << outputs.v.size() << std::endl;
+
     const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
-        tl_string("getParameters"), ExtendedHeaders(), {},
-        tl_vector(QVector<TLftabi_Param>{
-            tl_ftabi_paramUint(tl_int32(8)),    // maxQueuedTransactions
-            tl_ftabi_paramUint(tl_int32(8)),    // maxCustodianCount
-            tl_ftabi_paramUint(tl_int32(64)),   // expirationTime
-            tl_ftabi_paramUint(tl_int32(128)),  // minValue
-            tl_ftabi_paramUint(tl_int32(8)),    // requiredTxnConfirms
-        })));
+        tl_string("getParameters"), ExtendedHeaders(), {}, outputs));
     Expects(createdFunction.has_value());
     function = createdFunction.value();
   }

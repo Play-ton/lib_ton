@@ -19,7 +19,7 @@ FtabiKeyCreator::FtabiKeyCreator(not_null<RequestSender *> lib, not_null<Storage
                                  const QString &name, const QString &derivationPath,
                                  const Fn<void(Result<std::vector<QString>>)> &done)
     : _lib(lib), _db(db), _name(name), _password(GenerateLocalPassword()) {
-  _lib->request(TLftabi_CreateNewKey(TLsecureString{_password}, tl_string(derivationPath)))
+  _lib->request(TLCreateNewFtabiKey(TLsecureString{_password}, tl_string(derivationPath)))
       .done(crl::guard(this,
                        [=](const TLKey &key) {
                          key.match([&](const TLDkey &data) {
@@ -41,8 +41,8 @@ FtabiKeyCreator::FtabiKeyCreator(not_null<RequestSender *> lib, not_null<Storage
   for (const auto &word : words) {
     list.push_back(TLsecureString{word.toUtf8()});
   }
-  _lib->request(TLftabi_ImportKey(TLsecureString{_password},
-                                  tl_ftabi_exportedKey(tl_vector<TLsecureString>(list), tl_string(derivationPath))))
+  _lib->request(TLImportKey(TLsecureString{_password}, TLsecureString{},
+                            tl_ftabi_exportedKey(tl_vector<TLsecureString>(list), tl_string(derivationPath))))
       .done(crl::guard(this,
                        [=](const TLKey &key) {
                          _state = State::Created;
@@ -85,8 +85,8 @@ void FtabiKeyCreator::changePassword(const QByteArray &password, Callback<> done
   Expects(_password != password);
 
   _state = State::ChangingPassword;
-  _lib->request(TLftabi_ChangeLocalPassword(
-                    tl_inputKeyRegular(tl_key(tl_string(_key), TLsecureBytes{_secret}), TLsecureBytes{_password}),
+  _lib->request(TLChangeLocalPassword(
+                    tl_inputKeyFtabi(tl_key(tl_string(_key), TLsecureBytes{_secret}), TLsecureBytes{_password}),
                     TLsecureBytes{password}))
       .done(crl::guard(this,
                        [=](const TLKey &result) {
@@ -107,10 +107,10 @@ void FtabiKeyCreator::exportWords(const Fn<void(Result<std::vector<QString>>)> &
   Expects(!_key.isEmpty());
   Expects(!_secret.isEmpty());
 
-  _lib->request(TLftabi_ExportKey(
-                    tl_inputKeyRegular(tl_key(tl_string(_key), TLsecureBytes{_secret}), TLsecureBytes{_password})))
+  _lib->request(
+          TLExportKey(tl_inputKeyFtabi(tl_key(tl_string(_key), TLsecureBytes{_secret}), TLsecureBytes{_password})))
       .done(crl::guard(this,
-                       [=](const TLftabi_ExportedKey &result) {
+                       [=](const TLExportedKey &result) {
                          _state = State::Created;
                          InvokeCallback(done, Parse(result));
                        }))

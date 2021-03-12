@@ -382,21 +382,6 @@ struct MultisigInfo {
   int64 expirationTime;
 };
 
-struct MultisigState {
-  MultisigVersion version;
-  QByteArray publicKey;
-  AccountState accountState;
-  TransactionsSlice lastTransactions;
-
-  std::vector<QByteArray> custodians;
-  int64 expirationTime;
-};
-
-bool operator==(const MultisigState &a, const MultisigState &b);
-bool operator!=(const MultisigState &a, const MultisigState &b);
-
-using MultisigStatesMap = std::map<QString, MultisigState>;
-
 struct TransactionToSend {
   int64 amount = 0;
   QString recipient;
@@ -535,6 +520,22 @@ using AssetListItem = std::variant<AssetListItemWallet, AssetListItemToken, Asse
 
 bool operator==(const AssetListItem &a, const AssetListItem &b);
 bool operator!=(const AssetListItem &a, const AssetListItem &b);
+
+struct MultisigState {
+  MultisigVersion version;
+  QByteArray publicKey;
+  AccountState accountState;
+  TransactionsSlice lastTransactions;
+  std::vector<PendingTransaction> pendingTransactions;
+
+  std::vector<QByteArray> custodians;
+  int64 expirationTime;
+};
+
+bool operator==(const MultisigState &a, const MultisigState &b);
+bool operator!=(const MultisigState &a, const MultisigState &b);
+
+using MultisigStatesMap = std::map<QString, MultisigState>;
 
 struct WalletState {
   QString address;

@@ -122,7 +122,7 @@ bool IsCell(const TLftabi_Value &value);
 [[nodiscard]] TLftabi_Function MultisigConstructorFunction();
 [[nodiscard]] TLftabi_Function MultisigSubmitTransactionFunction();
 [[nodiscard]] TLftabi_Function MultisigConfirmTransactionFunction();
-[[nodiscard]] TLftabi_Function MultisigGetParameters();
+[[nodiscard]] TLftabi_Function MultisigGetParameters(MultisigVersion version);
 [[nodiscard]] TLftabi_Function MultisigGetTransactionIds();
 [[nodiscard]] TLftabi_Function MultisigGetCustodians();
 

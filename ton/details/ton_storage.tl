@@ -78,6 +78,7 @@ storage.multisigState
     publicKey:bytes
     state:storage.AccountState
     lastTransactions:storage.TransactionsSlice
+    pendingTransactions:vector<storage.PendingTransaction>
     custodians:vector<bytes>
     expirationTime:int64 = storage.MultisigState;
 storage.assetsListMain = storage.AssetsListItem;

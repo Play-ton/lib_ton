@@ -21,10 +21,10 @@ FtabiPasswordChanger::FtabiPasswordChanger(not_null<RequestSender *> lib, not_nu
 
   _index = it - _list.ftabiEntries.begin();
 
-  _lib->request(TLftabi_ChangeLocalPassword(  //
-                    tl_inputKeyRegular(tl_key(tl_string(_list.ftabiEntries[_index].publicKey),
-                                              TLsecureBytes{_list.ftabiEntries[_index].secret}),
-                                       TLsecureBytes{_oldPassword}),
+  _lib->request(TLChangeLocalPassword(  //
+                    tl_inputKeyFtabi(tl_key(tl_string(_list.ftabiEntries[_index].publicKey),
+                                            TLsecureBytes{_list.ftabiEntries[_index].secret}),
+                                     TLsecureBytes{_oldPassword}),
                     TLsecureBytes{_newPassword}))
       .done([=](const TLKey &result) { saved(result.match([&](const TLDkey &data) { return data.vsecret().v; })); })
       .fail([=](const TLError &error) { rollback(ErrorFromLib(error)); })

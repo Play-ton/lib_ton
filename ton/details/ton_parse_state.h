@@ -20,7 +20,6 @@ namespace Ton::details {
                                        const TransactionToSend &transaction);
 [[nodiscard]] TransactionCheckResult Parse(const TLquery_Fees &data);
 [[nodiscard]] std::vector<QString> Parse(const TLExportedKey &data);
-[[nodiscard]] std::vector<QString> Parse(const TLftabi_ExportedKey &data);
 [[nodiscard]] Update Parse(const TLUpdate &data);
 
 [[nodiscard]] TLmsg_DataEncryptedArray MsgDataArrayFromEncrypted(const QVector<EncryptedText> &data);

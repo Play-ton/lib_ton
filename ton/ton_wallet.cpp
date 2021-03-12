@@ -390,33 +390,40 @@ void Wallet::exportKey(const QByteArray &publicKey, const QByteArray &password,
 void Wallet::exportFtabiKey(const QByteArray &publicKey, const QByteArray &password,
                             const Callback<std::pair<QString, std::vector<QString>>> &done) {
   _external->lib()
-      .request(TLftabi_ExportKey(prepareInputKey(publicKey, password)))
-      .done([=](const TLftabi_ExportedKey &result) {
-        result.match([&](const TLDftabi_exportedKey &result) {
-          std::vector<QString> wordsList;
-          wordsList.reserve(result.vword_list().v.size());
-          for (const auto &word : result.vword_list().v) {
-            wordsList.emplace_back(word.v);
-          }
-          InvokeCallback(done, std::make_pair(result.vderivation_path().v, std::move(wordsList)));
-        });
+      .request(TLExportKey(prepareInputKey(publicKey, password)))
+      .done([=](const TLExportedKey &result) {
+        result.match(
+            [&](const TLDftabi_exportedKey &result) {
+              std::vector<QString> wordsList;
+              wordsList.reserve(result.vword_list().v.size());
+              for (const auto &word : result.vword_list().v) {
+                wordsList.emplace_back(word.v);
+              }
+              InvokeCallback(done, std::make_pair(result.vderivation_path().v, std::move(wordsList)));
+            },
+            [&](auto &&) {
+              InvokeCallback(done, Error{Error::Type::TonLib, "Failed to export ftabi key"});
+            });
       })
       .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
       .send();
 }
 
 TLinputKey Wallet::prepareInputKey(const QByteArray &publicKey, const QByteArray &password) const {
-  const auto find = [&](const auto &entries, const auto &fieldSelector) -> std::optional<TLinputKey> {
+  const auto find =
+      [&](const auto &entries, const auto &fieldSelector,
+          const Fn<TLinputKey(const TLkey &, const TLsecureString &)> &wrapper) -> std::optional<TLinputKey> {
     const auto i = ranges::find(entries, publicKey, fieldSelector);
     if (i == end(entries)) {
       return std::nullopt;
     }
-    return tl_inputKeyRegular(tl_key(tl_string(publicKey), TLsecureBytes{i->secret}), TLsecureBytes{password});
+    return wrapper(tl_key(tl_string(publicKey), TLsecureBytes{i->secret}), TLsecureBytes{password});
   };
 
-  if (auto entry = find(_list->entries, SelectConstField(&WalletList::Entry::publicKey))) {
+  if (auto entry = find(_list->entries, SelectConstField(&WalletList::Entry::publicKey), tl_inputKeyRegular)) {
     return entry.value();
-  } else if (auto ftabiEntry = find(_list->ftabiEntries, SelectConstField(&WalletList::FtabiEntry::publicKey))) {
+  } else if (auto ftabiEntry =
+                 find(_list->ftabiEntries, SelectConstField(&WalletList::FtabiEntry::publicKey), tl_inputKeyFtabi)) {
     return ftabiEntry.value();
   } else {
     Unexpected("Key not found");
@@ -755,7 +762,8 @@ void Wallet::checkDeployMultisig(const DeployMultisigTransactionToSend &transact
 
         _external->lib()
             .request(TLraw_CreateQueryTvc(tl_accountAddress(tl_string(transaction.initialInfo.address)),
-                                          tl_bytes(transaction.initialInfo.initState), tl_bytes(body.value())))
+                                          tl_int32(transaction.timeout), tl_bytes(transaction.initialInfo.initState),
+                                          tl_bytes(body.value())))
             .done([=](const TLquery_Info &result) {
               result.match([&](const TLDquery_info &data) { check(data.vid().v); });
             })
@@ -775,8 +783,8 @@ void Wallet::checkSubmitTransaction(const SubmitTransactionToSend &transaction,
           return InvokeCallback(done, body.error());
         }
         _external->lib()
-            .request(TLraw_CreateQueryTvc(tl_accountAddress(tl_string(transaction.multisigAddress)), {},
-                                          tl_bytes(body.value())))
+            .request(TLraw_CreateQueryTvc(tl_accountAddress(tl_string(transaction.multisigAddress)),
+                                          tl_int32(transaction.timeout), {}, tl_bytes(body.value())))
             .done([=](const TLquery_Info &result) {
               result.match([&](const TLDquery_info &data) { check(data.vid().v); });
             })
@@ -795,8 +803,8 @@ void Wallet::checkConfirmTransaction(const ConfirmTransactionToSend &transaction
           return InvokeCallback(done, body.error());
         }
         _external->lib()
-            .request(TLraw_CreateQueryTvc(tl_accountAddress(tl_string(transaction.multisigAddress)), {},
-                                          tl_bytes(body.value())))
+            .request(TLraw_CreateQueryTvc(tl_accountAddress(tl_string(transaction.multisigAddress)),
+                                          tl_int32(transaction.timeout), {}, tl_bytes(body.value())))
             .done([=](const TLquery_Info &result) {
               result.match([&](const TLDquery_info &data) { check(data.vid().v); });
             })
@@ -827,7 +835,7 @@ void Wallet::sendTokens(const QByteArray &publicKey, const QByteArray &password,
 
   const auto bodyCreated = [=](Result<QByteArray> &&body) {
     if (!body.has_value()) {
-      return InvokeCallback(done, body.error());
+      return InvokeCallback(ready, body.error());
     }
 
     const auto realAmount = TokenTransactionToSend::realAmount;
@@ -846,7 +854,7 @@ void Wallet::sendTokens(const QByteArray &publicKey, const QByteArray &password,
     case TokenTransferType::SwapBack: {
       const auto ethereumAddress = ParseEthereumAddress(transaction.recipient);
       if (!ethereumAddress.has_value()) {
-        return InvokeCallback(done, Error{Error::Type::Web, "Invalid ethereum address"});
+        return InvokeCallback(ready, Error{Error::Type::Web, "Invalid ethereum address"});
       }
       return CreateSwapBackMessage(_external->lib(), *ethereumAddress, transaction.callbackAddress, transaction.amount,
                                    bodyCreated);
@@ -866,7 +874,7 @@ void Wallet::sendStake(const QByteArray &publicKey, const QByteArray &password,
 
   CreateStakeMessage(_external->lib(), transaction.stake, [=](Result<QByteArray> &&body) {
     if (!body.has_value()) {
-      return InvokeCallback(done, body.error());
+      return InvokeCallback(ready, body.error());
     }
 
     const auto realAmount = StakeTransactionToSend::depoolFee + transaction.stake;
@@ -887,7 +895,7 @@ void Wallet::withdraw(const QByteArray &publicKey, const QByteArray &password,
 
   CreateWithdrawalMessage(_external->lib(), transaction.amount, transaction.all, [=](Result<QByteArray> &&body) {
     if (!body.has_value()) {
-      return InvokeCallback(done, body.error());
+      return InvokeCallback(ready, body.error());
     }
 
     const auto realAmount = WithdrawalTransactionToSend::depoolFee;
@@ -906,7 +914,7 @@ void Wallet::cancelWithdrawal(const QByteArray &publicKey, const QByteArray &pas
 
   CreateCancelWithdrawalMessage(_external->lib(), [=](Result<QByteArray> &&body) {
     if (!body.has_value()) {
-      return InvokeCallback(done, body.error());
+      return InvokeCallback(ready, body.error());
     }
 
     const auto realAmount = CancelWithdrawalTransactionToSend::depoolFee;
@@ -926,7 +934,7 @@ void Wallet::deployTokenWallet(const QByteArray &publicKey, const QByteArray &pa
   CreateTokenWalletDeployMessage(  //
       _external->lib(), DeployTokenWalletTransactionToSend::initialBalance, sender, [=](Result<QByteArray> &&body) {
         if (!body.has_value()) {
-          return InvokeCallback(done, body.error());
+          return InvokeCallback(ready, body.error());
         }
 
         const auto realAmount = DeployTokenWalletTransactionToSend::realAmount;
@@ -945,7 +953,7 @@ void Wallet::collectTokens(const QByteArray &publicKey, const QByteArray &passwo
 
   CreateExecuteProxyCallbackMessage(_external->lib(), [=](Result<QByteArray> &&body) {
     if (!body.has_value()) {
-      return InvokeCallback(done, body.error());
+      return InvokeCallback(ready, body.error());
     }
 
     const auto realAmount = CollectTokensTransactionToSend::realAmount;
@@ -955,39 +963,52 @@ void Wallet::collectTokens(const QByteArray &publicKey, const QByteArray &passwo
   });
 }
 
-void Wallet::deployMultisig(const QByteArray &password, const DeployMultisigTransactionToSend &transaction,
+void Wallet::deployMultisig(const QByteArray &publicKey, const QByteArray &password,
+                            const DeployMultisigTransactionToSend &transaction,
                             const Callback<PendingTransaction> &ready, const Callback<> &done) {
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
+
   CreateMultisigConstructorMessage(  //
       _external->lib(), prepareInputKey(transaction.publicKey, password), transaction.requiredConfirmations,
       transaction.custodians, [=](Result<QByteArray> &&body) {
         if (!body.has_value()) {
-          return InvokeCallback(done, body.error());
+          return InvokeCallback(ready, body.error());
         }
-        sendExternalMessage(transaction.initialInfo.address, transaction.initialInfo.initState, body.value(), ready,
-                            done);
+        sendExternalMessage(sender, transaction.initialInfo.address, transaction.timeout,
+                            transaction.initialInfo.initState, body.value(), ready, done);
       });
 }
 
-void Wallet::submitTransaction(const QByteArray &password, const SubmitTransactionToSend &transaction,
-                               const Callback<PendingTransaction> &ready, const Callback<> &done) {
+void Wallet::submitTransaction(const QByteArray &publicKey, const QByteArray &password,
+                               const SubmitTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                               const Callback<> &done) {
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
+
   CreateMultisigSubmitTransactionMessage(  //
-      _external->lib(), tl_inputKeyFake(), transaction.dest, transaction.value, transaction.bounce, transaction.payload,
+      _external->lib(), prepareInputKey(transaction.publicKey, password), transaction.dest, transaction.value,
+      transaction.bounce, transaction.payload, [=](Result<QByteArray> &&body) {
+        if (!body.has_value()) {
+          return InvokeCallback(ready, body.error());
+        }
+        sendExternalMessage(sender, transaction.multisigAddress, transaction.timeout, {}, body.value(), ready, done);
+      });
+}
+
+void Wallet::confirmTransaction(const QByteArray &publicKey, const QByteArray &password,
+                                const ConfirmTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                                const Callback<> &done) {
+  const auto sender = getUsedAddress(publicKey);
+  Assert(!sender.isEmpty());
+
+  CreateMultisigConfirmTransactionMessage(  //
+      _external->lib(), prepareInputKey(transaction.publicKey, password), transaction.transactionId,
       [=](Result<QByteArray> &&body) {
         if (!body.has_value()) {
-          return InvokeCallback(done, body.error());
+          return InvokeCallback(ready, body.error());
         }
-        sendExternalMessage(transaction.multisigAddress, {}, body.value(), ready, done);
-      });
-}
-
-void Wallet::confirmTransaction(const QByteArray &password, const ConfirmTransactionToSend &transaction,
-                                const Callback<PendingTransaction> &ready, const Callback<> &done) {
-  CreateMultisigConfirmTransactionMessage(  //
-      _external->lib(), tl_inputKeyFake(), transaction.transactionId, [=](Result<QByteArray> &&body) {
-        if (!body.has_value()) {
-          return InvokeCallback(done, body.error());
-        }
-        sendExternalMessage(transaction.multisigAddress, {}, body.value(), ready, done);
+        sendExternalMessage(sender, transaction.multisigAddress, transaction.timeout, {}, body.value(), ready, done);
       });
 }
 
@@ -1192,11 +1213,8 @@ void Wallet::addMultisig(const QByteArray &publicKey, const MultisigInfo &info, 
                          const Callback<> &done) {
   const auto account = getUsedAddress(publicKey);
 
-  std::cout << "Info.address: " << info.address.toStdString() << std::endl;
-
-  requestState(info.address, [=](Result<AccountState> result) {
+  requestState(info.address, [=](Result<AccountState> result) mutable {
     if (!result.has_value()) {
-      std::cout << "STATE: " << result.error().details.toStdString() << std::endl;
       return InvokeCallback(done, result.error());
     }
     auto accountState = std::move(result.value());
@@ -1210,6 +1228,7 @@ void Wallet::addMultisig(const QByteArray &publicKey, const MultisigInfo &info, 
           if (!lastTransactions.has_value()) {
             return InvokeCallback(done, lastTransactions.error());
           }
+
           _accountViewers->addMultisig(  //
               account, info.address,
               MultisigState{
@@ -1494,23 +1513,22 @@ void Wallet::requestMultisigStates(const MultisigStatesMap &previousStates, cons
             return ctx->notifySuccess(address, std::move(previousState));
           }
 
-          if (previousState.accountState.lastTransactionId == accountState->lastTransactionId) {
-            ctx->notifySuccess(address, MultisigState{
-                                            .accountState = std::move(accountState.value()),
-                                            .lastTransactions = previousState.lastTransactions,
-                                        });
-          } else {
+          const auto lastTransactionId = accountState->lastTransactionId;
+          bool transactionsChanged = previousState.accountState.lastTransactionId != lastTransactionId;
+
+          previousState.accountState = std::move(accountState.value());
+
+          if (transactionsChanged) {
             requestTransactions(
-                address, accountState->lastTransactionId,
-                [=, accountState = std::move(*accountState)](Result<TransactionsSlice> lastTransactions) mutable {
-                  if (!lastTransactions.has_value()) {
-                    return ctx->notifySuccess(address, std::move(previousState));
+                address, lastTransactionId,
+                [=, previousState = std::move(previousState)](Result<TransactionsSlice> lastTransactions) mutable {
+                  if (lastTransactions.has_value()) {
+                    previousState.lastTransactions = std::move(lastTransactions.value());
                   }
-                  ctx->notifySuccess(address, MultisigState{
-                                                  .accountState = std::move(accountState),
-                                                  .lastTransactions = std::move(lastTransactions.value()),
-                                              });
+                  ctx->notifySuccess(address, std::move(previousState));
                 });
+          } else {
+            ctx->notifySuccess(address, std::move(previousState));
           }
         });
   }
@@ -1628,7 +1646,7 @@ void Wallet::requestMultisigInfo(const QString &address, const Callback<Multisig
                 balance,                                              //
                 data,                                                 //
                 code,                                                 //
-                MultisigGetParameters(),                              //
+                MultisigGetParameters(*multisigVersion),              //
                 tl_ftabi_functionCallExternal({}, {})))
             .done([=](const TLftabi_tvmOutput &tvmResult) mutable {
               const auto &output = tvmResult.c_ftabi_tvmOutput();
@@ -1638,7 +1656,7 @@ void Wallet::requestMultisigInfo(const QString &address, const Callback<Multisig
 
               const auto &results = output.vvalues().v;
               const auto invalidAbiError = Error{Error::Type::TonLib, "Invalid Multisig.getParameters abi"};
-              if (results.size() != 5 || results[2].type() != id_ftabi_valueInt) {
+              if (results.size() < 5 || results[2].type() != id_ftabi_valueInt) {
                 return InvokeCallback(done, invalidAbiError);
               }
 
@@ -2274,13 +2292,15 @@ void Wallet::sendMessage(const QByteArray &publicKey, const QByteArray &password
       .send();
 }
 
-void Wallet::sendExternalMessage(const QString &address, const QByteArray &initState, const QByteArray &body,
+void Wallet::sendExternalMessage(const QString &sender, const QString &address, int timeout,
+                                 const QByteArray &initState, const QByteArray &body,
                                  const Callback<PendingTransaction> &ready, const Callback<> &done) {
   const auto send = makeSendCallback(done);
 
   _external->lib()
-      .request(TLraw_CreateQueryTvc(tl_accountAddress(tl_string(address)), tl_bytes(initState), tl_bytes(body)))
-      .done([=](const TLquery_Info &result) {
+      .request(TLraw_CreateQueryTvc(tl_accountAddress(tl_string(address)), tl_int32(timeout), tl_bytes(initState),
+                                    tl_bytes(body)))
+      .done([=, ready = ready](const TLquery_Info &result) {
         result.match([&](const TLDquery_info &data) {
           const auto weak = base::make_weak(this);
           auto pending = Parse(result, address,
@@ -2290,7 +2310,7 @@ void Wallet::sendExternalMessage(const QString &address, const QByteArray &initS
                                    .timeout = 0,
                                    .allowSendToUninited = true,
                                });
-          _accountViewers->addPendingTransaction(pending);
+          _accountViewers->addMsigPendingTransaction(sender, address, pending);
           if (!weak) {
             return;
           }
@@ -2301,7 +2321,7 @@ void Wallet::sendExternalMessage(const QString &address, const QByteArray &initS
           send(data.vid().v);
         });
       })
-      .fail([=](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
+      .fail([=, ready = ready](const TLError &error) { InvokeCallback(ready, ErrorFromLib(error)); })
       .send();
 }
 

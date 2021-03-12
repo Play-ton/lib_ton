@@ -30,18 +30,12 @@ namespace {
   return result;
 }
 
-constexpr auto kTestRestrictedInitPublicKey = "PuYcgC80F-MUPMI9Y_Gd0NhVrkYm_5_6vXFUqdArH7Uo4Y6P";
-
 }  // namespace
 
 ConfigInfo Parse(const TLoptions_ConfigInfo &data) {
   return data.match([](const TLDoptions_configInfo &data) {
-    return ConfigInfo{
-        .walletId = data.vdefault_wallet_id().v,
-        .restrictedInitPublicKey = tl::utf8(data.vdefault_rwallet_init_public_key())
-        //.restrictedInitPublicKey = kTestRestrictedInitPublicKey
-        //AssertIsDebug()
-    };
+    return ConfigInfo{.walletId = data.vdefault_wallet_id().v,
+                      .restrictedInitPublicKey = tl::utf8(data.vdefault_rwallet_init_public_key())};
   });
 }
 
@@ -250,17 +244,17 @@ TransactionCheckResult Parse(const TLquery_Fees &data) {
 }
 
 std::vector<QString> Parse(const TLExportedKey &data) {
-  return data.match([&](const TLDexportedKey &data) {
-    return ranges::views::all(data.vword_list().v) |
-           ranges::views::transform([](const TLsecureString &data) { return tl::utf16(data.v); }) | ranges::to_vector;
-  });
-}
-
-[[nodiscard]] std::vector<QString> Parse(const TLftabi_ExportedKey &data) {
-  return data.match([&](const TLDftabi_exportedKey &data) {
-    return ranges::views::all(data.vword_list().v) |
-           ranges::views::transform([](const TLsecureString &data) { return tl::utf16(data.v); }) | ranges::to_vector;
-  });
+  return data.match(
+      [&](const TLDexportedKey &data) {
+        return ranges::views::all(data.vword_list().v) |
+               ranges::views::transform([](const TLsecureString &data) { return tl::utf16(data.v); }) |
+               ranges::to_vector;
+      },
+      [&](const TLDftabi_exportedKey &data) {
+        return ranges::views::all(data.vword_list().v) |
+               ranges::views::transform([](const TLsecureString &data) { return tl::utf16(data.v); }) |
+               ranges::to_vector;
+      });
 }
 
 SyncState Parse(const TLSyncState &data) {

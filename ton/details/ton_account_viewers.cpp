@@ -31,6 +31,14 @@ std::vector<PendingTransaction> ComputePendingTransactions(std::vector<PendingTr
   return list;
 }
 
+MultisigStatesMap ComputePendingTransactions(MultisigStatesMap &&states) {
+  for (auto &[address, state] : states) {
+    state.pendingTransactions =
+        ComputePendingTransactions(std::move(state.pendingTransactions), state.accountState, state.lastTransactions);
+  }
+  return states;
+}
+
 }  // namespace
 
 AccountViewers::AccountViewers(not_null<Wallet *> owner, not_null<RequestSender *> lib,
@@ -110,13 +118,16 @@ void AccountViewers::saveNewState(Viewers &viewers, WalletState &&state, Refresh
 }
 
 void AccountViewers::checkPendingForSameState(const QString &address, Viewers &viewers,
-                                              const CurrencyMap<TokenStateValue> &tokenStates,
-                                              const DePoolStatesMap &dePoolStates,
-                                              const MultisigStatesMap &multisigStates, const AccountState &state) {
-  auto pending = ComputePendingTransactions(viewers.state.current().pendingTransactions, state, TransactionsSlice());
+                                              CurrencyMap<TokenStateValue> &&tokenStates,
+                                              DePoolStatesMap &&dePoolStates, MultisigStatesMap &&multisigStates,
+                                              AccountState &&state) {
   auto currentState = viewers.state.current();
+
+  auto pending = ComputePendingTransactions(viewers.state.current().pendingTransactions, state, TransactionsSlice());
+  auto multisigStatesFiltered = ComputePendingTransactions(std::forward<MultisigStatesMap>(multisigStates));
+
   if (tokenStates != currentState.tokenStates || dePoolStates != currentState.dePoolParticipantStates ||
-      multisigStates != currentState.multisigStates || currentState.pendingTransactions != pending) {
+      multisigStatesFiltered != currentState.multisigStates || currentState.pendingTransactions != pending) {
     // Some pending transactions were discarded by the sync time.
 
     //  TODO: check why asset list items disappear
@@ -131,7 +142,7 @@ void AccountViewers::checkPendingForSameState(const QString &address, Viewers &v
                     return dePoolStates.find(dePool.address) == end(dePoolStates);
                   },
                   [&](const AssetListItemMultisig &multisig) {
-                    return multisigStates.find(multisig.address) == end(multisigStates);
+                    return multisigStatesFiltered.find(multisig.address) == end(multisigStatesFiltered);
                   },
                   [](const auto &) { return false; });
             }),
@@ -140,12 +151,12 @@ void AccountViewers::checkPendingForSameState(const QString &address, Viewers &v
     saveNewState(  //
         viewers,
         WalletState{.address = address,
-                    .account = state,
+                    .account = std::forward<AccountState>(state),
                     .lastTransactions = std::move(currentState.lastTransactions),
                     .pendingTransactions = std::move(pending),
-                    .tokenStates = tokenStates,
-                    .dePoolParticipantStates = dePoolStates,
-                    .multisigStates = multisigStates,
+                    .tokenStates = std::forward<CurrencyMap<TokenStateValue>>(tokenStates),
+                    .dePoolParticipantStates = std::forward<DePoolStatesMap>(dePoolStates),
+                    .multisigStates = std::move(multisigStatesFiltered),
                     .assetsList = std::move(currentState.assetsList)},
         RefreshSource::Remote);
   } else {
@@ -194,7 +205,8 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
     }
 
     void checkComplete() const {
-      if (account.has_value() && tokenStates.has_value() && dePoolParticipantStates.has_value()) {
+      if (account.has_value() && tokenStates.has_value() && dePoolParticipantStates.has_value() &&
+          multisigStatesMap.has_value()) {
         InvokeCallback(done, std::forward_as_tuple(std::move(*account), std::move(*tokenStates),
                                                    std::move(*dePoolParticipantStates), std::move(*multisigStatesMap)));
       }
@@ -213,12 +225,13 @@ void AccountViewers::refreshAccount(const QString &address, Viewers &viewers) {
 
   std::shared_ptr<StateContext> ctx{new StateContext{
       viewers.state.current(), [=](Result<ContextData> result) {
-        const auto [state, tokenStates, dePoolParticipantStates, multisigStates] = std::move(result.value());
-        const auto [account, viewers] = std::move(state);
+        auto [state, tokenStates, dePoolParticipantStates, multisigStates] = std::move(result.value());
+        auto [account, viewers] = std::move(state);
 
         auto currentState = viewers->state.current();
         if (account == currentState.account) {
-          checkPendingForSameState(address, *viewers, tokenStates, dePoolParticipantStates, multisigStates, account);
+          checkPendingForSameState(address, *viewers, std::move(tokenStates), std::move(dePoolParticipantStates),
+                                   std::move(multisigStates), std::move(account));
           return;
         }
 
@@ -310,6 +323,7 @@ void AccountViewers::saveNewStateEncrypted(const QString &address, Viewers &view
     auto pending = (source == RefreshSource::Database)
                        ? full.pendingTransactions
                        : ComputePendingTransactions(viewers.state.current().pendingTransactions, full.account, last);
+
     saveNewState(viewers,
                  WalletState{.address = address,
                              .account = std::move(full.account),
@@ -317,7 +331,9 @@ void AccountViewers::saveNewStateEncrypted(const QString &address, Viewers &view
                              .pendingTransactions = std::move(pending),
                              .tokenStates = std::move(full.tokenStates),
                              .dePoolParticipantStates = std::move(full.dePoolParticipantStates),
-                             .multisigStates = std::move(full.multisigStates),
+                             .multisigStates = (source == RefreshSource::Database)
+                                                   ? std::move(full.multisigStates)
+                                                   : ComputePendingTransactions(std::move(full.multisigStates)),
                              .assetsList = std::move(full.assetsList)},
                  source);
   };
@@ -344,8 +360,14 @@ void AccountViewers::checkNextRefresh() {
     Assert(viewers.lastRefreshFinished > 0);
     Assert(!viewers.list.empty());
     const auto min = (*ranges::min_element(viewers.list, ranges::less(), &AccountViewer::refreshEach))->refreshEach();
-    const auto use =
-        viewers.state.current().pendingTransactions.empty() ? min : std::min(min, kRefreshWithPendingTimeout);
+
+    const auto currentState = viewers.state.current();
+    bool hasPending = !currentState.pendingTransactions.empty();
+    for (auto it = currentState.multisigStates.begin(); !hasPending && (it != end(currentState.multisigStates)); ++it) {
+      hasPending = !it->second.pendingTransactions.empty();
+    }
+
+    const auto use = hasPending ? std::min(min, kRefreshWithPendingTimeout) : min;
     const auto next = viewers.nextRefresh = viewers.lastRefreshFinished + use;
     const auto in = next - now;
     if (in <= 0) {
@@ -435,6 +457,23 @@ void AccountViewers::addPendingTransaction(const PendingTransaction &pending) {
     state.pendingTransactions.insert(begin(state.pendingTransactions), pending);
     saveNewState(i->second, std::move(state), RefreshSource::Pending);
   }
+}
+
+void AccountViewers::addMsigPendingTransaction(const QString &viewerAddress, const QString &msigAddress,
+                                               const PendingTransaction &pending) {
+  const auto i = _map.find(viewerAddress);
+  if (i == end(_map)) {
+    return;
+  }
+
+  auto state = i->second.state.current();
+  auto msigIt = state.multisigStates.find(msigAddress);
+  if (msigIt == state.multisigStates.end()) {
+    return;
+  }
+
+  msigIt->second.pendingTransactions.insert(begin(msigIt->second.pendingTransactions), pending);
+  saveNewState(i->second, std::move(state), RefreshSource::Pending);
 }
 
 void AccountViewers::addDePool(const QString &account, const QString &dePoolAddress,

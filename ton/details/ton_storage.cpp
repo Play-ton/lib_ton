@@ -466,8 +466,8 @@ TLstorage_MultisigState Serialize(const NamedMultisigState &data) {
 
   return make_storage_multisigState(tl_string(data.address), tl_int32(static_cast<int32>(data.state.version)),
                                     tl_bytes(data.state.publicKey), Serialize(data.state.accountState),
-                                    Serialize(data.state.lastTransactions), custodians,
-                                    tl_int64(data.state.expirationTime));
+                                    Serialize(data.state.lastTransactions), Serialize(data.state.pendingTransactions),
+                                    custodians, tl_int64(data.state.expirationTime));
 }
 
 NamedMultisigState Deserialize(const TLstorage_MultisigState &data) {
@@ -485,6 +485,7 @@ NamedMultisigState Deserialize(const TLstorage_MultisigState &data) {
         .publicKey = tl::utf8(data.vpublicKey().v),
         .accountState = Deserialize(data.vstate()),
         .lastTransactions = Deserialize(data.vlastTransactions()),
+        .pendingTransactions = Deserialize(data.vpendingTransactions()),
         .custodians = std::move(custodians),
         .expirationTime = data.vexpirationTime().v,
     };

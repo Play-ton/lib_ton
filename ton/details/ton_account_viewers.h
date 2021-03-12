@@ -33,6 +33,8 @@ class AccountViewers final : public base::has_weak_ptr {
 
   [[nodiscard]] std::unique_ptr<AccountViewer> createAccountViewer(const QByteArray &publicKey, const QString &address);
   void addPendingTransaction(const PendingTransaction &pending);
+  void addMsigPendingTransaction(const QString &viewerAddress, const QString &msigAddress,
+                                 const PendingTransaction &pending);
 
   void addDePool(const QString &account, const QString &dePoolAddress, DePoolParticipantState &&participantState);
   void removeDePool(const QString &account, const QString &dePoolAddress);
@@ -68,9 +70,9 @@ class AccountViewers final : public base::has_weak_ptr {
 
   void refreshFromDatabase(const QString &address, Viewers &viewers);
   void refreshAccount(const QString &address, Viewers &viewers);
-  void checkPendingForSameState(const QString &address, Viewers &viewers,
-                                const CurrencyMap<TokenStateValue> &tokenStates, const DePoolStatesMap &dePoolStates,
-                                const MultisigStatesMap &multisigStates, const AccountState &state);
+  void checkPendingForSameState(const QString &address, Viewers &viewers, CurrencyMap<TokenStateValue> &&tokenStates,
+                                DePoolStatesMap &&dePoolStates, MultisigStatesMap &&multisigStates,
+                                AccountState &&state);
   void checkNextRefresh();
   Viewers *findRefreshingViewers(const QString &address);
   void finishRefreshing(Viewers &viewers, Result<> result = {});

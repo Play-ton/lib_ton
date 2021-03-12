@@ -90,15 +90,17 @@ void CreateKey(const QByteArray &seed, Callback<UtilityKey> done) {
               ->request(TLExportKey(
                   tl_inputKeyRegular(tl_key(tl_string(publicKey), TLsecureString{secret}), LocalPassword())))
               .done([=](const TLexportedKey &result) {
-                result.match([&](const TLDexportedKey &data) {
-                  auto key = UtilityKey();
-                  key.publicKey = publicKey;
-                  key.words.reserve(data.vword_list().v.size());
-                  for (const auto &word : data.vword_list().v) {
-                    key.words.push_back(word.v);
-                  }
-                  deleteAfterCreate(secret, key);
-                });
+                result.match(
+                    [&](const TLDexportedKey &data) {
+                      auto key = UtilityKey();
+                      key.publicKey = publicKey;
+                      key.words.reserve(data.vword_list().v.size());
+                      for (const auto &word : data.vword_list().v) {
+                        key.words.push_back(word.v);
+                      }
+                      deleteAfterCreate(secret, key);
+                    },
+                    [&](const TLDftabi_exportedKey &data) { Unexpected("Expoted key"); });
               })
               .fail(ErrorHandler(done))
               .send();

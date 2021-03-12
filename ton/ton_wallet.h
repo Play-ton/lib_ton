@@ -135,14 +135,17 @@ class Wallet final : public base::has_weak_ptr {
                      const CollectTokensTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
                      const Callback<> &done);
 
-  void deployMultisig(const QByteArray &password, const DeployMultisigTransactionToSend &transaction,
-                      const Callback<PendingTransaction> &ready, const Callback<> &done);
+  void deployMultisig(const QByteArray &publicKey, const QByteArray &password,
+                      const DeployMultisigTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                      const Callback<> &done);
 
-  void submitTransaction(const QByteArray &password, const SubmitTransactionToSend &transaction,
-                         const Callback<PendingTransaction> &ready, const Callback<> &done);
+  void submitTransaction(const QByteArray &publicKey, const QByteArray &password,
+                         const SubmitTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                         const Callback<> &done);
 
-  void confirmTransaction(const QByteArray &password, const ConfirmTransactionToSend &transaction,
-                          const Callback<PendingTransaction> &ready, const Callback<> &done);
+  void confirmTransaction(const QByteArray &publicKey, const QByteArray &password,
+                          const ConfirmTransactionToSend &transaction, const Callback<PendingTransaction> &ready,
+                          const Callback<> &done);
 
   void openGate(const QString &rawAddress, const std::optional<Symbol> &token = {});
   void openGateExecuteSwapBack(const QString &eventAddress);
@@ -207,7 +210,7 @@ class Wallet final : public base::has_weak_ptr {
     crl::time expires = 0;
   };
   void setWalletList(const details::WalletList &list);
-  [[nodiscard]] details::TLinputKey prepareInputKey(const QByteArray &entries, const QByteArray &password) const;
+  [[nodiscard]] details::TLinputKey prepareInputKey(const QByteArray &publicKey, const QByteArray &password) const;
   [[nodiscard]] Fn<void(Update)> generateUpdatesCallback();
   void checkLocalTime(details::BlockchainTime time);
   void notifyPasswordGood(const QByteArray &publicKey, int generation);
@@ -229,8 +232,8 @@ class Wallet final : public base::has_weak_ptr {
                    const QString &recipient, const tl::boxed<Ton::details::TLmsg_data> &body, int64 realAmount,
                    int timeout, bool allowSendToUninited, const QString &comment,
                    const Callback<PendingTransaction> &ready, const Callback<> &done);
-  void sendExternalMessage(const QString &address, const QByteArray &initState, const QByteArray &body,
-                           const Callback<PendingTransaction> &ready, const Callback<> &done);
+  void sendExternalMessage(const QString &sender, const QString &address, int timeout, const QByteArray &initState,
+                           const QByteArray &body, const Callback<PendingTransaction> &ready, const Callback<> &done);
 
   std::optional<ConfigInfo> _configInfo;
   rpl::event_stream<Update> _updates;
