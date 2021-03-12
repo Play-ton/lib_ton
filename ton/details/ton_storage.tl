@@ -36,6 +36,17 @@ storage.dePoolOnRoundComplete
     reinvest:storage.Bool
     reason:int32 = storage.TransactionAdditionalInfo;
 
+storage.multisigSubmitTransaction
+    dest:string
+    amount:int64
+    transactionId:int64
+    bounce:storage.Bool
+    executed:storage.Bool
+    comment:string = storage.TransactionAdditionalInfo;
+storage.multisigConfirmTransaction
+    transactionId:int64
+    executed:storage.Bool = storage.TransactionAdditionalInfo;
+
 storage.message
     source:string
     destination:string

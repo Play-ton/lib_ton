@@ -258,10 +258,13 @@ struct MultisigSubmitTransaction {
   int64 amount;
   int64 transactionId;
   bool bounce;
+  bool executed;
+  QString comment;
 };
 
 struct MultisigConfirmTransaction {
   int64 transactionId;
+  bool executed;
 };
 
 struct MessageData {
@@ -305,8 +308,11 @@ using TransactionAdditionalInfo =     //
                  TokenMint,      //
                  TokensBounced,  //
                  // DePool transaction
-                 DePoolOrdinaryStakeTransaction,  //
-                 DePoolOnRoundCompleteTransaction>;
+                 DePoolOrdinaryStakeTransaction,    //
+                 DePoolOnRoundCompleteTransaction,  //
+                 // Multisig transaction
+                 MultisigSubmitTransaction,  //
+                 MultisigConfirmTransaction>;
 
 struct Transaction {
   TransactionId id;

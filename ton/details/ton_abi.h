@@ -30,6 +30,9 @@ struct DePoolParticipantState;
 struct RootTokenContractDetails;
 struct TokenWalletContractDetails;
 
+struct MultisigSubmitTransaction;
+struct MultisigConfirmTransaction;
+
 enum class MultisigVersion;
 
 }  // namespace Ton
@@ -77,12 +80,15 @@ bool IsAddress(const TLftabi_Value &value);
 bool IsInt(const TLftabi_Value &value);
 bool IsBigInt(const TLftabi_Value &value);
 bool IsBool(const TLftabi_Value &value);
+bool IsBytes(const TLftabi_Value &value);
 bool IsCell(const TLftabi_Value &value);
 
 [[nodiscard]] TLVector<TLftabi_namedParam> DefaultHeaders();
 [[nodiscard]] TLVector<TLftabi_namedParam> ExtendedHeaders();
 
 [[nodiscard]] std::map<int64, InvestParams> parseInvestParamsMap(const TLDftabi_valueMap &map);
+
+[[nodiscard]] TLftabi_Function TransferWithComment();
 
 [[nodiscard]] TLftabi_Function EthEventStatusChangedNotification();
 [[nodiscard]] TLftabi_Function TonEventStatusChangedNotification();
@@ -126,6 +132,7 @@ bool IsCell(const TLftabi_Value &value);
 [[nodiscard]] TLftabi_Function MultisigGetTransactionIds();
 [[nodiscard]] TLftabi_Function MultisigGetCustodians();
 
+[[nodiscard]] std::optional<QByteArray> ParseTransferComment(const QByteArray &body);
 [[nodiscard]] std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body);
 [[nodiscard]] std::optional<TokenTransfer> ParseTokenTransferToOwner(const QByteArray &body);
 [[nodiscard]] std::optional<TokenTransfer> ParseInternalTokenTransfer(const QByteArray &body);
@@ -136,6 +143,9 @@ bool IsCell(const TLftabi_Value &value);
 [[nodiscard]] std::optional<TonEventStatus> ParseTonEventNotification(const QByteArray &body);
 [[nodiscard]] std::optional<TokenWalletDeployed> ParseTokenWalletDeployedNotification(const QByteArray &body);
 [[nodiscard]] std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body);
+[[nodiscard]] std::optional<MultisigSubmitTransaction> ParseMultisigSubmitTransaction(const QByteArray &body);
+[[nodiscard]] std::optional<int64> ParseMultisigSubmitTransactionId(const QByteArray &body);
+[[nodiscard]] std::optional<MultisigConfirmTransaction> ParseMultisigConfirmTransaction(const QByteArray &body);
 
 [[nodiscard]] std::optional<DePoolOrdinaryStakeTransaction> ParseOrdinaryStakeTransfer(const QByteArray &body);
 [[nodiscard]] std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const QByteArray &body);

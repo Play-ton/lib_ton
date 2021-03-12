@@ -184,6 +184,43 @@ bool ParseDePoolTransaction(Ton::Transaction &transaction) {
   return false;
 }
 
+bool ParseMultisigTransaction(Ton::Transaction &transaction) {
+  if (!transaction.incoming.source.isEmpty()) {
+    return false;
+  }
+
+  bool executed = false;
+  for (const auto &item : transaction.outgoing) {
+    if (!item.destination.isEmpty() && item.value > 0) {
+      executed = true;
+    }
+  }
+
+  if (auto submit = ParseMultisigSubmitTransaction(transaction.incoming.message.data); submit.has_value()) {
+    auto hasOutput = false;
+    for (const auto &item : transaction.outgoing) {
+      if (auto output = ParseMultisigSubmitTransactionId(item.message.data); output.has_value()) {
+        hasOutput = true;
+        submit->transactionId = *output;
+        break;
+      }
+    }
+
+    submit->executed = executed;
+
+    if (hasOutput) {
+      transaction.additional = *submit;
+      return true;
+    }
+  } else if (auto confirm = ParseMultisigConfirmTransaction(transaction.incoming.message.data); confirm.has_value()) {
+    confirm->executed = executed;
+    transaction.additional = *confirm;
+    return true;
+  }
+
+  return false;
+}
+
 Transaction Parse(const TLraw_Transaction &data) {
   return data.match([&](const TLDraw_transaction &data) {
     auto result = Transaction();
@@ -197,7 +234,7 @@ Transaction Parse(const TLraw_Transaction &data) {
     result.storageFee = data.vstorage_fee().v;
     result.time = data.vutime().v;
     result.aborted = data.vaborted().type() == id_boolTrue;
-    if (!ParseTokenTransaction(result) && !ParseDePoolTransaction(result)) {
+    if (!ParseTokenTransaction(result) && !ParseDePoolTransaction(result) && !ParseMultisigTransaction(result)) {
       result.additional = RegularTransaction{};
     }
     return result;

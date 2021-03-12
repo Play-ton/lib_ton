@@ -128,6 +128,10 @@ bool IsBool(const TLftabi_Value &value) {
   return value.type() == id_ftabi_valueBool;
 }
 
+bool IsBytes(const TLftabi_Value &value) {
+  return value.type() == id_ftabi_valueBytes;
+}
+
 bool IsCell(const TLftabi_Value &value) {
   return value.type() == id_ftabi_valueCell;
 }
@@ -162,6 +166,18 @@ bool IsCell(const TLftabi_Value &value) {
                                        }));
   }
   return result;
+}
+
+TLftabi_Function TransferWithComment() {
+  static TLftabi_Function function = tl_ftabi_function(  //
+      tl_string("transfer"), {},
+      tl_vector(QVector<TLftabi_Param>{
+          tl_ftabi_paramBytes(),  // comment
+      }),
+      {},                      // output
+      tl_int32(0x00000000u),   // input id
+      tl_int32(0x80000000u));  // output id
+  return function;
 }
 
 TLftabi_Function EthEventStatusChangedNotification() {
@@ -694,8 +710,10 @@ TLftabi_Function MultisigConfirmTransactionFunction() {
 }
 
 TLftabi_Function MultisigGetParameters(MultisigVersion version) {
-  static std::optional<TLftabi_function> function;
-  if (!function.has_value()) {
+  const auto withUpdate = version == MultisigVersion::SetcodeMultisig || version == MultisigVersion::Surf;
+
+  static std::optional<TLftabi_function> function[2];
+  if (!function[withUpdate].has_value()) {
     auto outputs = tl_vector(QVector<TLftabi_Param>{
         tl_ftabi_paramUint(tl_int32(8)),    // maxQueuedTransactions
         tl_ftabi_paramUint(tl_int32(8)),    // maxCustodianCount
@@ -704,24 +722,16 @@ TLftabi_Function MultisigGetParameters(MultisigVersion version) {
         tl_ftabi_paramUint(tl_int32(8)),    // requiredTxnConfirms
     });
 
-    switch (version) {
-      case MultisigVersion::SetcodeMultisig:
-      case MultisigVersion::Surf: {
-        outputs.v.push_back(tl_ftabi_paramUint(tl_int32(8)));  // requiredUpdConfirms
-        break;
-      }
-      default:
-        break;
+    if (withUpdate) {
+      outputs.v.push_back(tl_ftabi_paramUint(tl_int32(8)));  // requiredUpdConfirms
     }
-
-    std::cout << "Version: " << static_cast<int>(version) << ", " << outputs.v.size() << std::endl;
 
     const auto createdFunction = RequestSender::Execute(TLftabi_CreateFunction(  //
         tl_string("getParameters"), ExtendedHeaders(), {}, outputs));
     Expects(createdFunction.has_value());
-    function = createdFunction.value();
+    function[withUpdate] = createdFunction.value();
   }
-  return *function;
+  return *function[withUpdate];
 }
 
 TLftabi_Function MultisigGetTransactionIds() {
@@ -753,6 +763,21 @@ TLftabi_Function MultisigGetCustodians() {
     function = createdFunction.value();
   }
   return *function;
+}
+
+std::optional<QByteArray> ParseTransferComment(const QByteArray &body) {
+  const auto decoded =
+      RequestSender::Execute(TLftabi_DecodeInput(TransferWithComment(), tl_bytes(body), tl_boolTrue()));
+  if (!decoded.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto args = decoded.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 1 || !IsBytes(args[0])) {
+    return std::nullopt;
+  }
+
+  return UnpackBytes(args[0]);
 }
 
 std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
@@ -900,7 +925,7 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
     return std::nullopt;
   }
 
-  const auto args = decodedSwapBackInput.value().c_ftabi_decodedInput().vvalues().v;
+  const auto &args = decodedSwapBackInput.value().c_ftabi_decodedInput().vvalues().v;
   if (args.size() != 4 || !IsBigInt(args[0]) || !IsAddress(args[2]) || !IsCell(args[3])) {
     return std::nullopt;
   }
@@ -927,6 +952,60 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
   return TokenSwapBack{.address = "0x" + address.toHex(), .value = UnpackUint128(args[0])};
 }
 
+std::optional<MultisigSubmitTransaction> ParseMultisigSubmitTransaction(const QByteArray &body) {
+  const auto decoded =
+      RequestSender::Execute(TLftabi_DecodeInput(MultisigSubmitTransactionFunction(), tl_bytes(body), tl_boolFalse()));
+  if (!decoded.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto &args = decoded.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 5 || !IsBigInt(args[1]) || !IsBool(args[2]) || !IsCell(args[4])) {
+    return std::nullopt;
+  }
+
+  const auto &payload = args[4].c_ftabi_valueCell().vvalue().c_tvm_cell().vbytes();
+
+  return MultisigSubmitTransaction{
+      .dest = UnpackAddress(args[0]),
+      .amount = UnpackUint(args[1]),
+      .bounce = UnpackBool(args[2]),
+      .comment = ParseTransferComment(payload.v).value_or(QByteArray{}),
+  };
+}
+
+std::optional<int64> ParseMultisigSubmitTransactionId(const QByteArray &body) {
+  const auto decoded =
+      RequestSender::Execute(TLftabi_DecodeOutput(MultisigSubmitTransactionFunction(), tl_bytes(body)));
+  if (!decoded.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto &args = decoded.value().c_ftabi_decodedOutput().vvalues().v;
+  if (args.size() != 1 || !IsInt(args[0])) {
+    return std::nullopt;
+  }
+
+  return UnpackUint(args[0]);
+}
+
+std::optional<MultisigConfirmTransaction> ParseMultisigConfirmTransaction(const QByteArray &body) {
+  const auto decoded =
+      RequestSender::Execute(TLftabi_DecodeInput(MultisigConfirmTransactionFunction(), tl_bytes(body), tl_boolFalse()));
+  if (!decoded.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto &args = decoded.value().c_ftabi_decodedInput().vvalues().v;
+  if (args.size() != 1 || !IsInt(args[0])) {
+    return std::nullopt;
+  }
+
+  return MultisigConfirmTransaction{
+      .transactionId = UnpackUint(args[0]),
+  };
+}
+
 std::optional<DePoolOrdinaryStakeTransaction> ParseOrdinaryStakeTransfer(const QByteArray &body) {
   const auto decodedInput =
       RequestSender::Execute(TLftabi_DecodeInput(OrdinaryStakeFunction(), tl_bytes(body), tl_boolTrue()));
@@ -934,7 +1013,7 @@ std::optional<DePoolOrdinaryStakeTransaction> ParseOrdinaryStakeTransfer(const Q
     return std::nullopt;
   }
 
-  const auto args = decodedInput.value().c_ftabi_decodedInput().vvalues().v;
+  const auto &args = decodedInput.value().c_ftabi_decodedInput().vvalues().v;
   if (args.size() != 1 || !IsInt(args[0])) {
     return std::nullopt;
   }
@@ -949,7 +1028,7 @@ std::optional<DePoolOnRoundCompleteTransaction> ParseDePoolOnRoundComplete(const
     return std::nullopt;
   }
 
-  const auto args = decodedInput.value().c_ftabi_decodedInput().vvalues().v;
+  const auto &args = decodedInput.value().c_ftabi_decodedInput().vvalues().v;
   if (args.size() != 7) {
     return std::nullopt;
   }

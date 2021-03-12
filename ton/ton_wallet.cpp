@@ -1667,11 +1667,13 @@ void Wallet::requestMultisigInfo(const QString &address, const Callback<Multisig
               });
             })
             .fail([=](const TLError &error) {
+              std::cout << error.c_error().vmessage().v.toStdString() << std::endl;
               InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get multisig parameters"});
             })
             .send();
       })
       .fail([=](const TLError &error) {
+        std::cout << error.c_error().vmessage().v.toStdString() << std::endl;
         InvokeCallback(done, Error{Error::Type::TonLib, "Failed to get multisig wallet state"});
       })
       .send();

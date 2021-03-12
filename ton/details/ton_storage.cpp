@@ -323,6 +323,14 @@ TLstorage_TransactionAdditionalInfo Serialize(const TransactionAdditionalInfo &d
         return make_storage_dePoolOnRoundComplete(
             tl_int64(data.roundId), tl_int64(data.reward), tl_int64(data.ordinaryStake), tl_int64(data.vestingStake),
             tl_int64(data.lockStake), Serialize(data.reinvest), tl_int32(data.reason));
+      },
+      [](const MultisigSubmitTransaction &data) -> TLstorage_TransactionAdditionalInfo {
+        return make_storage_multisigSubmitTransaction(tl_string(data.dest), tl_int64(data.amount),
+                                                      tl_int64(data.transactionId), Serialize(data.bounce),
+                                                      Serialize(data.executed), tl_string(data.comment));
+      },
+      [](const MultisigConfirmTransaction &data) -> TLstorage_TransactionAdditionalInfo {
+        return make_storage_multisigConfirmTransaction(tl_int64(data.transactionId), Serialize(data.executed));
       });
 }
 
@@ -376,6 +384,22 @@ TransactionAdditionalInfo Deserialize(const TLstorage_TransactionAdditionalInfo 
             .lockStake = data.vlockStake().v,
             .reinvest = Deserialize(data.vreinvest()),
             .reason = static_cast<uint8>(data.vreason().v),
+        };
+      },
+      [](const TLDstorage_multisigSubmitTransaction &data) -> TransactionAdditionalInfo {
+        return MultisigSubmitTransaction{
+            .dest = data.vdest().v,
+            .amount = data.vamount().v,
+            .transactionId = data.vtransactionId().v,
+            .bounce = Deserialize(data.vbounce()),
+            .executed = Deserialize(data.vexecuted()),
+            .comment = data.vcomment().v,
+        };
+      },
+      [](const TLDstorage_multisigConfirmTransaction &data) -> TransactionAdditionalInfo {
+        return MultisigConfirmTransaction{
+            .transactionId = data.vtransactionId().v,
+            .executed = Deserialize(data.vexecuted()),
         };
       });
 }
