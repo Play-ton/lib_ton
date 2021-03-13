@@ -1233,9 +1233,15 @@ QByteArray GetMultisigTvc(Ton::MultisigVersion version) {
 }
 
 Result<GeneratedInitData> CreateMultisigInitData(Ton::MultisigVersion version, const QByteArray &publicKey) {
-  static auto tvc = GetMultisigTvc(version);
+  auto tvc = GetMultisigTvc(version);
 
-  const auto result = RequestSender::Execute(TLftabi_GenerateStateInit(tl_bytes(tvc), tl_bytes(publicKey)));
+  const auto raw = RequestSender::Execute(TLftabi_UnpackPublicKey(tl_bytes(publicKey)));
+  if (!raw.has_value()) {
+    return raw.error();
+  }
+
+  const auto result =
+      RequestSender::Execute(TLftabi_GenerateStateInit(tl_bytes(tvc), raw->c_ftabi_unpackedPublicKey().vpublic_key()));
   if (!result.has_value()) {
     return result.error();
   }

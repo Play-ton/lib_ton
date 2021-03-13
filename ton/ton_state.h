@@ -20,6 +20,8 @@ namespace Ton {
 inline constexpr auto kUnknownBalance = int64(-666);
 
 inline constexpr auto kFtabiKeyDerivationPath = "m/44'/396'/0'/0/0";
+inline constexpr auto kMaxMultisigCustodianCount = 32;
+inline constexpr int64 kMinimalDeploymentBalance = 500'000'000;  // 0.5 TON
 
 extern const QString kZeroAddress;
 
@@ -375,10 +377,18 @@ enum class MultisigVersion {
   Surf,
 };
 
+int GetExpirationTime(MultisigVersion version);
+
 struct MultisigInitialInfo {
   QString address;
   MultisigVersion version;
+  QByteArray publicKey;
   QByteArray initState;
+};
+
+struct MultisigPredeployInfo {
+  int64 balance;
+  MultisigInitialInfo initialInfo;
 };
 
 struct MultisigInfo {
@@ -455,10 +465,9 @@ struct CancelWithdrawalTransactionToSend {
 };
 
 struct DeployMultisigTransactionToSend {
-  QByteArray publicKey;
   MultisigInitialInfo initialInfo;
   uint8 requiredConfirmations = 1;
-  std::vector<QByteArray> custodians;
+  std::vector<QByteArray> owners;
   int timeout = 0;
 };
 

@@ -60,6 +60,20 @@ bool operator!=(const TokenStateValue &a, const TokenStateValue &b) {
   return !(a == b);
 }
 
+int GetExpirationTime(MultisigVersion version) {
+  switch (version) {
+    case MultisigVersion::SafeMultisig:
+    case MultisigVersion::SetcodeMultisig:
+      return 3600;
+    case MultisigVersion::Surf:
+      return 3601;
+    case MultisigVersion::SafeMultisig24h:
+      return 86400;
+    default:
+      Unexpected("Multisig version");
+  }
+}
+
 bool operator==(const MultisigState &a, const MultisigState &b) {
   return (a.version == b.version) && (a.publicKey == b.publicKey) && (a.accountState == b.accountState) &&
          (a.lastTransactions == b.lastTransactions) && (a.pendingTransactions == b.pendingTransactions) &&

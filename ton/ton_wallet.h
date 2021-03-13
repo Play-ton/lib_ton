@@ -168,6 +168,8 @@ class Wallet final : public base::has_weak_ptr {
   [[nodiscard]] static QString ConvertIntoRaw(const QString &address);
   [[nodiscard]] static QString ConvertIntoPacked(const QString &address);
   [[nodiscard]] static QByteArray PackPublicKey(const QByteArray &publicKey);
+  [[nodiscard]] static QByteArray UnpackPublicKey(const QByteArray &publicKey);
+  [[nodiscard]] static QByteArray ExtractContractPublicKey(const QByteArray &data);
   [[nodiscard]] static base::flat_set<QString> GetValidWords();
   [[nodiscard]] static bool IsIncorrectPasswordError(const Error &error);
 
@@ -200,7 +202,7 @@ class Wallet final : public base::has_weak_ptr {
   void requestMultisigStates(const MultisigStatesMap &previousStates, const Callback<MultisigStatesMap> &done);
 
   void requestNewMultisigAddress(MultisigVersion version, const QByteArray &publicKey,
-                                 const Callback<MultisigInitialInfo> &done);
+                                 const Callback<MultisigPredeployInfo> &done);
   void requestMultisigInfo(const QString &address, const Callback<MultisigInfo> &done);
 
  private:

@@ -160,6 +160,16 @@ QByteArray Wallet::PackPublicKey(const QByteArray &publicKey) {
   return result.value().c_ftabi_packedPublicKey().vpublic_key().v;
 }
 
+QByteArray Wallet::UnpackPublicKey(const QByteArray &publicKey) {
+  const auto result = RequestSender::Execute(TLftabi_UnpackPublicKey(tl_string(publicKey)));
+  Expects(result.has_value());
+  return result.value().c_ftabi_unpackedPublicKey().vpublic_key().v;
+}
+
+QByteArray Wallet::ExtractContractPublicKey(const QByteArray &data) {
+  const auto request = RequestSender::Execute(TLftabi_UnpackPublicKey());
+}
+
 base::flat_set<QString> Wallet::GetValidWords() {
   const auto result = RequestSender::Execute(TLGetBip39Hints(tl_string()));
   Assert(result);
@@ -328,10 +338,6 @@ void Wallet::importKey(const std::vector<QString> &words, const Callback<> &done
 
 void Wallet::importFtabiKey(const QString &name, const QString &derivationPath, const std::vector<QString> &words,
                             const Callback<> &done) {
-  Expects(_ftabiKeyCreator == nullptr);
-  Expects(_keyDestroyer == nullptr);
-  Expects(_passwordChanger == nullptr);
-
   auto created = [=](Result<> result) {
     const auto destroyed = result ? std::unique_ptr<FtabiKeyCreator>() : base::take(_ftabiKeyCreator);
     InvokeCallback(done, result);
@@ -754,20 +760,26 @@ void Wallet::checkDeployMultisig(const DeployMultisigTransactionToSend &transact
   const auto check = makeEstimateFeesCallback(done);
 
   CreateMultisigConstructorMessage(  //
-      _external->lib(), tl_inputKeyFake(), transaction.requiredConfirmations, transaction.custodians,
+      _external->lib(), tl_inputKeyFake(), transaction.requiredConfirmations, transaction.owners,
       [=](Result<QByteArray> &&body) {
         if (!body.has_value()) {
           return InvokeCallback(done, body.error());
         }
+
+        std::cout << "Created message" << std::endl;
 
         _external->lib()
             .request(TLraw_CreateQueryTvc(tl_accountAddress(tl_string(transaction.initialInfo.address)),
                                           tl_int32(transaction.timeout), tl_bytes(transaction.initialInfo.initState),
                                           tl_bytes(body.value())))
             .done([=](const TLquery_Info &result) {
+              std::cout << "Created query" << std::endl;
               result.match([&](const TLDquery_info &data) { check(data.vid().v); });
             })
-            .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
+            .fail([=](const TLError &error) {
+              std::cout << "Failed query" << std::endl;
+              InvokeCallback(done, ErrorFromLib(error));
+            })
             .send();
       });
 }
@@ -970,8 +982,8 @@ void Wallet::deployMultisig(const QByteArray &publicKey, const QByteArray &passw
   Assert(!sender.isEmpty());
 
   CreateMultisigConstructorMessage(  //
-      _external->lib(), prepareInputKey(transaction.publicKey, password), transaction.requiredConfirmations,
-      transaction.custodians, [=](Result<QByteArray> &&body) {
+      _external->lib(), prepareInputKey(transaction.initialInfo.publicKey, password), transaction.requiredConfirmations,
+      transaction.owners, [=](Result<QByteArray> &&body) {
         if (!body.has_value()) {
           return InvokeCallback(ready, body.error());
         }
@@ -1535,9 +1547,10 @@ void Wallet::requestMultisigStates(const MultisigStatesMap &previousStates, cons
 }
 
 void Wallet::requestNewMultisigAddress(MultisigVersion version, const QByteArray &publicKey,
-                                       const Callback<MultisigInitialInfo> &done) {
+                                       const Callback<MultisigPredeployInfo> &done) {
   auto initData = CreateMultisigInitData(version, publicKey);
   if (!initData.has_value()) {
+    std::cout << initData.error().details.toStdString() << std::endl;
     return InvokeCallback(done, Error{Error::Type::TonLib, "Failed to compute init data"});
   }
   const auto rawContractAddress = QString{"0:"} + initData->hash.toHex();
@@ -1546,13 +1559,19 @@ void Wallet::requestNewMultisigAddress(MultisigVersion version, const QByteArray
   _external->lib()
       .request(TLGetAccountState(tl_accountAddress(tl_string(packedAddress))))
       .done([=](TLFullAccountState &&result) mutable {
-        if (result.c_fullAccountState().vaccount_state().type() == id_uninited_accountState) {
-          return InvokeCallback(done, MultisigInitialInfo{
-                                          .address = packedAddress,
-                                          .version = version,
-                                          .initState = std::move(initData->data),
-                                      });
+        const auto &account = result.c_fullAccountState();
+        if (account.vaccount_state().type() == id_uninited_accountState) {
+          return InvokeCallback(  //
+              done, MultisigPredeployInfo{.balance = account.vbalance().v,
+                                          .initialInfo = MultisigInitialInfo{
+                                              .address = packedAddress,
+                                              .version = version,
+                                              .publicKey = publicKey,
+                                              .initState = std::move(initData->data),
+                                          }});
         } else {
+          std::cout << "Address: " << rawContractAddress.toStdString() << " " << account.vaccount_state().type()
+                    << std::endl;
           return InvokeCallback(done, Error{Error::Type::TonLib, "Account already exists"});
         }
       })
