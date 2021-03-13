@@ -76,6 +76,7 @@ class RequestSender;
 [[nodiscard]] bool UnpackBool(const TLftabi_Value &value);
 
 [[nodiscard]] QByteArray UnpackBytes(const TLftabi_Value &value);
+[[nodiscard]] TLftabi_Value PackBytes(const QByteArray &value);
 
 bool IsAddress(const TLftabi_Value &value);
 bool IsInt(const TLftabi_Value &value);
@@ -192,5 +193,7 @@ void CreateMultisigSubmitTransactionMessage(RequestSender &lib, const TLInputKey
                                             bool bounce, const QByteArray &payload, const MessageBodyCallback &done);
 void CreateMultisigConfirmTransactionMessage(RequestSender &lib, const TLInputKey &key, int64 transactionId,
                                              const MessageBodyCallback &done);
+
+QByteArray CreatePayloadFromComment(const QString &comment);
 
 }  // namespace Ton::details

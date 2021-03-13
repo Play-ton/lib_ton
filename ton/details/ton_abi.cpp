@@ -112,6 +112,10 @@ void CreateExternalSignedMessageBody(RequestSender &lib, const TLftabi_Function 
   return value.c_ftabi_valueBytes().vvalue().v;
 }
 
+[[nodiscard]] TLftabi_Value PackBytes(const QByteArray &value) {
+  return tl_ftabi_valueBytes(tl_ftabi_paramBytes(), tl_bytes(value));
+}
+
 bool IsAddress(const TLftabi_Value &value) {
   return value.type() == id_ftabi_valueAddress;
 }
@@ -766,18 +770,19 @@ TLftabi_Function MultisigGetCustodians() {
 }
 
 std::optional<QByteArray> ParseTransferComment(const QByteArray &body) {
-  const auto decoded =
-      RequestSender::Execute(TLftabi_DecodeInput(TransferWithComment(), tl_bytes(body), tl_boolTrue()));
+  const auto decoded = RequestSender::Execute(TLftabi_UnpackFromCell(
+      tl_tvm_cell(tl_bytes(body)),
+      tl_vector(QVector<TLftabi_Param>{tl_ftabi_paramUint(tl_int32(32)), tl_ftabi_paramBytes()})));
   if (!decoded.has_value()) {
     return std::nullopt;
   }
 
-  const auto args = decoded.value().c_ftabi_decodedInput().vvalues().v;
-  if (args.size() != 1 || !IsBytes(args[0])) {
+  const auto args = decoded.value().c_ftabi_decodedOutput().vvalues().v;
+  if (args.size() != 2 || !IsBytes(args[1])) {
     return std::nullopt;
   }
 
-  return UnpackBytes(args[0]);
+  return UnpackBytes(args[1]);
 }
 
 std::optional<TokenTransfer> ParseTokenTransfer(const QByteArray &body) {
@@ -958,8 +963,6 @@ std::optional<MultisigDeploymentTransaction> ParseMultisigDeploymentTransaction(
   if (!decoded.has_value()) {
     return std::nullopt;
   }
-
-  std::cout << "Deployment" << std::endl;
 
   // TODO: decode
   return MultisigDeploymentTransaction{};
@@ -1306,6 +1309,33 @@ void CreateMultisigConfirmTransactionMessage(RequestSender &lib, const TLInputKe
           PackUint64(transactionId),  // transactionId
       },
       key, done);
+}
+
+const QRegExp &Base64Regex() {
+  static const QRegExp regex(R"##(^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$)##");
+  return regex;
+}
+
+QByteArray PackValuesIntoCell(QVector<TLftabi_Value> &&values) {
+  auto result = RequestSender::Execute(TLftabi_PackIntoCell(tl_vector(std::forward<QVector<TLftabi_Value>>(values))));
+  if (result.has_value()) {
+    return result->c_tvm_cell().vbytes().v;
+  } else {
+    return {};
+  }
+}
+
+QByteArray CreatePayloadFromComment(const QString &comment) {
+  if (comment.isEmpty()) {
+    return {};
+  }
+  if (Base64Regex().exactMatch(comment)) {
+    return QByteArray::fromBase64(comment.toUtf8());
+  }
+  return PackValuesIntoCell({
+      tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(32)), tl_int64(0x00000000u)),
+      tl_ftabi_valueBytes(tl_ftabi_paramBytes(), tl_bytes(comment.toUtf8())),
+  });
 }
 
 }  // namespace Ton::details

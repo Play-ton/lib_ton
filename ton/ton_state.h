@@ -487,7 +487,7 @@ struct SubmitTransactionToSend {
   QString dest;
   int64 value;
   bool bounce;
-  QByteArray payload;
+  QString comment;
   int timeout = 0;
 };
 

@@ -556,8 +556,9 @@ void Wallet::checkSendGrams(const QByteArray &publicKey, const TransactionToSend
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  checkTransactionFees(sender, transaction.recipient, tl_msg_dataText(tl_string(transaction.comment)),
-                       transaction.amount, transaction.timeout, transaction.allowSendToUninited, done);
+  const auto payload = CreatePayloadFromComment(transaction.comment);
+  checkTransactionFees(sender, transaction.recipient, tl_msg_dataRaw(tl_bytes(payload), tl_bytes()), transaction.amount,
+                       transaction.timeout, transaction.allowSendToUninited, done);
 }
 
 void Wallet::checkSendTokens(const QByteArray &publicKey, const TokenTransactionToSend &transaction,
@@ -768,18 +769,14 @@ void Wallet::checkDeployMultisig(const DeployMultisigTransactionToSend &transact
           return InvokeCallback(done, body.error());
         }
 
-        std::cout << "Created message" << std::endl;
-
         _external->lib()
             .request(TLraw_CreateQueryTvc(tl_accountAddress(tl_string(transaction.initialInfo.address)),
                                           tl_int32(transaction.timeout), tl_bytes(transaction.initialInfo.initState),
                                           tl_bytes(body.value())))
             .done([=](const TLquery_Info &result) {
-              std::cout << "Created query" << std::endl;
               result.match([&](const TLDquery_info &data) { check(data.vid().v); });
             })
             .fail([=](const TLError &error) {
-              std::cout << "Failed query" << std::endl;
               InvokeCallback(done, ErrorFromLib(error));
             })
             .send();
@@ -790,8 +787,9 @@ void Wallet::checkSubmitTransaction(const SubmitTransactionToSend &transaction,
                                     const Callback<TransactionCheckResult> &done) {
   const auto check = makeEstimateFeesCallback(done);
 
+  const auto payload = CreatePayloadFromComment(transaction.comment);
   CreateMultisigSubmitTransactionMessage(  //
-      _external->lib(), tl_inputKeyFake(), transaction.dest, transaction.value, transaction.bounce, transaction.payload,
+      _external->lib(), tl_inputKeyFake(), transaction.dest, transaction.value, transaction.bounce, payload,
       [=](Result<QByteArray> &&body) {
         if (!body.has_value()) {
           return InvokeCallback(done, body.error());
@@ -834,7 +832,8 @@ void Wallet::sendGrams(const QByteArray &publicKey, const QByteArray &password, 
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
-  sendMessage(publicKey, password, sender, transaction.recipient, tl_msg_dataText(tl_string(transaction.comment)),
+  const auto payload = CreatePayloadFromComment(transaction.comment);
+  sendMessage(publicKey, password, sender, transaction.recipient, tl_msg_dataRaw(tl_bytes(payload), tl_bytes()),
               transaction.amount, transaction.timeout, transaction.allowSendToUninited, transaction.comment, ready,
               done);
 }
@@ -1000,9 +999,10 @@ void Wallet::submitTransaction(const QByteArray &publicKey, const QByteArray &pa
   const auto sender = getUsedAddress(publicKey);
   Assert(!sender.isEmpty());
 
+  const auto payload = CreatePayloadFromComment(transaction.comment);
   CreateMultisigSubmitTransactionMessage(  //
       _external->lib(), prepareInputKey(transaction.publicKey, password), transaction.dest, transaction.value,
-      transaction.bounce, transaction.payload, [=](Result<QByteArray> &&body) {
+      transaction.bounce, payload, [=](Result<QByteArray> &&body) {
         if (!body.has_value()) {
           return InvokeCallback(ready, body.error());
         }
@@ -1519,31 +1519,96 @@ void Wallet::requestMultisigStates(const MultisigStatesMap &previousStates, cons
 
   std::shared_ptr<StateContext> ctx{new StateContext{previousStates, done}};
 
-  for (const auto &[address, previousState] : previousStates) {
-    requestState(
-        address, [=, address = address, previousState = previousState](Result<AccountState> accountState) mutable {
-          if (!accountState.has_value()) {
-            return ctx->notifySuccess(address, std::move(previousState));
-          }
+  auto updateState = [=](const QString &address, MultisigState &&previousState, Result<AccountState> &&accountState) {
+    if (!accountState.has_value()) {
+      return ctx->notifySuccess(address, std::forward<MultisigState>(previousState));
+    }
 
-          const auto lastTransactionId = accountState->lastTransactionId;
-          bool transactionsChanged = previousState.accountState.lastTransactionId != lastTransactionId;
+    const auto lastTransactionId = accountState->lastTransactionId;
+    bool transactionsChanged = previousState.accountState.lastTransactionId != lastTransactionId;
 
-          previousState.accountState = std::move(accountState.value());
+    previousState.accountState = std::move(accountState.value());
 
-          if (transactionsChanged) {
-            requestTransactions(
-                address, lastTransactionId,
-                [=, previousState = std::move(previousState)](Result<TransactionsSlice> lastTransactions) mutable {
-                  if (lastTransactions.has_value()) {
-                    previousState.lastTransactions = std::move(lastTransactions.value());
-                  }
-                  ctx->notifySuccess(address, std::move(previousState));
-                });
-          } else {
+    if (transactionsChanged) {
+      requestTransactions(
+          address, lastTransactionId,
+          [=, previousState = std::move(previousState)](Result<TransactionsSlice> lastTransactions) mutable {
+            if (lastTransactions.has_value()) {
+              previousState.lastTransactions = std::move(lastTransactions.value());
+            }
             ctx->notifySuccess(address, std::move(previousState));
+          });
+    } else {
+      ctx->notifySuccess(address, std::move(previousState));
+    }
+  };
+
+  for (const auto &[address, previousState] : previousStates) {
+    if (!previousState.custodians.empty()) {
+      requestState(address,
+                   [=, address = address, previousState = previousState](Result<AccountState> accountState) mutable {
+                     updateState(address, std::move(previousState), std::move(accountState));
+                   });
+      continue;
+    }
+
+    // Special case when contract is not deployed yet
+    _external->lib()
+        .request(TLGetAccountState(tl_accountAddress(tl_string(address))))
+        .done([=, address = address, previousState = previousState](TLFullAccountState &&result) mutable {
+          if (result.c_fullAccountState().vaccount_state().type() != id_raw_accountState) {
+            return updateState(address, std::move(previousState), Parse(result));
           }
-        });
+
+          const auto &info = result.c_fullAccountState();
+          const auto &accountState = info.vaccount_state().c_raw_accountState();
+
+          _external->lib()
+              .request(TLftabi_RunLocalCachedSplit(                                               //
+                  tl_accountAddress(tl_string(address)),                                          //
+                  tl_int64(info.vlast_transaction_id().c_internal_transactionId().vlt().v + 10),  //
+                  tl_int32(static_cast<int32>(info.vsync_utime().v)),                             //
+                  info.vbalance(),                                                                //
+                  accountState.vdata(),                                                           //
+                  accountState.vcode(),                                                           //
+                  MultisigGetCustodians(),                                                        //
+                  tl_ftabi_functionCallExternal({}, {})))
+              .done([=](const TLftabi_tvmOutput &tvmResult) mutable {
+                const auto &output = tvmResult.c_ftabi_tvmOutput();
+                if (output.vsuccess().type() != id_boolTrue) {
+                  return ctx->notifySuccess(address, std::move(previousState));
+                }
+
+                const auto &results = output.vvalues().v;
+                if (results.size() != 1 || results[0].type() != id_ftabi_valueArray) {
+                  return ctx->notifySuccess(address, std::move(previousState));
+                }
+
+                const auto custodians = results[0].c_ftabi_valueArray().vvalues().v;
+                previousState.custodians.reserve(custodians.size());
+                for (const auto &custodian : custodians) {
+                  if (custodian.type() != id_ftabi_valueTuple) {
+                    return ctx->notifySuccess(address, std::move(previousState));
+                  }
+                  const auto &tuple = custodian.c_ftabi_valueTuple().vvalues().v;
+                  if (tuple.size() != 2 || !IsBigInt(tuple[1])) {
+                    return ctx->notifySuccess(address, std::move(previousState));
+                  }
+
+                  const auto publicKey = UnpackPubkey(tuple[1]);
+                  previousState.custodians.push_back(PackPublicKey(publicKey));
+                }
+
+                updateState(address, std::move(previousState), Parse(result));
+              })
+              .fail([=](const TLError &) mutable { ctx->notifySuccess(address, std::move(previousState)); })
+              .send();
+        })
+        .fail([=, address = address, previousState = previousState](const TLError &error) mutable {
+          std::cout << error.c_error().vmessage().v.toStdString() << std::endl;
+          ctx->notifySuccess(address, std::move(previousState));
+        })
+        .send();
   }
 }
 
@@ -1636,7 +1701,7 @@ void Wallet::requestMultisigInfo(const QString &address, const Callback<Multisig
 
                 const auto custodians = results[0].c_ftabi_valueArray().vvalues().v;
                 info.custodians.reserve(custodians.size());
-                for (const auto custodian : custodians) {
+                for (const auto &custodian : custodians) {
                   if (custodian.type() != id_ftabi_valueTuple) {
                     return InvokeCallback(done, invalidAbiError);
                   }
@@ -1658,8 +1723,6 @@ void Wallet::requestMultisigInfo(const QString &address, const Callback<Multisig
         };
 
         const auto publicKey = ExtractContractPublicKey(data.v);
-
-        std::cout << "Deployer public key: " << UnpackPublicKey(publicKey).toHex().toStdString() << std::endl;
 
         _external->lib()
             .request(TLftabi_RunLocalCachedSplit(                     //
