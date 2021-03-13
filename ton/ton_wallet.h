@@ -156,8 +156,7 @@ class Wallet final : public base::has_weak_ptr {
   void addToken(const QByteArray &publicKey, const QString &rootContractAddress, const Callback<> &done);
   void removeToken(const QByteArray &publicKey, const Symbol &token);
 
-  void addMultisig(const QByteArray &publicKey, const MultisigInfo &info, const QByteArray &custodianPublicKey,
-                   const Callback<> &done);
+  void addMultisig(const QByteArray &publicKey, const MultisigInfo &info, const Callback<> &done);
   void removeMultisig(const QByteArray &publicKey, const QString &multisigAddress);
 
   void reorderAssets(const QByteArray &publicKey, int oldPosition, int newPosition);

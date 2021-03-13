@@ -36,6 +36,7 @@ storage.dePoolOnRoundComplete
     reinvest:storage.Bool
     reason:int32 = storage.TransactionAdditionalInfo;
 
+storage.multisigDeploymentTransaction = storage.TransactionAdditionalInfo;
 storage.multisigSubmitTransaction
     dest:string
     amount:int64

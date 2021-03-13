@@ -324,6 +324,9 @@ TLstorage_TransactionAdditionalInfo Serialize(const TransactionAdditionalInfo &d
             tl_int64(data.roundId), tl_int64(data.reward), tl_int64(data.ordinaryStake), tl_int64(data.vestingStake),
             tl_int64(data.lockStake), Serialize(data.reinvest), tl_int32(data.reason));
       },
+      [](const MultisigDeploymentTransaction &data) -> TLstorage_TransactionAdditionalInfo {
+        return make_storage_multisigDeploymentTransaction();
+      },
       [](const MultisigSubmitTransaction &data) -> TLstorage_TransactionAdditionalInfo {
         return make_storage_multisigSubmitTransaction(tl_string(data.dest), tl_int64(data.amount),
                                                       tl_int64(data.transactionId), Serialize(data.bounce),
@@ -385,6 +388,9 @@ TransactionAdditionalInfo Deserialize(const TLstorage_TransactionAdditionalInfo 
             .reinvest = Deserialize(data.vreinvest()),
             .reason = static_cast<uint8>(data.vreason().v),
         };
+      },
+      [](const TLDstorage_multisigDeploymentTransaction &data) -> TransactionAdditionalInfo {
+        return MultisigDeploymentTransaction{};
       },
       [](const TLDstorage_multisigSubmitTransaction &data) -> TransactionAdditionalInfo {
         return MultisigSubmitTransaction{

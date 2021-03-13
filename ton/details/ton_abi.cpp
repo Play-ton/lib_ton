@@ -952,6 +952,19 @@ std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body) {
   return TokenSwapBack{.address = "0x" + address.toHex(), .value = UnpackUint128(args[0])};
 }
 
+std::optional<MultisigDeploymentTransaction> ParseMultisigDeploymentTransaction(const QByteArray &body) {
+  const auto decoded =
+      RequestSender::Execute(TLftabi_DecodeInput(MultisigConstructorFunction(), tl_bytes(body), tl_boolFalse()));
+  if (!decoded.has_value()) {
+    return std::nullopt;
+  }
+
+  std::cout << "Deployment" << std::endl;
+
+  // TODO: decode
+  return MultisigDeploymentTransaction{};
+}
+
 std::optional<MultisigSubmitTransaction> ParseMultisigSubmitTransaction(const QByteArray &body) {
   const auto decoded =
       RequestSender::Execute(TLftabi_DecodeInput(MultisigSubmitTransactionFunction(), tl_bytes(body), tl_boolFalse()));

@@ -255,6 +255,10 @@ struct DePoolOnRoundCompleteTransaction {
   uint8 reason{};
 };
 
+struct MultisigDeploymentTransaction {
+  // TODO: add deployment info?
+};
+
 struct MultisigSubmitTransaction {
   QString dest;
   int64 amount;
@@ -300,20 +304,25 @@ struct RegularTransaction {};
 
 using TransactionAdditionalInfo =     //
     std::variant<RegularTransaction,  //
+
                  // Events
                  TokenWalletDeployed,    //
                  EthEventStatusChanged,  //
                  TonEventStatusChanged,  //
+
                  // Token transaction
                  TokenTransfer,  //
                  TokenSwapBack,  //
                  TokenMint,      //
                  TokensBounced,  //
+
                  // DePool transaction
                  DePoolOrdinaryStakeTransaction,    //
                  DePoolOnRoundCompleteTransaction,  //
+
                  // Multisig transaction
-                 MultisigSubmitTransaction,  //
+                 MultisigDeploymentTransaction,  //
+                 MultisigSubmitTransaction,      //
                  MultisigConfirmTransaction>;
 
 struct Transaction {
@@ -394,6 +403,7 @@ struct MultisigPredeployInfo {
 struct MultisigInfo {
   QString address;
   MultisigVersion version;
+  QByteArray publicKey;
   std::vector<QByteArray> custodians;
   int64 expirationTime;
 };

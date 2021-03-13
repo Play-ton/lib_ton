@@ -30,6 +30,7 @@ struct DePoolParticipantState;
 struct RootTokenContractDetails;
 struct TokenWalletContractDetails;
 
+struct MultisigDeploymentTransaction;
 struct MultisigSubmitTransaction;
 struct MultisigConfirmTransaction;
 
@@ -143,6 +144,7 @@ bool IsCell(const TLftabi_Value &value);
 [[nodiscard]] std::optional<TonEventStatus> ParseTonEventNotification(const QByteArray &body);
 [[nodiscard]] std::optional<TokenWalletDeployed> ParseTokenWalletDeployedNotification(const QByteArray &body);
 [[nodiscard]] std::optional<TokenSwapBack> ParseTokenSwapBack(const QByteArray &body);
+[[nodiscard]] std::optional<MultisigDeploymentTransaction> ParseMultisigDeploymentTransaction(const QByteArray &body);
 [[nodiscard]] std::optional<MultisigSubmitTransaction> ParseMultisigSubmitTransaction(const QByteArray &body);
 [[nodiscard]] std::optional<int64> ParseMultisigSubmitTransactionId(const QByteArray &body);
 [[nodiscard]] std::optional<MultisigConfirmTransaction> ParseMultisigConfirmTransaction(const QByteArray &body);

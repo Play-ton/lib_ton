@@ -216,6 +216,9 @@ bool ParseMultisigTransaction(Ton::Transaction &transaction) {
     confirm->executed = executed;
     transaction.additional = *confirm;
     return true;
+  } else if (auto deploy = ParseMultisigDeploymentTransaction(transaction.incoming.message.data); deploy.has_value()) {
+    transaction.additional = *deploy;
+    return true;
   }
 
   return false;

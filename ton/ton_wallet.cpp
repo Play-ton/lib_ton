@@ -167,7 +167,9 @@ QByteArray Wallet::UnpackPublicKey(const QByteArray &publicKey) {
 }
 
 QByteArray Wallet::ExtractContractPublicKey(const QByteArray &data) {
-  const auto request = RequestSender::Execute(TLftabi_UnpackPublicKey());
+  const auto result = RequestSender::Execute(TLftabi_ExtractPublicKeyFromData(tl_bytes(data)));
+  Expects(result.has_value());
+  return result.value().c_ftabi_packedPublicKey().vpublic_key().v;
 }
 
 base::flat_set<QString> Wallet::GetValidWords() {
@@ -1221,8 +1223,7 @@ void Wallet::removeToken(const QByteArray &publicKey, const Symbol &token) {
   _accountViewers->removeToken(getUsedAddress(publicKey), token);
 }
 
-void Wallet::addMultisig(const QByteArray &publicKey, const MultisigInfo &info, const QByteArray &custodianPublicKey,
-                         const Callback<> &done) {
+void Wallet::addMultisig(const QByteArray &publicKey, const MultisigInfo &info, const Callback<> &done) {
   const auto account = getUsedAddress(publicKey);
 
   requestState(info.address, [=](Result<AccountState> result) mutable {
@@ -1245,10 +1246,10 @@ void Wallet::addMultisig(const QByteArray &publicKey, const MultisigInfo &info, 
               account, info.address,
               MultisigState{
                   .version = info.version,
-                  .publicKey = custodianPublicKey,
+                  .publicKey = info.publicKey,
                   .accountState = std::move(accountState),
                   .lastTransactions = std::move(*lastTransactions),
-                  .custodians = std::move(info.custodians),
+                  .custodians = info.custodians,
                   .expirationTime = info.expirationTime,
               });
           InvokeCallback(done);
@@ -1557,10 +1558,10 @@ void Wallet::requestNewMultisigAddress(MultisigVersion version, const QByteArray
   const auto packedAddress = ConvertIntoPacked(rawContractAddress);
 
   _external->lib()
-      .request(TLGetAccountState(tl_accountAddress(tl_string(packedAddress))))
-      .done([=](TLFullAccountState &&result) mutable {
-        const auto &account = result.c_fullAccountState();
-        if (account.vaccount_state().type() == id_uninited_accountState) {
+      .request(TLraw_GetAccountState(tl_accountAddress(tl_string(packedAddress))))
+      .done([=](TLraw_FullAccountState &&result) mutable {
+        const auto &account = result.c_raw_fullAccountState();
+        if (account.vcode().v.isEmpty()) {
           return InvokeCallback(  //
               done, MultisigPredeployInfo{.balance = account.vbalance().v,
                                           .initialInfo = MultisigInitialInfo{
@@ -1570,8 +1571,7 @@ void Wallet::requestNewMultisigAddress(MultisigVersion version, const QByteArray
                                               .initState = std::move(initData->data),
                                           }});
         } else {
-          std::cout << "Address: " << rawContractAddress.toStdString() << " " << account.vaccount_state().type()
-                    << std::endl;
+          std::cout << "Address: " << rawContractAddress.toStdString() << std::endl;
           return InvokeCallback(done, Error{Error::Type::TonLib, "Account already exists"});
         }
       })
@@ -1657,6 +1657,10 @@ void Wallet::requestMultisigInfo(const QString &address, const Callback<Multisig
               .send();
         };
 
+        const auto publicKey = ExtractContractPublicKey(data.v);
+
+        std::cout << "Deployer public key: " << UnpackPublicKey(publicKey).toHex().toStdString() << std::endl;
+
         _external->lib()
             .request(TLftabi_RunLocalCachedSplit(                     //
                 tl_accountAddress(tl_string(packedMultisigAddress)),  //
@@ -1682,6 +1686,7 @@ void Wallet::requestMultisigInfo(const QString &address, const Callback<Multisig
               getCustodians(MultisigInfo{
                   .address = packedMultisigAddress,
                   .version = multisigVersion.value(),
+                  .publicKey = publicKey,
                   .expirationTime = UnpackUint(results[2]),
               });
             })
