@@ -429,10 +429,10 @@ TLinputKey Wallet::prepareInputKey(const QByteArray &publicKey, const QByteArray
   };
 
   if (auto entry = find(_list->entries, SelectConstField(&WalletList::Entry::publicKey), tl_inputKeyRegular)) {
-    return entry.value();
+    return *entry;
   } else if (auto ftabiEntry =
                  find(_list->ftabiEntries, SelectConstField(&WalletList::FtabiEntry::publicKey), tl_inputKeyFtabi)) {
-    return ftabiEntry.value();
+    return *ftabiEntry;
   } else {
     Unexpected("Key not found");
   }
@@ -1748,7 +1748,7 @@ void Wallet::requestMultisigInfo(const QString &address, const Callback<Multisig
 
               getCustodians(MultisigInfo{
                   .address = packedMultisigAddress,
-                  .version = multisigVersion.value(),
+                  .version = *multisigVersion,
                   .publicKey = publicKey,
                   .expirationTime = UnpackUint(results[2]),
               });

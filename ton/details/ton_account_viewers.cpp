@@ -36,7 +36,7 @@ MultisigStatesMap ComputePendingTransactions(MultisigStatesMap &&states) {
     state.pendingTransactions =
         ComputePendingTransactions(std::move(state.pendingTransactions), state.accountState, state.lastTransactions);
   }
-  return states;
+  return std::forward<MultisigStatesMap>(states);
 }
 
 }  // namespace
