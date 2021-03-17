@@ -1331,8 +1331,7 @@ QByteArray CreatePayloadFromComment(const QString &comment) {
   }
   if (Base64Regex().exactMatch(comment)) {
     auto raw = QByteArray::fromBase64(comment.toUtf8());
-    if (RequestSender::Execute(
-            TLftabi_UnpackFromCell(tl_tvm_cell(tl_bytes(comment.toUtf8())), tl_vector(QVector<TLftabi_Param>{})))
+    if (RequestSender::Execute(TLftabi_UnpackFromCell(tl_tvm_cell(tl_bytes(raw)), tl_vector(QVector<TLftabi_Param>{})))
             .has_value()) {
       return raw;
     }
