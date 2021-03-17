@@ -350,8 +350,14 @@ bool operator==(const TransactionsSlice &a, const TransactionsSlice &b);
 
 bool operator!=(const TransactionsSlice &a, const TransactionsSlice &b);
 
+enum class TokenVersion {
+  tipo3v0,
+  tipo3v1,
+};
+
 struct TokenState {
   Symbol token;
+  TokenVersion version;
   QString walletContractAddress;
   QString rootOwnerAddress;
   TransactionsSlice lastTransactions;
@@ -362,6 +368,7 @@ bool operator==(const TokenState &a, const TokenState &b);
 bool operator!=(const TokenState &a, const TokenState &b);
 
 struct TokenStateValue {
+  TokenVersion version;
   QString walletContractAddress;
   QString rootOwnerAddress;
   TransactionsSlice lastTransactions;
@@ -369,6 +376,7 @@ struct TokenStateValue {
 
   [[nodiscard]] auto withSymbol(Symbol symbol) const -> TokenState {
     return TokenState{.token = std::move(symbol),
+                      .version = version,
                       .walletContractAddress = walletContractAddress,
                       .rootOwnerAddress = rootOwnerAddress,
                       .lastTransactions = lastTransactions,
@@ -545,6 +553,26 @@ using AssetListItem = std::variant<AssetListItemWallet, AssetListItemToken, Asse
 
 bool operator==(const AssetListItem &a, const AssetListItem &b);
 bool operator!=(const AssetListItem &a, const AssetListItem &b);
+
+struct IgnoredAssetToken {
+  QString rootTokensContractAddress;
+};
+struct IgnoredAssetDePool {
+  QString address;
+};
+
+using IgnoredAssetListItem = std::variant<IgnoredAssetToken, IgnoredAssetDePool>;
+
+bool operator==(const IgnoredAssetListItem &a, const IgnoredAssetListItem &b);
+bool operator!=(const IgnoredAssetListItem &a, const IgnoredAssetListItem &b);
+
+struct IgnoredAsset {
+  IgnoredAssetListItem data;
+};
+
+struct IgnoredAssetsList {
+  std::vector<IgnoredAssetListItem> list;
+};
 
 struct MultisigState {
   MultisigVersion version;

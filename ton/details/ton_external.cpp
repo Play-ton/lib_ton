@@ -79,6 +79,7 @@ std::atomic<bool> LoggingEnabled = false;
 External::External(const QString &path, Fn<void(Update)> &&updateCallback)
     : _basePath(path.endsWith('/') ? path : (path + '/'))
     , _updateCallback(std::move(updateCallback))
+    , _ignoredAssets(std::make_unique<IgnoredAssetsList>())
     , _lib(generateUpdateCallback())
     , _db(MakeDatabase(_basePath)) {
   Expects(!path.isEmpty());
@@ -94,7 +95,8 @@ Fn<void(const TLUpdate &)> External::generateUpdateCallback() const {
   };
 }
 
-void External::open(const QByteArray &globalPassword, const Settings &defaultSettings, Callback<WalletList> done) {
+void External::open(const QByteArray &globalPassword, const Settings &defaultSettings,
+                    const Callback<WalletList> &done) {
   Expects(_state == State::Initial);
 
   _state = State::Opening;
@@ -126,39 +128,54 @@ void External::open(const QByteArray &globalPassword, const Settings &defaultSet
 
     class CacheContext {
      public:
-      CacheContext(const Fn<void(std::map<QString, TokenOwnersCache> &&)> &done, size_t count)
-          : _done{done}, _count{static_cast<int>(count)} {
+      using Done = Fn<void(std::map<QString, TokenOwnersCache> &&, IgnoredAssetsList &&)>;
+
+      CacheContext(const Done &done, size_t count) : _done{done}, _count{static_cast<int>(count)} {
       }
 
       void notifyLoaded(const QString &address, TokenOwnersCache &&item) {
         std::unique_lock<std::mutex> lock{_mutex};
         _cache.emplace(std::piecewise_construct, std::forward_as_tuple(address),
                        std::forward_as_tuple(std::forward<TokenOwnersCache>(item)));
+        checkComplete();
+      }
+
+      void notifyLoaded(IgnoredAssetsList &&ignoredAssets) {
+        std::unique_lock<std::mutex> lock{_mutex};
+        _ignoredAssets = std::forward<IgnoredAssetsList>(ignoredAssets);
+        checkComplete();
+      }
+
+      void checkComplete() {
         if (--_count <= 0) {
-          _done(std::move(_cache));
+          _done(std::move(_cache), std::move(_ignoredAssets));
         }
       }
 
      private:
-      Fn<void(std::map<QString, TokenOwnersCache> &&)> _done;
+      Done _done;
       int _count;
       std::map<QString, TokenOwnersCache> _cache;
+      IgnoredAssetsList _ignoredAssets;
       std::mutex _mutex;
     };
 
-    auto knownContractsLoaded = crl::guard(this, [=](std::map<QString, TokenOwnersCache> &&cache) {
-      _tokenOwnersCache = std::move(cache);
-      LoadWalletList(_db.get(), useTestNetwork, loadedWallets);
-    });
+    auto knownContractsLoaded =
+        crl::guard(this, [=](std::map<QString, TokenOwnersCache> &&cache, IgnoredAssetsList &&ignoredAssets) {
+          _tokenOwnersCache = std::move(cache);
+          *_ignoredAssets = std::move(ignoredAssets);
+          LoadWalletList(_db.get(), useTestNetwork, loadedWallets);
+        });
 
     LoadKnownTokenContracts(
         _db.get(), _settings.useTestNetwork, crl::guard(this, [=](KnownTokenContracts &&knownTokenContracts) {
-          if (knownTokenContracts.addresses.empty()) {
-            return knownContractsLoaded(std::map<QString, TokenOwnersCache>{});
-          }
-
           auto context = std::shared_ptr<CacheContext>{
-              new CacheContext{knownContractsLoaded, knownTokenContracts.addresses.size()}};
+              new CacheContext{knownContractsLoaded, knownTokenContracts.addresses.size() + 1}};
+
+          LoadIgnoredAssetsList(_db.get(), useTestNetwork, [=](IgnoredAssetsList &&ignoredAssets) {
+            context->notifyLoaded(std::forward<IgnoredAssetsList>(ignoredAssets));
+          });
+
           for (const auto &address : knownTokenContracts.addresses) {
             LoadTokenOwnersCache(_db.get(), useTestNetwork, address, [=](TokenOwnersCache &&owners) {
               context->notifyLoaded(address, std::forward<TokenOwnersCache>(owners));
@@ -205,7 +222,7 @@ const Settings &External::settings() const {
   return _settings;
 }
 
-void External::updateSettings(const Settings &settings, Callback<ConfigInfo> done) {
+void External::updateSettings(const Settings &settings, const Callback<ConfigInfo> &done) {
   Expects(_settings.useTestNetwork == settings.useTestNetwork);
 
   const auto &was = _settings.net();
@@ -278,6 +295,33 @@ void External::updateTokenOwnersCache(const QString &rootContractAddress, const 
 
 const std::map<QString, TokenOwnersCache> &External::tokenOwnersCache() const {
   return _tokenOwnersCache;
+}
+
+bool External::isIgnoredAsset(const IgnoredAsset &item) const {
+  const auto it = std::find(_ignoredAssets->list.begin(), _ignoredAssets->list.end(), item.data);
+  return it != _ignoredAssets->list.end();
+}
+
+void External::addIgnoredAsset(const IgnoredAsset &item, const Callback<> &done) {
+  if (isIgnoredAsset(item)) {
+    return InvokeCallback(done);
+  }
+  _ignoredAssets->list.emplace_back(item.data);
+  updateIgnoredAssets(done);
+}
+
+void External::removeIgnoredAsset(const IgnoredAsset &item, const Callback<> &done) {
+  const auto it = std::find(_ignoredAssets->list.begin(), _ignoredAssets->list.end(), item.data);
+  if (it == _ignoredAssets->list.end()) {
+    return InvokeCallback(done);
+  }
+  _ignoredAssets->list.erase(it);
+  updateIgnoredAssets(done);
+}
+
+void External::updateIgnoredAssets(const Callback<> &done) {
+  const auto useTestNetwork = settings().useTestNetwork;
+  SaveIgnoredAssetsList(_db.get(), useTestNetwork, *_ignoredAssets, done);
 }
 
 void External::resetNetwork() {
@@ -388,7 +432,7 @@ void External::openDatabase(const QByteArray &globalPassword, Callback<Settings>
   });
 }
 
-void External::startLibrary(const Callback<>& done) {
+void External::startLibrary(const Callback<> &done) {
   const auto path = LibraryStoragePath(_basePath);
   if (!QDir().mkpath(path)) {
     InvokeCallback(done, Error{Error::Type::IO, path});

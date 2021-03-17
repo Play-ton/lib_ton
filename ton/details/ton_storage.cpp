@@ -20,9 +20,15 @@ constexpr auto kWalletTestListKey = Storage::Cache::Key{1ULL, 1ULL};
 constexpr auto kWalletMainListKey = Storage::Cache::Key{1ULL, 2ULL};
 constexpr auto kKnownTokenContractsTestList = Storage::Cache::Key{1ULL, 3ULL};
 constexpr auto kKnownTokenContractsMainList = Storage::Cache::Key{1ULL, 4ULL};
+constexpr auto kIgnoredAssetsTestList = Storage::Cache::Key{1ULL, 5ULL};
+constexpr auto kIgnoredAssetsMainList = Storage::Cache::Key{1ULL, 6ULL};
 
 [[nodiscard]] Storage::Cache::Key WalletListKey(bool useTestNetwork) {
   return useTestNetwork ? kWalletTestListKey : kWalletMainListKey;
+}
+
+[[nodiscard]] Storage::Cache::Key IgnoredAssetsListKey(bool useTestNetwork) {
+  return useTestNetwork ? kIgnoredAssetsTestList : kIgnoredAssetsMainList;
 }
 
 [[nodiscard]] Storage::Cache::Key WalletStateKey(const QString &address) {
@@ -97,6 +103,8 @@ TLstorage_AssetsListItem Serialize(const AssetListItem &data);
 AssetListItem Deserialize(const TLstorage_AssetsListItem &data);
 TLstorage_WalletState Serialize(const WalletState &data);
 WalletState Deserialize(const TLstorage_WalletState &data);
+TLstorage_IgnoredAssetsListItem Serialize(const IgnoredAssetListItem &data);
+IgnoredAssetListItem Deserialize(const TLstorage_IgnoredAssetsListItem &data);
 TLstorage_TokenOwnersCache Serialize(const TokenOwnersCache &data);
 TokenOwnersCache Deserialize(const TLstorage_TokenOwnersCache &data);
 TLstorage_KnownTokenContracts Serialize(const KnownTokenContracts &data);
@@ -452,21 +460,33 @@ PendingTransaction Deserialize(const TLstorage_PendingTransaction &data) {
 
 TLstorage_TokenState Serialize(const TokenState &data) {
   Assert(data.token.isToken());
-  return make_storage_tokenState(tl_string(data.token.rootContractAddress()), tl_string(data.walletContractAddress),
-                                 tl_string(data.rootOwnerAddress), tl_string(data.token.name()),
-                                 tl_int32(static_cast<int32_t>(data.token.decimals())),
-                                 Serialize(data.lastTransactions), tl_bytes(Int128ToBytesBE(data.balance)));
+  return make_storage_tokenState2(tl_int32(static_cast<int32>(data.version)),
+                                  tl_string(data.token.rootContractAddress()), tl_string(data.walletContractAddress),
+                                  tl_string(data.rootOwnerAddress), tl_string(data.token.name()),
+                                  tl_int32(static_cast<int32_t>(data.token.decimals())),
+                                  Serialize(data.lastTransactions), tl_bytes(Int128ToBytesBE(data.balance)));
 }
 
 TokenState Deserialize(const TLstorage_TokenState &data) {
-  return data.match([&](const TLDstorage_tokenState &data) {
-    return TokenState{.token = Symbol::tip3(tl::utf8(data.vname().v), static_cast<size_t>(data.vdecimals().v),
-                                            data.vrootContractAddress().v),
-                      .walletContractAddress = data.vwalletContractAddress().v,
-                      .rootOwnerAddress = data.vrootOwnerAddress().v,
-                      .lastTransactions = Deserialize(data.vlastTransactions()),
-                      .balance = BytesBEToInt128(data.vbalance().v)};
-  });
+  return data.match(
+      [&](const TLDstorage_tokenState &data) {
+        return TokenState{.token = Symbol::tip3(tl::utf8(data.vname().v), static_cast<size_t>(data.vdecimals().v),
+                                                data.vrootContractAddress().v),
+                          .version = TokenVersion::tipo3v0,
+                          .walletContractAddress = data.vwalletContractAddress().v,
+                          .rootOwnerAddress = data.vrootOwnerAddress().v,
+                          .lastTransactions = Deserialize(data.vlastTransactions()),
+                          .balance = BytesBEToInt128(data.vbalance().v)};
+      },
+      [&](const TLDstorage_tokenState2 &data) {
+        return TokenState{.token = Symbol::tip3(tl::utf8(data.vname().v), static_cast<size_t>(data.vdecimals().v),
+                                                data.vrootContractAddress().v),
+                          .version = static_cast<TokenVersion>(data.vversion().v),
+                          .walletContractAddress = data.vwalletContractAddress().v,
+                          .rootOwnerAddress = data.vrootOwnerAddress().v,
+                          .lastTransactions = Deserialize(data.vlastTransactions()),
+                          .balance = BytesBEToInt128(data.vbalance().v)};
+      });
 }
 
 TLstorage_DePoolState Serialize(const NamedDePoolState &data) {
@@ -611,6 +631,31 @@ WalletState Deserialize(const TLstorage_WalletState &data) {
                        .multisigStates = std::move(multisigStates),
                        .assetsList = std::move(assetsList)};
   });
+}
+
+TLstorage_IgnoredAssetsListItem Serialize(const IgnoredAssetListItem &data) {
+  return v::match(
+      data,
+      [](const IgnoredAssetToken &data) {
+        return make_storage_ignoredAssetsListToken(tl_bytes(data.rootTokensContractAddress.toUtf8()));
+      },
+      [](const IgnoredAssetDePool &data) {
+        return make_storage_ignoredAssetsListDePool(tl_bytes(data.address.toUtf8()));
+      });
+}
+
+IgnoredAssetListItem Deserialize(const TLstorage_IgnoredAssetsListItem &data) {
+  return data.match(
+      [](const TLDstorage_ignoredAssetsListToken &data) -> IgnoredAssetListItem {
+        return IgnoredAssetToken{
+            .rootTokensContractAddress = tl::utf8(data.vrootContractAddress().v),
+        };
+      },
+      [](const TLDstorage_ignoredAssetsListDePool &data) -> IgnoredAssetListItem {
+        return IgnoredAssetDePool{
+            .address = tl::utf8(data.vaddress().v),
+        };
+      });
 }
 
 TLstorage_TokenOwnersCache Serialize(const TokenOwnersCache &data) {
@@ -763,6 +808,35 @@ void LoadWalletList(not_null<Storage::Cache::Database *> db, bool useTestNetwork
 
   db->get(WalletListKey(useTestNetwork), [=](const QByteArray &value) {
     crl::on_main([done, result = Unpack<WalletList>(value)]() mutable { done(std::move(result)); });
+  });
+}
+
+void SaveIgnoredAssetsList(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
+                           const IgnoredAssetsList &ignoredAssets, const Callback<> &done) {
+  auto saved = [=](const Storage::Cache::Error &error) {
+    crl::on_main([=] {
+      if (const auto bad = ErrorFromStorage(error)) {
+        InvokeCallback(done, *bad);
+      } else {
+        InvokeCallback(done);
+      }
+    });
+  };
+  if (ignoredAssets.list.empty()) {
+    db->remove(IgnoredAssetsListKey(useTestNetwork), std::move(saved));
+  } else {
+    db->put(IgnoredAssetsListKey(useTestNetwork), Pack(ignoredAssets.list), std::move(saved));
+  }
+}
+
+void LoadIgnoredAssetsList(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
+                           const Fn<void(IgnoredAssetsList &&)> &done) {
+  Expects(done != nullptr);
+
+  db->get(IgnoredAssetsListKey(useTestNetwork), [=](const QByteArray &value) {
+    crl::on_main([done, result = Unpack<std::vector<IgnoredAssetListItem>>(value)]() mutable {
+      done(IgnoredAssetsList{.list = std::move(result)});
+    });
   });
 }
 

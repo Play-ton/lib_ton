@@ -96,6 +96,20 @@ std::optional<MultisigVersion> GuessMultisigVersion(const QByteArray &codeHash) 
   return it->second;
 }
 
+std::optional<TokenVersion> GuessTokenVersion(const QByteArray &codeHash) {
+  static const std::map<QByteArray, TokenVersion> codeHashes = {
+      {QByteArray::fromHex("fa6c215df5869e2bfdb0613a3fb8fe9f0f3ed446fa32429adebeab03bbe5d8bf"),  //
+       TokenVersion::tipo3v0},
+      {QByteArray::fromHex("140b9acfe5036ea7f8664711e35bfb3034fc0b87c691617c3c2caa0a8ba65499"),  //
+       TokenVersion::tipo3v1},
+  };
+  const auto it = codeHashes.find(codeHash);
+  if (it == codeHashes.end()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
 }  // namespace
 
 namespace details {
@@ -776,9 +790,7 @@ void Wallet::checkDeployMultisig(const DeployMultisigTransactionToSend &transact
             .done([=](const TLquery_Info &result) {
               result.match([&](const TLDquery_info &data) { check(data.vid().v); });
             })
-            .fail([=](const TLError &error) {
-              InvokeCallback(done, ErrorFromLib(error));
-            })
+            .fail([=](const TLError &error) { InvokeCallback(done, ErrorFromLib(error)); })
             .send();
       });
 }
@@ -1046,9 +1058,15 @@ void Wallet::openGateExecuteSwapBack(const QString &eventAddress) {
   QDesktopServices::openUrl(url);
 }
 
-void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress, const Callback<> &done) {
+void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress, bool skipIgnored,
+                       const Callback<> &done) {
   const auto account = getUsedAddress(publicKey);
   const auto packedDePoolAddress = ConvertIntoPacked(dePoolAddress);
+
+  if (skipIgnored &&
+      _external->isIgnoredAsset(IgnoredAsset{.data = IgnoredAssetDePool{.address = packedDePoolAddress}})) {
+    return;
+  }
 
   _external->lib()
       .request(TLGetAccountState(tl_accountAddress(tl_string(packedDePoolAddress))))
@@ -1098,12 +1116,20 @@ void Wallet::addDePool(const QByteArray &publicKey, const QString &dePoolAddress
 }
 
 void Wallet::removeDePool(const QByteArray &publicKey, const QString &dePoolAddress) {
-  _accountViewers->removeDePool(getUsedAddress(publicKey), dePoolAddress);
+  _external->addIgnoredAsset(IgnoredAsset{.data = IgnoredAssetDePool{.address = dePoolAddress}}, [=](const Result<> &) {
+    _accountViewers->removeDePool(getUsedAddress(publicKey), dePoolAddress);
+  });
 }
 
-void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAddress, const Callback<> &done) {
+void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAddress, bool skipIgnored,
+                      const Callback<> &done) {
   const auto account = getUsedAddress(publicKey);
   const auto packedRootContractAddress = ConvertIntoPacked(rootContractAddress);
+
+  if (skipIgnored && _external->isIgnoredAsset(IgnoredAsset{
+                         .data = IgnoredAssetToken{.rootTokensContractAddress = packedRootContractAddress}})) {
+    return;
+  }
 
   const auto getWalletAddress = [this, done, account, packedRootContractAddress](
                                     TLFullAccountState &&result, const RootTokenContractDetails &details) {
@@ -1220,7 +1246,9 @@ void Wallet::addToken(const QByteArray &publicKey, const QString &rootContractAd
 }
 
 void Wallet::removeToken(const QByteArray &publicKey, const Symbol &token) {
-  _accountViewers->removeToken(getUsedAddress(publicKey), token);
+  _external->addIgnoredAsset(
+      IgnoredAsset{.data = IgnoredAssetToken{.rootTokensContractAddress = token.rootContractAddress()}},
+      [=](const Result<> &) { _accountViewers->removeToken(getUsedAddress(publicKey), token); });
 }
 
 void Wallet::addMultisig(const QByteArray &publicKey, const MultisigInfo &info, const Callback<> &done) {

@@ -150,10 +150,11 @@ class Wallet final : public base::has_weak_ptr {
   void openGate(const QString &rawAddress, const std::optional<Symbol> &token = {});
   void openGateExecuteSwapBack(const QString &eventAddress);
 
-  void addDePool(const QByteArray &publicKey, const QString &dePoolAddress, const Callback<> &done);
+  void addDePool(const QByteArray &publicKey, const QString &dePoolAddress, bool skipIgnored, const Callback<> &done);
   void removeDePool(const QByteArray &publicKey, const QString &dePoolAddress);
 
-  void addToken(const QByteArray &publicKey, const QString &rootContractAddress, const Callback<> &done);
+  void addToken(const QByteArray &publicKey, const QString &rootContractAddress, bool skipIgnored,
+                const Callback<> &done);
   void removeToken(const QByteArray &publicKey, const Symbol &token);
 
   void addMultisig(const QByteArray &publicKey, const MultisigInfo &info, const Callback<> &done);

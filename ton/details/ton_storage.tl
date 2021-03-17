@@ -76,6 +76,15 @@ storage.tokenState
     name:bytes
     decimals:int32
     lastTransactions:storage.TransactionsSlice
+    balance:bytes = storage.TokenState; // outdated in 1.3.3
+storage.tokenState2
+    version:int32
+    rootContractAddress:bytes
+    walletContractAddress:bytes
+    rootOwnerAddress:bytes
+    name:bytes
+    decimals:int32
+    lastTransactions:storage.TransactionsSlice
     balance:bytes = storage.TokenState;
 storage.dePoolState
     address:string
@@ -106,6 +115,10 @@ storage.walletState
     dePoolStates:vector<storage.DePoolState>
     multisigStates:vector<storage.MultisigState>
     assetsList:vector<storage.AssetsListItem> = storage.WalletState;
+
+storage.ignoredAssetsListToken rootContractAddress:bytes = storage.IgnoredAssetsListItem;
+storage.ignoredAssetsListDePool address:bytes = storage.IgnoredAssetsListItem;
+storage.ignoredAssetsList assetsList:vector<storage.IgnoredAssetsListItem> = storage.IgnoredAssetsList;
 
 storage.tokenOwnersCacheItem wallet:bytes owner:bytes = storage.TokenOwnersCacheItem;
 storage.tokenOwnersCache wallets:vector<storage.tokenOwnersCacheItem> = storage.TokenOwnersCache;

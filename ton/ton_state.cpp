@@ -43,8 +43,8 @@ bool operator!=(const TransactionId &a, const TransactionId &b) {
 }
 
 bool operator==(const TokenState &a, const TokenState &b) {
-  return (a.token == b.token) && (a.balance == b.balance) && (a.lastTransactions == b.lastTransactions) &&
-         (a.walletContractAddress == b.walletContractAddress);
+  return (a.token == b.token) && (a.version == b.version) && (a.balance == b.balance) &&
+         (a.lastTransactions == b.lastTransactions) && (a.walletContractAddress == b.walletContractAddress);
 }
 
 bool operator!=(const TokenState &a, const TokenState &b) {
@@ -164,6 +164,26 @@ bool operator==(const AssetListItem &a, const AssetListItem &b) {
 }
 
 bool operator!=(const AssetListItem &a, const AssetListItem &b) {
+  return !(a == b);
+}
+
+bool operator==(const IgnoredAssetListItem &a, const IgnoredAssetListItem &b) {
+  if (a.index() != b.index()) {
+    return false;
+  }
+  return v::match(
+      a,
+      [&](const IgnoredAssetToken &itemA) {
+        const auto *itemB = std::get_if<IgnoredAssetToken>(&b);
+        return itemA.rootTokensContractAddress == itemB->rootTokensContractAddress;
+      },
+      [&](const IgnoredAssetDePool &itemA) {
+        const auto *itemB = std::get_if<IgnoredAssetDePool>(&b);
+        return itemA.address == itemB->address;
+      });
+}
+
+bool operator!=(const IgnoredAssetListItem &a, const IgnoredAssetListItem &b) {
   return !(a == b);
 }
 

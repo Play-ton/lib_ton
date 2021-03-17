@@ -22,6 +22,7 @@ struct TransactionsSlice;
 struct PendingTransaction;
 struct WalletState;
 struct Settings;
+struct IgnoredAssetsList;
 }  // namespace Ton
 
 namespace Ton::details {
@@ -61,6 +62,11 @@ void DeletePublicKey(not_null<RequestSender *> lib, const QByteArray &publicKey,
 void SaveWalletList(not_null<Storage::Cache::Database *> db, const WalletList &list, bool useTestNetwork,
                     const Callback<> &done);
 void LoadWalletList(not_null<Storage::Cache::Database *> db, bool useTestNetwork, const Fn<void(WalletList &&)> &done);
+
+void SaveIgnoredAssetsList(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
+                           const IgnoredAssetsList &ignoredAssets, const Callback<> &done);
+void LoadIgnoredAssetsList(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
+                           const Fn<void(IgnoredAssetsList &&)> &done);
 
 void SaveTokenOwnersCache(not_null<Storage::Cache::Database *> db, bool useTestNetwork,
                           const QString &rootContractAddress, const TokenOwnersCache &owners, const Callback<> &done);

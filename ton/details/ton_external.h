@@ -20,6 +20,8 @@ class Database;
 namespace Ton {
 struct Update;
 struct ConfigInfo;
+struct IgnoredAsset;
+struct IgnoredAssetsList;
 }  // namespace Ton
 
 namespace Ton::details {
@@ -32,11 +34,11 @@ class External final : public base::has_weak_ptr {
  public:
   External(const QString &path, Fn<void(Update)> &&updateCallback);
 
-  void open(const QByteArray &globalPassword, const Settings &defaultSettings, Callback<WalletList> done);
+  void open(const QByteArray &globalPassword, const Settings &defaultSettings, const Callback<WalletList> &done);
   void start(Callback<ConfigInfo> done);
 
   [[nodiscard]] const Settings &settings() const;
-  void updateSettings(const Settings &settings, Callback<ConfigInfo> done);
+  void updateSettings(const Settings &settings, const Callback<ConfigInfo> &done);
   void switchNetwork(const Callback<ConfigInfo> &done);
 
   void updateTokenOwnersCache(const QString &rootContractAddress, const TokenOwnersCache &newItems,
@@ -44,6 +46,11 @@ class External final : public base::has_weak_ptr {
   void updateTokenOwnersCache(const QString &rootContractAddress, const QString &walletAddress,
                               const QString &ownerAddress, const Callback<> &done);
   [[nodiscard]] const std::map<QString, TokenOwnersCache> &tokenOwnersCache() const;
+
+  [[nodiscard]] bool isIgnoredAsset(const IgnoredAsset &item) const;
+  void addIgnoredAsset(const IgnoredAsset &item, const Callback<> &done);
+  void removeIgnoredAsset(const IgnoredAsset &item, const Callback<> &done);
+  void updateIgnoredAssets(const Callback<> &done);
 
   [[nodiscard]] RequestSender &lib();
   [[nodiscard]] Storage::Cache::Database &db();
@@ -62,7 +69,7 @@ class External final : public base::has_weak_ptr {
   [[nodiscard]] Result<> writeNewSalt();
   [[nodiscard]] Fn<void(const TLUpdate &)> generateUpdateCallback() const;
   void openDatabase(const QByteArray &globalPassword, Callback<Settings> done);
-  void startLibrary(const Callback<>& done);
+  void startLibrary(const Callback<> &done);
   void resetNetwork();
   void applyLocalSettings(const Settings &localSettings);
 
@@ -70,6 +77,8 @@ class External final : public base::has_weak_ptr {
   const Fn<void(Update)> _updateCallback;
   Settings _settings;
   std::map<QString, TokenOwnersCache> _tokenOwnersCache;
+  std::unique_ptr<IgnoredAssetsList> _ignoredAssets;
+
   RequestSender _lib;
   Storage::DatabasePointer _db;
   ConfigUpgrade _configUpgrade = ConfigUpgrade::None;
