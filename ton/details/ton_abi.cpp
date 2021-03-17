@@ -1330,7 +1330,12 @@ QByteArray CreatePayloadFromComment(const QString &comment) {
     return {};
   }
   if (Base64Regex().exactMatch(comment)) {
-    return QByteArray::fromBase64(comment.toUtf8());
+    auto raw = QByteArray::fromBase64(comment.toUtf8());
+    if (RequestSender::Execute(
+            TLftabi_UnpackFromCell(tl_tvm_cell(tl_bytes(comment.toUtf8())), tl_vector(QVector<TLftabi_Param>{})))
+            .has_value()) {
+      return raw;
+    }
   }
   return PackValuesIntoCell({
       tl_ftabi_valueInt(tl_ftabi_paramUint(tl_int32(32)), tl_int64(0x00000000u)),
